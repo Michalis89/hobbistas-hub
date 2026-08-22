@@ -1,14 +1,15 @@
 import { withApiRoute } from '@/lib/observability/withApiRoute';
 
-import { NextResponse } from 'next/server';
-
 import { API_ERRORS } from '@/lib/api/errors';
-import { fail } from '@/lib/api/response';
+import { fail, ok } from '@/lib/api/response';
 import { rateLimit, getClientIp, rateLimitHeaders } from '@/lib/rate-limit';
 import { verifyCaptchaToken } from '@/lib/captcha/turnstile';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { sendConfirmEmail } from '@/lib/email/send';
+import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
+import { setAuthCookies } from '@/lib/auth';
+import { sendVerificationEmail } from '@/lib/auth/verification';
 import { resolveSiteUrl } from '@/lib/auth/site-url';
+import { ONBOARDING_PATH } from '@/lib/routes/authRoutes';
 import {
   LEGAL_PATHS,
   PRIVACY_POLICY_VERSION,
@@ -20,6 +21,28 @@ import {
   validatePassword,
   validateFullName,
 } from '@/utils/validation/auth';
+
+/**
+ * Signs the freshly created account in so registration ends inside the app
+ * rather than at a second login form. A failure here is not fatal: the account
+ * exists, and the caller falls back to the login screen.
+ */
+async function signInNewUser(email: string, password: string) {
+  try {
+    const authClient = await createRouteHandlerClient(undefined, { ignoreCookies: true });
+    const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+
+    if (error || !data.session) {
+      console.error('Auto sign-in after signup failed:', error);
+      return null;
+    }
+
+    return data.session;
+  } catch (error) {
+    console.error('Auto sign-in after signup threw:', error);
+    return null;
+  }
+}
 
 async function POSTHandler(req: Request) {
   const siteUrl = resolveSiteUrl(req);
@@ -139,10 +162,13 @@ async function POSTHandler(req: Request) {
     }
 
     step = 'create_auth_user';
+    // The account is created confirmed at the Supabase level so the user can be
+    // signed in immediately and start using the app. Address ownership is tracked
+    // separately via public.users.email_verified, which the emailed link flips.
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: process.env.NODE_ENV === 'development', // Auto-confirm in dev
+      email_confirm: true,
       user_metadata: {
         username,
         full_name: safeFullName,
@@ -180,6 +206,7 @@ async function POSTHandler(req: Request) {
           date_of_birth: date_of_birth || null,
           country: country || null,
           bio: bio || null,
+          email_verified: false,
           privacy_settings: {
             legal_acceptance: legalAcceptance,
           },
@@ -225,37 +252,31 @@ async function POSTHandler(req: Request) {
       }
     }
 
-    step = 'generate_signup_link';
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-      type: 'signup',
-      email,
-      password,
-      options: {
-        redirectTo: `${siteUrl}/auth/confirm-email?state=success`,
-      },
-    });
+    // From here on the account exists and is usable. Email delivery problems must
+    // never fail the request — that would leave the user with an account they were
+    // told was not created. Failures are reported as a flag instead, and the user
+    // can always trigger /api/auth/resend-verification.
+    step = 'send_verification_email';
+    const verificationEmailSent = await sendVerificationEmail(supabase, email, siteUrl);
 
-    const actionLink = linkData?.properties?.action_link;
-    if (linkError || !actionLink) {
-      console.error('Signup link generation failed:', linkError);
-      return fail(
-        {
-          error: 'Account created, but confirmation email was not sent. Try again.',
-        },
-        500,
-      );
-    }
+    step = 'create_session';
+    const session = await signInNewUser(email, password);
 
-    try {
-      step = 'send_confirmation_email';
-      await sendConfirmEmail(email, actionLink);
-    } catch (error) {
-      console.error('Failed to send confirmation email:', error);
-      return fail({ error: 'We could not send the confirmation email. Try again shortly.' }, 500);
+    if (session) {
+      step = 'set_auth_cookies';
+      await setAuthCookies(session.access_token, session.refresh_token, true);
     }
 
     step = 'complete';
-    return NextResponse.json({ ok: true });
+    return ok({
+      ok: true,
+      user: { id: createdUser.id, email, username },
+      session,
+      // No session means the browser has to fall back to the login screen, but the
+      // account itself was created successfully either way.
+      redirectUrl: session ? ONBOARDING_PATH : '/auth/login',
+      verificationEmailSent,
+    });
   } catch (error) {
     console.error('Signup handler error:', { step, error });
     if (process.env.NODE_ENV === 'development') {

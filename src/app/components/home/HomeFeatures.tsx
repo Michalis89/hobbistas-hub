@@ -1,76 +1,62 @@
 import {
   Layers,
-  ListTodo,
-  BarChart3,
-  Trophy,
-  StickyNote,
-  Film,
+  Download,
+  Sparkles,
   NotebookPen,
-  RefreshCw,
+  WifiOff,
+  ListTodo,
   Star,
+  BarChart3,
+  StickyNote,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
 type Feature = {
   title: string;
   description: string;
-  icon: ReactNode;
+  icon: LucideIcon;
+  featured?: boolean;
 };
+
 const features: Feature[] = [
   {
     title: 'All Hobbies, One Library',
     description:
-      'Games, anime, manga, books, movies, TV shows — everything in one place. No more switching between five different apps.',
-    icon: <Layers className="h-6 w-6" />,
-  },
-  {
-    title: 'Progress Tracking',
-    description:
-      'Update hours played, episodes watched, chapters read, or pages finished as you go. Pick up exactly where you left off.',
-    icon: <ListTodo className="h-6 w-6" />,
-  },
-  {
-    title: 'Personal Statistics',
-    description:
-      'See how much time you invest in each hobby, your completion rate, and what you have in progress.',
-    icon: <BarChart3 className="h-6 w-6" />,
-  },
-  {
-    title: 'Ratings & Reflections',
-    description:
-      'Rate entries on a 1–10 scale and write short notes to capture your thoughts while they are still fresh.',
-    icon: <Star className="h-6 w-6" />,
-  },
-  {
-    title: 'Private Diary',
-    description:
-      'A dedicated space for personal journal entries, encrypted locally on your device. Only you can read it.',
-    icon: <NotebookPen className="h-6 w-6" />,
-  },
-  {
-    title: 'Smart Status & Backlog',
-    description:
-      'Organize everything with Planned, Current, Completed, or Dropped. Your backlog stays under control.',
-    icon: <StickyNote className="h-6 w-6" />,
+      'Games, anime, manga, books, movies and TV shows live side by side — with a single backlog, a single history, and one place to look when you want to know what you are on.',
+    icon: Layers,
+    featured: true,
   },
   {
     title: 'Steam Import',
     description:
       'Connect Steam and import your full game library with playtime. Your backlog appears in seconds.',
-    icon: <Trophy className="h-6 w-6" />,
+    icon: Download,
   },
   {
     title: 'Smart Recommendations',
     description:
-      'Get suggestions based on your actual taste — genres, themes, and ratings you have already given across all your hobbies.',
-    icon: <Film className="h-6 w-6" />,
+      'Suggestions built from your actual taste — the genres, themes and ratings you have already given, read across every hobby at once.',
+    icon: Sparkles,
+  },
+  {
+    title: 'Private Diary',
+    description:
+      'A personal journal encrypted on your own device before it ever leaves it. Not even we can read it.',
+    icon: NotebookPen,
   },
   {
     title: 'Works Offline',
     description:
-      'Hobbistas is a PWA — install it on your phone or desktop and keep tracking even without an internet connection.',
-    icon: <RefreshCw className="h-6 w-6" />,
+      'Install Hobbistas on your phone or desktop and keep tracking with no connection. It syncs when you are back.',
+    icon: WifiOff,
   },
+];
+
+const essentials: { label: string; icon: LucideIcon }[] = [
+  { label: 'Progress tracking', icon: ListTodo },
+  { label: 'Ratings & notes', icon: Star },
+  { label: 'Planned / Current / Completed', icon: StickyNote },
+  { label: 'Personal statistics', icon: BarChart3 },
 ];
 
 export function HomeFeatures() {
@@ -85,25 +71,49 @@ export function HomeFeatures() {
             One app, every hobby
           </h2>
           <p className="mx-auto max-w-xl text-muted-foreground">
-            Everything you need to track, organize, and discover across all your hobbies — free.
+            Track what you are on, remember what you finished, and find what to start next.
           </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(feature => (
-            <div
-              key={feature.title}
-              className="group rounded-lg p-6 transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
-            >
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border bg-card text-primary transition-colors group-hover:bg-primary/10">
-                {feature.icon}
+          {features.map(feature => {
+            const Icon = feature.icon;
+            return (
+              <div
+                key={feature.title}
+                className={`group rounded-lg border p-6 transition-[transform,box-shadow,border-color,background-color] duration-200 hover:border-primary/30 hover:bg-card/60 hover:shadow-md ${
+                  feature.featured
+                    ? 'border-border bg-card/40 sm:col-span-2'
+                    : 'border-transparent bg-transparent'
+                }`}
+              >
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card text-primary transition-colors group-hover:bg-primary/10">
+                  <Icon className="h-6 w-6" aria-hidden />
+                </div>
+                <h3 className="mb-2 text-base font-semibold tracking-[-0.01em] text-foreground">
+                  {feature.title}
+                </h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {feature.description}
+                </p>
               </div>
-              <h3 className="mb-2 text-base font-semibold tracking-[-0.01em] text-foreground">
-                {feature.title}
-              </h3>
-              <p className="text-sm leading-relaxed text-muted-foreground">{feature.description}</p>
-            </div>
-          ))}
+            );
+          })}
+        </div>
+
+        <div className="mx-auto mt-8 flex max-w-5xl flex-wrap items-center justify-center gap-x-6 gap-y-3 rounded-lg border border-border bg-card/40 px-6 py-4">
+          {essentials.map(item => {
+            const Icon = item.icon;
+            return (
+              <span
+                key={item.label}
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                <Icon className="h-4 w-4 text-primary/70" aria-hidden />
+                {item.label}
+              </span>
+            );
+          })}
         </div>
       </div>
     </section>

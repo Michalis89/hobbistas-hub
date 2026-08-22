@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ClipboardCopy, Heart, Pencil, Share2, Trash2 } from 'lucide-react';
 import type { ArticleRow } from '@/types/database';
 import { selectCanEditArticles, selectIsAuthorOf } from '@/store/slices/authSlice';
-import EditArticleDialog from '@/app/components/articles/EditArticleDialog';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -29,7 +29,6 @@ export default function ActionRow({ article, className }: ActionRowProps) {
   const canEditRaw = useSelector(selectCanEditArticles);
   const isAuthorRaw = useSelector(selectIsAuthorOf(article.author_id));
   const [mounted, setMounted] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -226,10 +225,13 @@ export default function ActionRow({ article, className }: ActionRowProps) {
             iconOnly
             size="icon"
             variant="secondary"
-            onClick={() => setIsEditOpen(true)}
+            asChild
+            title="Edit in Studio"
             className={cn(ACTION_BUTTON_BASE, 'hover:text-primary')}
           >
-            <Pencil size={18} strokeWidth={2.2} />
+            <Link href={`/studio/${article.id}`} aria-label="Edit in Studio">
+              <Pencil size={18} strokeWidth={2.2} />
+            </Link>
           </Button>
         )}
 
@@ -254,21 +256,6 @@ export default function ActionRow({ article, className }: ActionRowProps) {
           </Button>
         )}
       </div>
-      {canEdit && (
-        <EditArticleDialog
-          isOpen={isEditOpen}
-          article={article}
-          onClose={() => setIsEditOpen(false)}
-          onSuccess={() => {
-            setIsEditOpen(false);
-            router.refresh();
-          }}
-          onDelete={() => {
-            setIsEditOpen(false);
-            router.push(fallbackHref);
-          }}
-        />
-      )}
     </>
   );
 }

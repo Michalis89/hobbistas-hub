@@ -3,6 +3,7 @@ import type { PersonalStats } from './types';
 import { DASHBOARD_TAB_CATEGORIES } from '@/lib/dashboard/category-data';
 import type { CategoryDashboardSection, DashboardCategoryKey } from '@/lib/dashboard/category-data';
 import CategoryDashboardTabs from '@/app/components/dashboard/CategoryDashboardTabs';
+import DashboardEmptyState from '@/app/components/dashboard/DashboardEmptyState';
 import UnifiedOverviewRow from '@/app/components/dashboard/UnifiedOverviewRow';
 import type {
   UnifiedOverviewCategory,
@@ -17,32 +18,32 @@ type HomeDashboardSectionsProps = {
   isReadOnly?: boolean;
 };
 
+function resolveStatsForCategory(stats: PersonalStats, category: DashboardCategoryKey) {
+  if (category === 'games') {
+    return stats.games;
+  }
+  if (category === 'anime') {
+    return stats.anime;
+  }
+  if (category === 'manga') {
+    return stats.manga;
+  }
+  if (category === 'movies') {
+    return stats.movies;
+  }
+  if (category === 'tv') {
+    return stats.tv;
+  }
+  return stats.books;
+}
+
 function buildUnifiedOverviewCategories(
   mediaCategories: DashboardCategoryKey[],
   categorySections: Record<DashboardCategoryKey, CategoryDashboardSection>,
   stats: PersonalStats,
 ): UnifiedOverviewCategory[] {
-  const resolveStatsForCategory = (category: DashboardCategoryKey) => {
-    if (category === 'games') {
-      return stats.games;
-    }
-    if (category === 'anime') {
-      return stats.anime;
-    }
-    if (category === 'manga') {
-      return stats.manga;
-    }
-    if (category === 'movies') {
-      return stats.movies;
-    }
-    if (category === 'tv') {
-      return stats.tv;
-    }
-    return stats.books;
-  };
-
   return DASHBOARD_TAB_CATEGORIES.map(category => {
-    const categoryStats = resolveStatsForCategory(category);
+    const categoryStats = resolveStatsForCategory(stats, category);
     const recentlyFinished = Math.max(
       0,
       categorySections[category]?.insights?.updatedLast7Days ?? 0,
@@ -64,11 +65,28 @@ export function HomeDashboardSections({
   categoryProfile = null,
   isReadOnly = false,
 }: HomeDashboardSectionsProps) {
+  const overviewCategories = buildUnifiedOverviewCategories(
+    mediaCategories,
+    categorySections,
+    stats,
+  );
+
   const overviewData: UnifiedOverviewInput = {
-    categories: buildUnifiedOverviewCategories(mediaCategories, categorySections, stats),
+    categories: overviewCategories,
     totalMinutes: Math.max(0, (stats.total_hours ?? 0) * 60),
     hasFullTimeCoverage: true,
   };
+
+  // Every counter, chart, and taste profile below is derived from the user's own
+  // entries. With none, the whole apparatus renders as zeros and "No data yet",
+  // which looks broken instead of new — so show a first-run panel instead.
+  const hasAnyEntries = mediaCategories.some(
+    category => (resolveStatsForCategory(stats, category)?.total ?? 0) > 0,
+  );
+
+  if (mediaCategories.length > 0 && !hasAnyEntries && !isReadOnly) {
+    return <DashboardEmptyState categories={mediaCategories} />;
+  }
 
   return (
     <>

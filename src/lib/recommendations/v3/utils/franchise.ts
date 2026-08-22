@@ -164,6 +164,7 @@ export function extractBaseTitle(title: string): string {
   }
 
   return t
+    .replace(/:/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/[\s\-:]+$/g, '')
     .trim();

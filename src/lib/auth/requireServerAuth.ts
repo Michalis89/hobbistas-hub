@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
+import { getLoginUrl } from '@/lib/routes/authRoutes';
 
 export async function requireServerAuth(redirectPath = '/dashboard') {
   const supabase = await createRouteHandlerClient();
@@ -8,7 +9,7 @@ export async function requireServerAuth(redirectPath = '/dashboard') {
   } = await supabase.auth.getSession();
 
   if (!session || !session.user) {
-    redirect(`/auth/login?redirectTo=${encodeURIComponent(redirectPath)}`);
+    redirect(getLoginUrl(redirectPath));
   }
 
   return session;

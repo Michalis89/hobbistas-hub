@@ -3,12 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Eye, Pencil } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useLocale } from '@/context/LocaleContext';
-import EditArticleDialog from '@/app/components/articles/EditArticleDialog';
 import type { ArticleRow, ArticleStatus } from '@/types/database';
 import { CONTENT_TOPIC_META } from './profileData';
 
@@ -19,6 +17,7 @@ type ContentTypeFilter = (typeof TYPE_FILTERS)[number];
 const STATUS_BADGE: Record<ArticleStatus, string> = {
   published: 'border-emerald-500/40 text-emerald-300',
   draft: 'border-amber-500/40 text-amber-300',
+  scheduled: 'border-primary/40 text-primary',
   archived: 'border-border/60 text-muted-foreground',
 };
 
@@ -39,12 +38,10 @@ function formatDate(value: string | null | undefined, locale: string) {
 
 export function ContentList() {
   const locale = useLocale();
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<ArticleStatus>('published');
   const [typeFilter, setTypeFilter] = useState<ContentTypeFilter>('all');
   const [articles, setArticles] = useState<ArticleRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [editArticle, setEditArticle] = useState<ArticleRow | null>(null);
 
   const loadTab = (status: ArticleStatus) => {
     setLoading(true);
@@ -155,7 +152,7 @@ export function ContentList() {
             return (
               <article
                 key={article.id}
-                className="group flex items-center gap-3 rounded-xl border border-border/50 bg-card/65 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card/80"
+                className="group flex items-center gap-3 rounded-xl border border-border/50 bg-card/65 p-3 transition-all duration-200 hover:border-primary/35 hover:bg-card/80"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <TopicIcon className="h-4 w-4" />
@@ -196,10 +193,12 @@ export function ContentList() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => setEditArticle(article)}
+                    asChild
                     aria-label="Edit content"
                   >
-                    <Pencil className="h-3.5 w-3.5" />
+                    <Link href={`/studio/${article.id}`}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Link>
                   </Button>
                 </div>
               </article>
@@ -212,22 +211,6 @@ export function ContentList() {
         )}
       </div>
 
-      {editArticle ? (
-        <EditArticleDialog
-          isOpen={true}
-          article={editArticle}
-          onClose={() => setEditArticle(null)}
-          onSuccess={() => {
-            setEditArticle(null);
-            router.refresh();
-            loadTab(activeTab);
-          }}
-          onDelete={() => {
-            setEditArticle(null);
-            setArticles(current => current.filter(item => item.id !== editArticle.id));
-          }}
-        />
-      ) : null}
     </section>
   );
 }

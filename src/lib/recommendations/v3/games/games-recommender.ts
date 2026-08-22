@@ -31,6 +31,7 @@ type UserMediaEntryRow = {
     category: string | null;
     genres: string[] | null;
     igdb_themes: string[] | null;
+    studios: string[] | null;
     platforms: string[] | null;
     cover_url_big: string | null;
     cover_url_thumb: string | null;
@@ -100,43 +101,9 @@ async function loadUserMediaHistory(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<GameHistoryEntry[]> {
-  const { data, error } = await supabase
-    .from('user_media_entries')
-    .select(
-      `
-      id,
-      media_id,
-      status,
-      score,
-      progress,
-      priority,
-      is_favorite,
-      pinned_rank,
-      updated_at,
-      selected_platform,
-      media_items!inner(
-        id,
-        title,
-        category,
-        genres,
-        igdb_themes,
-        platforms,
-        cover_url_big,
-        cover_url_thumb,
-        cover_image_large,
-        cover_image_medium
-      )
-    `,
-    )
-    .in('media_items.category', ['games', 'game'])
-    .eq('user_id', userId);
+  const rows = await loadUserMediaHistoryRows(supabase, userId);
 
-  if (error) {
-    console.error('[GamesRecommenderV3] Error loading media history:', error);
-    return [];
-  }
-
-  return (data || []).map((row: UserMediaEntryRow) => ({
+  return rows.map((row: UserMediaEntryRow) => ({
     id: row.id,
     mediaId: row.media_id,
     status: row.status as GameHistoryEntry['status'],
@@ -152,6 +119,7 @@ async function loadUserMediaHistory(
       title: row.media_items.title ?? 'Untitled',
       genres: row.media_items.genres ?? [],
       themes: row.media_items.igdb_themes ?? [],
+      studios: row.media_items.studios ?? [],
       platforms: row.media_items.platforms ?? [],
       coverImageLarge:
         row.media_items.cover_url_big ??
@@ -163,6 +131,69 @@ async function loadUserMediaHistory(
         row.media_items.cover_url_thumb ?? row.media_items.cover_image_medium ?? undefined,
     },
   }));
+}
+
+export async function loadUserMediaHistoryRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<UserMediaEntryRow[]> {
+  const allRows: UserMediaEntryRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('user_media_entries')
+      .select(
+        `
+        id,
+        media_id,
+        status,
+        score,
+        progress,
+        priority,
+        is_favorite,
+        pinned_rank,
+        updated_at,
+        selected_platform,
+        media_items!inner(
+          id,
+          title,
+          category,
+          genres,
+          igdb_themes,
+          studios,
+          platforms,
+          cover_url_big,
+          cover_url_thumb,
+          cover_image_large,
+          cover_image_medium
+        )
+      `,
+      )
+      .in('media_items.category', ['games', 'game'])
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .range(offset, offset + DATABASE_FETCH_PAGE_SIZE - 1);
+
+    if (error) {
+      console.error('[GamesRecommenderV3] Error loading media history:', error);
+      return [];
+    }
+
+    const pageRows = (data || []) as UserMediaEntryRow[];
+    if (pageRows.length === 0) {
+      break;
+    }
+
+    allRows.push(...pageRows);
+    if (pageRows.length < DATABASE_FETCH_PAGE_SIZE) {
+      break;
+    }
+
+    offset += DATABASE_FETCH_PAGE_SIZE;
+  }
+
+  return allRows;
 }
 
 async function loadUserCategoryProfile(

@@ -82,6 +82,7 @@ export const revalidateCache = {
     }
     revalidateTag(CACHE_TAGS.ACTIVITY_FEED, 'max');
     revalidateTag(CACHE_TAGS.PUBLIC_STATS, 'max');
+    revalidatePath('/sitemap.xml');
   },
 
   /**

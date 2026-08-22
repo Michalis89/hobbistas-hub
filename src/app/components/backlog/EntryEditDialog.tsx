@@ -93,6 +93,49 @@ const READING_FORMATS = [
   { key: 'digital', label: 'Digital' },
 ] as const;
 
+/**
+ * Fallback platforms for games.
+ *
+ * Every other category picks from a fixed list, but games used to offer only
+ * `entry.platforms` — the platforms IGDB happened to return. That list is empty
+ * for anything already in the library (it is only fetched for external results
+ * that have no description yet), which left the dropdown with nothing to choose
+ * while the API rejects games saved without a platform. Result: an entry that
+ * could not be saved at all.
+ */
+const GAME_PLATFORM_FALLBACK = [
+  'PC',
+  'PS5',
+  'PS4',
+  'Xbox Series X/S',
+  'Xbox One',
+  'Nintendo Switch',
+  'Steam Deck',
+  'Mobile',
+  'Other',
+] as const;
+
+/** The game's own platforms first, then any standard ones it did not list. */
+function getGamePlatformOptions(entryPlatforms?: string[] | null): string[] {
+  const seen = new Set<string>();
+  const options: string[] = [];
+
+  for (const platform of [...(entryPlatforms ?? []), ...GAME_PLATFORM_FALLBACK]) {
+    const trimmed = platform?.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    options.push(trimmed);
+  }
+
+  return options;
+}
+
 function formatMediaFormatLabel(value?: string | null) {
   const raw = value?.trim();
   if (!raw) {
@@ -409,13 +452,17 @@ export default function EntryEditDialog({
                     }
                   >
                     <SelectTrigger id="entry-platform-trigger" className="h-10 !min-h-0">
-                      <SelectValue placeholder="Not selected" />
+                      <SelectValue placeholder={isGames ? 'Select a platform' : 'Not selected'} />
                     </SelectTrigger>
                     <SelectContent
                       portalContainer={selectPortalContainer ?? undefined}
                       className="data-[state=closed]:animate-none data-[state=open]:animate-none"
                     >
-                      <SelectItem value={NO_PLATFORM_VALUE}>Not selected</SelectItem>
+                      {/* Games cannot be saved without a platform, so offering
+                          "Not selected" would only lead to a rejected save. */}
+                      {isGames ? null : (
+                        <SelectItem value={NO_PLATFORM_VALUE}>Not selected</SelectItem>
+                      )}
                       {isAnime
                         ? ANIME_PLATFORMS.map(platform => (
                             <SelectItem key={platform.key} value={platform.key}>
@@ -440,7 +487,7 @@ export default function EntryEditDialog({
                                     {platform.label}
                                   </SelectItem>
                                 ))
-                              : (entry.platforms ?? []).map(platform => (
+                              : getGamePlatformOptions(entry.platforms).map(platform => (
                                   <SelectItem key={platform} value={platform}>
                                     {platform}
                                   </SelectItem>

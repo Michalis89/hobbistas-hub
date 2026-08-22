@@ -1,7 +1,6 @@
 'use client';
 
-import { Suspense, memo, useEffect, useState, useTransition } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { memo, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { CoverThumbImage, IMAGE_SIZES } from '@/components/ui/cover-image';
 import { Calendar, Clock, Eye, FileText, Heart, Tag, User } from 'lucide-react';
@@ -28,6 +27,13 @@ interface ArticleWithAuthor extends ArticleRow {
     avatar_url: string | null;
   } | null;
 }
+
+type NewsPageClientProps = {
+  initialArticles?: ArticleWithAuthor[];
+  initialTotal?: number;
+  initialCategory?: ArticleCategory | null;
+  initialTag?: string | null;
+};
 
 const PRIMARY_CATEGORIES: ArticleCategory[] = [
   'games',
@@ -176,14 +182,6 @@ function NewsSkeletonGrid({ count = SKELETON_COUNT }: { count?: number }) {
   );
 }
 
-function NewsFallback() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <NewsSkeletonGrid />
-    </div>
-  );
-}
-
 function buildHref({ category, tag }: { category: ArticleCategory | null; tag: string | null }) {
   const params = new URLSearchParams();
   if (category) {
@@ -220,37 +218,59 @@ function FilterSegment({
   );
 }
 
-export default function NewsPageClient() {
+export default function NewsPageClient({
+  initialArticles = [],
+  initialTotal = 0,
+  initialCategory = null,
+  initialTag = null,
+}: NewsPageClientProps) {
   return (
-    <Suspense fallback={<NewsFallback />}>
-      <NewsPageContent />
-    </Suspense>
+    <NewsPageContent
+      initialArticles={initialArticles}
+      initialTotal={initialTotal}
+      initialCategory={initialCategory}
+      initialTag={initialTag}
+    />
   );
 }
 
-function NewsPageContent() {
+function NewsPageContent({
+  initialArticles,
+  initialTotal,
+  initialCategory,
+  initialTag,
+}: Required<NewsPageClientProps>) {
   const isAuthenticated = useSelector(selectIsAuthenticated);
-  const searchParams = useSearchParams();
   const availableCategories = getVisibleCategories({ scope: 'news' });
-
-  const rawCategory = searchParams.get('category');
   const category =
-    rawCategory && availableCategories.includes(rawCategory as ArticleCategory)
-      ? (rawCategory as ArticleCategory)
-      : null;
+    initialCategory && availableCategories.includes(initialCategory) ? initialCategory : null;
+  const tag = initialTag || null;
+  const skipInitialFetchRef = useRef(true);
 
-  const rawTag = searchParams.get('tag');
-  const tag = rawTag || null;
-
-  const [articles, setArticles] = useState<ArticleWithAuthor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [articles, setArticles] = useState<ArticleWithAuthor[]>(initialArticles);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState(initialTotal);
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
+    setArticles(initialArticles);
+    setTotal(initialTotal);
+    setError(null);
+    setLoading(false);
+    skipInitialFetchRef.current = true;
+  }, [initialArticles, initialTotal, initialCategory, initialTag]);
+
+  useEffect(() => {
     let isMounted = true;
+
+    if (skipInitialFetchRef.current && refreshSignal === 0) {
+      skipInitialFetchRef.current = false;
+      return () => {
+        isMounted = false;
+      };
+    }
 
     const fetchArticles = async () => {
       setLoading(true);

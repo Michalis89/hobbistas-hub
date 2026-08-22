@@ -118,6 +118,18 @@ export const LIMITER_CONFIGS: Record<string, LimiterConfig> = {
     prefix: 'rl:register:ip',
   },
 
+  // Resending the verification email: strict, it is an outbound-email trigger
+  resendVerificationIp: {
+    limit: 5,
+    windowSec: 60 * 60, // 1 hour
+    prefix: 'rl:resend:ip',
+  },
+  resendVerificationEmail: {
+    limit: 3,
+    windowSec: 60 * 60, // 1 hour
+    prefix: 'rl:resend:email',
+  },
+
   // Account deletion: very strict, sensitive operation
   deleteAccount: {
     limit: 1,

@@ -80,7 +80,7 @@ function createMockSupabase(initial: EntryRow) {
                   if (key2 === 'media_id') {
                     filters.mediaId = Number(value2);
                   }
-                  return {
+                  const result = {
                     maybeSingle: jest.fn(async () => {
                       const match =
                         state.entry.user_id === filters.userId &&
@@ -90,7 +90,9 @@ function createMockSupabase(initial: EntryRow) {
                         error: null,
                       };
                     }),
+                    limit: jest.fn(() => result),
                   };
+                  return result;
                 },
                 maybeSingle: jest.fn(async () => {
                   const match =
@@ -101,6 +103,17 @@ function createMockSupabase(initial: EntryRow) {
                     error: null,
                   };
                 }),
+                limit: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => {
+                    const match =
+                      state.entry.user_id === filters.userId &&
+                      state.entry.media_id === filters.mediaId;
+                    return {
+                      data: match ? { ...state.entry } : null,
+                      error: null,
+                    };
+                  }),
+                })),
               };
             },
           };

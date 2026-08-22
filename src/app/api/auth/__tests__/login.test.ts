@@ -446,7 +446,7 @@ describe('app/api/auth/login/route', () => {
     });
   });
 
-  it('creates fallback profile and redirects to profile edit when no category data', async () => {
+  it('creates fallback profile and redirects to onboarding when no category data', async () => {
     const loginClient = createLoginClient({
       authData: {
         user: { id: 'id-1234567890', email: '++@example.com', user_metadata: {} },
@@ -467,7 +467,7 @@ describe('app/api/auth/login/route', () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.redirectUrl).toBe('/profile/edit');
+    expect(body.data.redirectUrl).toBe('/onboarding');
     expect(setAuthCookiesMock).not.toHaveBeenCalled();
     expect(authedClient.spies.upsert).toHaveBeenCalled();
     const upsertArg = authedClient.spies.upsert.mock.calls[0]?.[0];
@@ -506,7 +506,7 @@ describe('app/api/auth/login/route', () => {
     expect(upsertArg.full_name).toBe('John Doe');
   });
 
-  it('redirects to profile edit when category profile row is missing', async () => {
+  it('redirects to onboarding when category profile row is missing', async () => {
     const loginClient = createLoginClient();
     const authedClient = createAuthedClient({
       profileData: { id: 'user-12345678', account_status: 'active', username: 'john' },
@@ -519,7 +519,7 @@ describe('app/api/auth/login/route', () => {
     const res = await POST(makeRequest({ identifier: 'user@example.com', password: 'secret' }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.redirectUrl).toBe('/profile/edit');
+    expect(body.data.redirectUrl).toBe('/onboarding');
   });
 
   it('returns internal error when request parsing throws', async () => {

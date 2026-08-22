@@ -73,4 +73,69 @@ describe('useLoginForm double-submit guard', () => {
 
     expect(result.current.loading).toBe(false);
   });
+
+  it('still submits after an attempt that failed client-side validation', async () => {
+    // Regression: the in-flight guard used to latch on early returns, so one
+    // malformed email permanently froze the form until a page reload.
+    global.fetch = jest.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { redirectUrl: '/dashboard' } }),
+        }) as unknown as Response,
+    ) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useLoginForm());
+    const event = { preventDefault: jest.fn() } as unknown as FormEvent;
+
+    act(() => {
+      result.current.handleIdentifierChange('not-an-email@');
+      result.current.handlePasswordChange('a-long-enough-password');
+      result.current.setCaptchaToken('captcha-token');
+    });
+
+    await act(async () => {
+      await result.current.handleSubmit(event);
+    });
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(result.current.errors.identifier).toBeDefined();
+
+    act(() => {
+      result.current.handleIdentifierChange('user@example.com');
+    });
+
+    await act(async () => {
+      await result.current.handleSubmit(event);
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a resend action when the account was never verified', async () => {
+    global.fetch = jest.fn(
+      async () =>
+        ({
+          ok: false,
+          status: 401,
+          json: async () => ({ error: 'Your email is not confirmed yet.' }),
+        }) as unknown as Response,
+    ) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useLoginForm());
+    const event = { preventDefault: jest.fn() } as unknown as FormEvent;
+
+    act(() => {
+      result.current.handleIdentifierChange('user@example.com');
+      result.current.handlePasswordChange('a-long-enough-password');
+      result.current.setCaptchaToken('captcha-token');
+    });
+
+    await act(async () => {
+      await result.current.handleSubmit(event);
+    });
+
+    expect(result.current.needsVerification).toBe(true);
+  });
 });

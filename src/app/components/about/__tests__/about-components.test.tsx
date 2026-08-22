@@ -1,13 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import { AboutFAQ } from '@/app/components/about/AboutFAQ';
-import { AboutFeatures } from '@/app/components/about/AboutFeatures';
 import { AboutFinalCTA } from '@/app/components/about/AboutFinalCTA';
 import { AboutHero } from '@/app/components/about/AboutHero';
-import { AboutHowItWorks } from '@/app/components/about/AboutHowItWorks';
 import { AboutPeople } from '@/app/components/about/AboutPeople';
 import { AboutPhilosophy } from '@/app/components/about/AboutPhilosophy';
 import { AboutRoadmap } from '@/app/components/about/AboutRoadmap';
-import { AboutStats } from '@/app/components/about/AboutStats';
+import { AboutTwoModes } from '@/app/components/about/AboutTwoModes';
+import { AboutWhatYouGet } from '@/app/components/about/AboutWhatYouGet';
 import type { TeamMember } from '@/app/components/about/AboutPeople';
 import * as AboutIndex from '@/app/components/about';
 
@@ -60,34 +59,27 @@ jest.mock('@/components/ui/avatar-image', () => ({
   AvatarImage: ({ alt }: { alt: string }) => <span data-testid="avatar-image" aria-label={alt} />,
 }));
 
-jest.mock('@/components/ui/empty', () => ({
-  __esModule: true,
-  default: ({ title, description }: { title: string; description: string }) => (
-    <div data-testid="empty-state">
-      <p>{title}</p>
-      <p>{description}</p>
-    </div>
-  ),
-}));
-
 jest.mock('@/config/roadmap', () => ({
   ROADMAP_ITEMS: [
     {
       title: 'Item done',
       description: 'Done desc',
       status: 'done',
+      area: 'core',
       icon: () => <svg data-testid="road-icon-done" />,
     },
     {
       title: 'Item in-progress',
       description: 'In progress desc',
       status: 'in-progress',
+      area: 'core',
       icon: () => <svg data-testid="road-icon-progress" />,
     },
     {
       title: 'Item planned',
       description: 'Planned desc',
       status: 'planned',
+      area: 'core',
       icon: () => <svg data-testid="road-icon-planned" />,
     },
   ],
@@ -121,7 +113,7 @@ describe('about components', () => {
       'href',
       '/auth/register',
     );
-    expect(screen.getByRole('link', { name: /contact us/i })).toHaveAttribute('href', '#');
+    expect(screen.getByRole('link', { name: /contact us/i })).toHaveAttribute('href', '/support');
 
     rerender(<AboutFinalCTA isAuthenticated />);
     expect(screen.getByRole('link', { name: /go to dashboard/i })).toHaveAttribute(
@@ -133,82 +125,49 @@ describe('about components', () => {
   it('AboutFAQ renders all FAQ items', () => {
     render(<AboutFAQ />);
     expect(screen.getByText('Frequently asked questions')).toBeInTheDocument();
-    expect(screen.getAllByTestId('accordion-item')).toHaveLength(6);
+    expect(screen.getAllByTestId('accordion-item')).toHaveLength(10);
     expect(screen.getByText('Is Hobbistas free?')).toBeInTheDocument();
-    expect(screen.getByText(/How can I contribute or suggest features/i)).toBeInTheDocument();
+    expect(screen.getByText(/How can I suggest a feature or report a bug/i)).toBeInTheDocument();
+    expect(screen.getByText('Is Hobbistas a social network?')).toBeInTheDocument();
+    expect(
+      screen.getByText('Can I share my library without making my profile public?'),
+    ).toBeInTheDocument();
   });
 
-  it('AboutFeatures, AboutHowItWorks and AboutPhilosophy render their sections', () => {
-    render(
-      <>
-        <AboutFeatures />
-        <AboutHowItWorks />
-        <AboutPhilosophy />
-      </>,
-    );
+  it('AboutTwoModes contrasts the solo default with the opt-in social layer', () => {
+    render(<AboutTwoModes />);
 
-    expect(screen.getByText('Core features available today')).toBeInTheDocument();
-    expect(screen.getByText('Personal Library')).toBeInTheDocument();
-    expect(screen.getByText('External Library Sync')).toBeInTheDocument();
+    expect(screen.getByText('Two ways to use Hobbistas')).toBeInTheDocument();
+    expect(screen.getByText('Solo')).toBeInTheDocument();
+    expect(screen.getByText('How every account starts')).toBeInTheDocument();
+    expect(screen.getByText('Social layer')).toBeInTheDocument();
+    expect(screen.getByText('Opt-in — coming soon')).toBeInTheDocument();
+  });
 
-    expect(screen.getByText('What Hobbistas is not')).toBeInTheDocument();
-    expect(screen.getByText('Not a social network')).toBeInTheDocument();
-    expect(screen.getByText('Not an algorithm')).toBeInTheDocument();
+  it('AboutWhatYouGet lists only capabilities that are already live', () => {
+    render(<AboutWhatYouGet />);
+
+    expect(screen.getByText('What actually works right now')).toBeInTheDocument();
+    expect(screen.getByText('Six categories, one library')).toBeInTheDocument();
+    expect(screen.getByText('Bring your existing lists')).toBeInTheDocument();
+    expect(screen.getByText('Share without going public')).toBeInTheDocument();
+    expect(screen.getByText('A diary only you can read')).toBeInTheDocument();
+  });
+
+  it('AboutPhilosophy renders the rationale and the boundaries it merged in', () => {
+    render(<AboutPhilosophy />);
 
     expect(screen.getByText('Why Hobbistas exists')).toBeInTheDocument();
-    expect(screen.getByText('Simplicity')).toBeInTheDocument();
-    expect(screen.getByText('Privacy & Control')).toBeInTheDocument();
+    expect(screen.getByText('No engagement notifications')).toBeInTheDocument();
+    expect(screen.getByText('No engagement algorithm')).toBeInTheDocument();
+    expect(screen.getByText('No data to sell')).toBeInTheDocument();
   });
 
-  it('AboutStats uses active stats when at least four non-zero values exist', () => {
-    render(
-      <AboutStats
-        totalUsers={120}
-        totalGames={10}
-        totalAnime={20}
-        totalManga={0}
-        totalMovies={30}
-        totalTv={0}
-        totalBooks={40}
-        totalArticles={50}
-      />,
-    );
-
-    expect(screen.getByText('Content in numbers')).toBeInTheDocument();
-    expect(screen.getByText('Games')).toBeInTheDocument();
-    expect(screen.getByText('Articles')).toBeInTheDocument();
-    expect(screen.getByText('Users')).toBeInTheDocument();
-    expect(screen.queryByText('Series')).not.toBeInTheDocument();
-  });
-
-  it('AboutStats falls back to first six stats when active stats are fewer than four', () => {
-    render(
-      <AboutStats
-        totalUsers={0}
-        totalGames={0}
-        totalAnime={0}
-        totalManga={0}
-        totalMovies={0}
-        totalTv={0}
-        totalBooks={0}
-        totalArticles={0}
-      />,
-    );
-
-    expect(screen.getByText('Games')).toBeInTheDocument();
-    expect(screen.getByText('Anime')).toBeInTheDocument();
-    expect(screen.getByText('Manga')).toBeInTheDocument();
-    expect(screen.getByText('Movies')).toBeInTheDocument();
-    expect(screen.getByText('Series')).toBeInTheDocument();
-    expect(screen.getByText('Books')).toBeInTheDocument();
-    expect(screen.queryByText('Articles')).not.toBeInTheDocument();
-    expect(screen.queryByText('Users')).not.toBeInTheDocument();
-  });
-
-  it('AboutPeople renders empty state when team is empty', () => {
-    render(<AboutPeople team={[]} />);
-    expect(screen.getByTestId('empty-state')).toBeInTheDocument();
-    expect(screen.getByText('No team members found.')).toBeInTheDocument();
+  it('AboutPeople renders no admin-facing empty state for an empty team', () => {
+    const { container } = render(<AboutPeople team={[]} />);
+    expect(screen.getByText('Built by people who use it')).toBeInTheDocument();
+    expect(screen.queryByText(/no team members found/i)).not.toBeInTheDocument();
+    expect(container.querySelectorAll('[data-testid="avatar-image"]')).toHaveLength(0);
   });
 
   it('AboutPeople sorts team, resolves role labels and renders avatar/fallback', () => {
@@ -247,7 +206,7 @@ describe('about components', () => {
 
     const { container } = render(<AboutPeople team={team} />);
 
-    expect(screen.getByText('People behind Hobbista')).toBeInTheDocument();
+    expect(screen.getByText('Built by people who use it')).toBeInTheDocument();
     expect(screen.getAllByText('Founder').length).toBeGreaterThan(0);
     expect(screen.getByText('Reviewer')).toBeInTheDocument();
     expect(screen.getByText('user')).toBeInTheDocument();
@@ -409,14 +368,16 @@ describe('about components', () => {
     expect(screen.getByText('status:done')).toBeInTheDocument();
     expect(screen.getByText('status:in-progress')).toBeInTheDocument();
     expect(screen.getByText('status:planned')).toBeInTheDocument();
+    expect(screen.getByText('Shipped')).toBeInTheDocument();
+    expect(screen.getByText('Being built')).toBeInTheDocument();
+    expect(screen.getByText('Planned')).toBeInTheDocument();
   });
 
   it('index.ts exports all public about modules', () => {
     expect(typeof AboutIndex.AboutHero).toBe('function');
-    expect(typeof AboutIndex.AboutFeatures).toBe('function');
-    expect(typeof AboutIndex.AboutHowItWorks).toBe('function');
+    expect(typeof AboutIndex.AboutTwoModes).toBe('function');
+    expect(typeof AboutIndex.AboutWhatYouGet).toBe('function');
     expect(typeof AboutIndex.AboutPhilosophy).toBe('function');
-    expect(typeof AboutIndex.AboutStats).toBe('function');
     expect(typeof AboutIndex.AboutRoadmap).toBe('function');
     expect(typeof AboutIndex.AboutPeople).toBe('function');
     expect(typeof AboutIndex.AboutFAQ).toBe('function');

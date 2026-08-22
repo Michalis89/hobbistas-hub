@@ -1,38 +1,34 @@
 import { z } from 'zod';
 
+/**
+ * Allowlist of node and mark types an article document may contain.
+ *
+ * These mirror the schema built in src/lib/articles/schema.ts. They are
+ * duplicated as plain literals so API routes do not have to bundle the whole
+ * TipTap extension set; src/lib/articles/__tests__/schema.test.ts asserts the
+ * two stay identical.
+ */
 const ALLOWED_NODE_TYPES = new Set([
-  'doc',
-  'paragraph',
-  'text',
-  'heading',
-  'bulletList',
-  'orderedList',
-  'listItem',
   'blockquote',
+  'bulletList',
   'codeBlock',
+  'doc',
+  'figure',
   'hardBreak',
+  'heading',
   'horizontalRule',
   'image',
-  'table',
-  'tableRow',
-  'tableCell',
-  'tableHeader',
-  'taskList',
-  'taskItem',
+  'listItem',
+  'mediaCard',
+  'orderedList',
+  'paragraph',
+  'text',
 ]);
 
-const ALLOWED_MARK_TYPES = new Set([
-  'bold',
-  'italic',
-  'underline',
-  'strike',
-  'code',
-  'link',
-  'textStyle',
-  'highlight',
-  'subscript',
-  'superscript',
-]);
+const ALLOWED_MARK_TYPES = new Set(['bold', 'code', 'italic', 'link', 'strike', 'underline']);
+
+export const ARTICLE_ALLOWED_NODE_TYPES = ALLOWED_NODE_TYPES;
+export const ARTICLE_ALLOWED_MARK_TYPES = ALLOWED_MARK_TYPES;
 
 const TipTapMarkSchema = z.object({
   type: z.string().refine(t => ALLOWED_MARK_TYPES.has(t), {

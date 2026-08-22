@@ -34,7 +34,9 @@ import { API_ERRORS } from '@/lib/api/errors';
 describe('app/api/auth/logout/route', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (clearAuthCookies as jest.Mock).mockResolvedValue(undefined);
     jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -70,7 +72,11 @@ describe('app/api/auth/logout/route', () => {
     });
   });
 
-  it('returns a 500 fail response when Supabase signOut reports an error', async () => {
+  it('still clears cookies when Supabase signOut reports an error', async () => {
+    // Regression: bailing out here skipped the cookie clearing. The client signs
+    // out first, so the refresh token is usually already invalid by the time this
+    // runs — meaning the common case left a live session cookie behind and the
+    // user was silently signed back in.
     const signOutError = { message: 'signout failed' };
     (createRouteHandlerClient as jest.Mock).mockResolvedValue({
       auth: {
@@ -80,43 +86,32 @@ describe('app/api/auth/logout/route', () => {
 
     const response = await POST();
 
-    expect(console.error).toHaveBeenCalledWith('Logout error:', signOutError);
-    expect(clearAuthCookies).not.toHaveBeenCalled();
-    expect(fail).toHaveBeenCalledWith({ error: 'Logout error' }, 500, {
-      headers: {
-        'Cache-Control': 'no-store',
-      },
-    });
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
-      body: { error: 'Logout error' },
-      init: {
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      },
-    });
+    expect(clearAuthCookies).toHaveBeenCalled();
+    expect(response.status).toBe(200);
   });
 
-  it('returns the standardized internal error when logout throws unexpectedly', async () => {
+  it('still clears cookies when creating the Supabase client throws', async () => {
     (createRouteHandlerClient as jest.Mock).mockRejectedValue(new Error('boom'));
 
     const response = await POST();
 
-    expect(console.error).toHaveBeenCalledWith('Logout error:', expect.any(Error));
+    expect(clearAuthCookies).toHaveBeenCalled();
+    expect(response.status).toBe(200);
+  });
+
+  it('reports an error only when the cookies themselves could not be cleared', async () => {
+    (createRouteHandlerClient as jest.Mock).mockResolvedValue({
+      auth: { signOut: jest.fn().mockResolvedValue({ error: null }) },
+    });
+    (clearAuthCookies as jest.Mock).mockRejectedValueOnce(new Error('cookie store unavailable'));
+
+    const response = await POST();
+
     expect(fail).toHaveBeenCalledWith(API_ERRORS.INTERNAL, API_ERRORS.INTERNAL.status, {
       headers: {
         'Cache-Control': 'no-store',
       },
     });
     expect(response.status).toBe(API_ERRORS.INTERNAL.status);
-    await expect(response.json()).resolves.toEqual({
-      body: API_ERRORS.INTERNAL,
-      init: {
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      },
-    });
   });
 });

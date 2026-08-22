@@ -1,7 +1,6 @@
 ﻿'use client';
 
 import { CoverHeroImage } from '@/components/ui/cover-image';
-import Link from 'next/link';
 import useSWR from 'swr';
 import {
   ArrowRight,
@@ -176,11 +175,6 @@ const getCategoryRoute = (category: string, search?: string | null) =>
     search,
   );
 
-const getFallbackRoute = (enabledCategories: string[]) => {
-  const firstEnabled = enabledCategories.find(category => category in CATEGORY_ROUTES);
-  return firstEnabled ? getCategoryRoute(firstEnabled) : '/backlog';
-};
-
 const getProgressLabel = (category: string, progress: number | null) => {
   if (!progress || progress <= 0) {
     return null;
@@ -326,7 +320,6 @@ export function ContinueHero({ fallbackData }: ContinueHeroProps = {}) {
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const enabledCategories = payload?.enabledCategories ?? [];
   const slides = useMemo(() => payload?.slides ?? [], [payload]);
   const countsByCategory = useMemo(() => payload?.countsByCategory ?? {}, [payload]);
 
@@ -402,32 +395,12 @@ export function ContinueHero({ fallbackData }: ContinueHeroProps = {}) {
     );
   }
 
+  // Nothing in progress: render nothing rather than a 468px-tall hero inviting
+  // the user to "pick up where you left off" — which reads as broken for someone
+  // who has never started anything. DashboardEmptyState covers this case with a
+  // panel that explains the emptiness and links into each chosen category.
   if (slideItems.length === 0) {
-    return (
-      <section className="relative w-full overflow-hidden">
-        <HeroSurface>
-          <div className="relative mx-auto flex min-h-[468px] max-w-7xl items-center px-6 py-9 md:py-12">
-            <div className="w-full max-w-2xl">
-              <h2 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
-                Pick up where you left off
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                You don&apos;t have anything in progress yet.
-              </p>
-              <div className="mt-6">
-                <Link
-                  href={getFallbackRoute(enabledCategories)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2"
-                >
-                  View backlog
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
-              </div>
-            </div>
-          </div>
-        </HeroSurface>
-      </section>
-    );
+    return null;
   }
 
   return (

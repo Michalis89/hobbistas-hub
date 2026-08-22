@@ -91,10 +91,7 @@ export const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
 
     // Handle dialog open/close
     React.useEffect(() => {
-      const dialog = dialogRef.current;
-      if (!dialog) {
-        return;
-      }
+      const dialog = dialogRef.current as HTMLDialogElement;
 
       if (open) {
         if (!dialog.open) {
@@ -116,10 +113,7 @@ export const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
 
     // Handle ESC key and close events
     React.useEffect(() => {
-      const dialog = dialogRef.current;
-      if (!dialog) {
-        return;
-      }
+      const dialog = dialogRef.current as HTMLDialogElement;
 
       const handleClose = () => {
         onOpenChange(false);
@@ -161,6 +155,7 @@ export const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
     }, [open, triggerElement]);
 
     if (typeof window === 'undefined') {
+      /* istanbul ignore next -- SSR guard; jsdom cannot safely unset window. */
       return null;
     }
 

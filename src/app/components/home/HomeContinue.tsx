@@ -95,7 +95,7 @@ export function HomeContinue() {
             <Link
               key={item.category}
               href={item.href}
-              className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition hover:-translate-y-0.5 hover:border-primary/40"
+              className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40"
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground transition group-hover:bg-primary/10 group-hover:text-primary">
                 {item.icon}

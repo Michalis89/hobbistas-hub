@@ -72,16 +72,16 @@ export const ROADMAP_ITEMS: RoadmapItem[] = [
     icon: Palette,
   },
   {
-    title: 'External Metadata Enrichment',
+    title: 'Library Import',
     description:
-      'Use external APIs to enrich entries with metadata and cover art when items are added.',
+      'Import your Steam library with playtime, and your anime and manga from MyAnimeList.',
     status: 'done',
-    area: 'core',
-    icon: Plug,
+    area: 'import',
+    icon: Download,
   },
   {
-    title: 'Import & Export',
-    description: 'Import lists from supported services and export personal data to common formats.',
+    title: 'Data Export',
+    description: 'Export your personal library and history to common, portable formats.',
     status: 'in-progress',
     area: 'import',
     icon: Download,
@@ -157,19 +157,9 @@ const PLANNED_LABELS: Record<'teaser' | 'full', string> = {
   full: 'In roadmap',
 };
 
-const TEASER_PLANNED_ITEMS = new Set(['Import / Export', 'Notifications']);
-
 export function getStatusLabel(status: RoadmapStatus, context: 'teaser' | 'full'): string {
   if (status === 'planned') {
     return PLANNED_LABELS[context];
   }
   return COMMON_STATUS_LABELS[status];
-}
-
-export function getTeaserRoadmapItems(): RoadmapItem[] {
-  const inProgress = ROADMAP_ITEMS.filter(item => item.status === 'in-progress');
-  const planned = ROADMAP_ITEMS.filter(
-    item => item.status === 'planned' && TEASER_PLANNED_ITEMS.has(item.title),
-  );
-  return [...inProgress, ...planned];
 }

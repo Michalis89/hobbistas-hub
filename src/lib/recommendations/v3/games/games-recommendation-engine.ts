@@ -427,15 +427,7 @@ function scoreDiscoveryCandidate(
     (genres.includes('hack-and-slash') ? 1 : 0) +
     (genres.includes('shooter') ? 1 : 0);
 
-  const historyStrength = history.reduce((acc, entry) => {
-    const overlap = toCanonicalGenres(entry.media.genres).filter(genre => genres.includes(genre)).length;
-    if (overlap === 0) {
-      return acc;
-    }
-    const base = entry.isFavorite ? 2 : 1;
-    const scoreBoost = entry.status === 'completed' ? (entry.score ?? 0) / 10 : 0.5;
-    return acc + base + scoreBoost;
-  }, 0);
+  const historyStrength = calculateDiscoveryHistoryStrength(history, genres);
 
   const popularityBoost = Math.min(8, candidate.popularityScore / 12);
   const platformBoost = scoreCandidatePlatformPreference(candidate, taste);
@@ -488,6 +480,36 @@ function scoreDiscoveryCandidate(
       puzzleNoisePenalty,
     }),
   };
+}
+
+export function calculateDiscoveryHistoryStrength(
+  history: GameHistoryEntry[],
+  candidateGenres: string[],
+): number {
+  const genres = toCanonicalGenres(candidateGenres);
+
+  return history.reduce((acc, entry) => {
+    const overlap = toCanonicalGenres(entry.media.genres).filter(genre => genres.includes(genre)).length;
+    if (overlap === 0) {
+      return acc;
+    }
+
+    if (entry.status === 'completed') {
+      const base = entry.isFavorite ? 2 : 1;
+      const scoreBoost = (entry.score ?? 0) / 10;
+      return acc + base + scoreBoost;
+    }
+
+    if (entry.status === 'current') {
+      return acc + (entry.isFavorite ? 0.8 : 0.5);
+    }
+
+    if (entry.status === 'planned' || entry.status === 'dropped') {
+      return acc;
+    }
+
+    return acc;
+  }, 0);
 }
 
 function scoreFranchiseProgression(entry: GameHistoryEntry, history: GameHistoryEntry[]): number {

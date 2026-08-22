@@ -8,6 +8,12 @@ export type GamesTasteProfile = {
   themes: Array<{ name: string; weight: number }>;
   playerStyles: Array<{ name: string; weight: number }>;
   negativeSignals: Array<{ name: string; weight: number }>;
+  signalTotals?: {
+    coreGenres: number;
+    themes: number;
+    playerStyles: number;
+    negativeSignals: number;
+  };
 };
 
 export type GameRecommendation = {
@@ -55,6 +61,7 @@ export type GameHistoryEntry = {
     title: string;
     genres: string[];
     themes: string[];
+    studios: string[];
     platforms: string[];
     coverImageLarge?: string;
     coverImageMedium?: string;

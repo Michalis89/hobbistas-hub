@@ -53,6 +53,6 @@ describe('RegisterPage', () => {
     expect(screen.getByText('Progress and stats')).toBeInTheDocument();
     expect(screen.getByText('Personalized discovery')).toBeInTheDocument();
     expect(screen.getByTestId('register-form')).toBeInTheDocument();
-    expect(screen.getByText('Hobbista Hub')).toBeInTheDocument();
+    expect(screen.getByText('Hobbistas')).toBeInTheDocument();
   });
 });

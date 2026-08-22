@@ -49,6 +49,14 @@ export interface PasswordStrength {
   errors: string[];
 }
 
+/**
+ * Password policy: length-based, not composition-based.
+ *
+ * Mandatory character-class rules (upper + lower + digit + symbol) push people
+ * toward short, predictable passwords and are the single biggest source of
+ * failed sign-ups. The minimum stays at 8 so every existing account can still
+ * sign in; `getPasswordStrength` does the coaching in the UI instead.
+ */
 export function validatePassword(password: string): { isValid: boolean; error?: string } {
   if (!password) {
     return { isValid: false, error: 'Password is required' };
@@ -62,26 +70,8 @@ export function validatePassword(password: string): { isValid: boolean; error?: 
     return { isValid: false, error: 'Password cannot exceed 128 characters' };
   }
 
-  if (!/[a-z]/.test(password)) {
-    return { isValid: false, error: 'Password must include at least one lowercase letter' };
-  }
-
-  if (!/[A-Z]/.test(password)) {
-    return {
-      isValid: false,
-      error: 'Password must include at least one uppercase letter',
-    };
-  }
-
-  if (!/[0-9]/.test(password)) {
-    return { isValid: false, error: 'Password must include at least one number' };
-  }
-
-  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
-    return {
-      isValid: false,
-      error: 'Password must include at least one special character',
-    };
+  if (/^(.)\1+$/.test(password)) {
+    return { isValid: false, error: 'Password cannot be the same character repeated' };
   }
 
   return { isValid: true };

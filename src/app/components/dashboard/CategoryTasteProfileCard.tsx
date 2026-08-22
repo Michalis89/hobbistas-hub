@@ -101,6 +101,12 @@ type GamesIdentityProfile = {
   themes: IdentitySignal[];
   playerStyles: IdentitySignal[];
   negativeSignals: IdentitySignal[];
+  signalTotals?: {
+    coreGenres?: number;
+    themes?: number;
+    playerStyles?: number;
+    negativeSignals?: number;
+  };
 };
 type AnimeIdentityProfile = {
   summary: string;
@@ -230,6 +236,11 @@ const toIdentitySignals = (value: unknown, limit: number): IdentitySignal[] => {
     .slice(0, limit);
 };
 
+const toSignalTotal = (value: unknown): number | undefined => {
+  const total = typeof value === 'number' ? value : Number(value ?? NaN);
+  return Number.isFinite(total) && total > 0 ? total : undefined;
+};
+
 const parseGamesIdentityProfile = (value: Record<string, unknown> | null | undefined): GamesIdentityProfile | null => {
   if (!value || typeof value !== 'object') {
     return null;
@@ -242,12 +253,25 @@ const parseGamesIdentityProfile = (value: Record<string, unknown> | null | undef
   if (!summary || coreGenres.length === 0) {
     return null;
   }
+  const signalTotalsValue =
+    value.signalTotals && typeof value.signalTotals === 'object'
+      ? (value.signalTotals as Record<string, unknown>)
+      : null;
+
   return {
     summary,
     coreGenres,
     themes,
     playerStyles,
     negativeSignals,
+    signalTotals: signalTotalsValue
+      ? {
+          coreGenres: toSignalTotal(signalTotalsValue.coreGenres),
+          themes: toSignalTotal(signalTotalsValue.themes),
+          playerStyles: toSignalTotal(signalTotalsValue.playerStyles),
+          negativeSignals: toSignalTotal(signalTotalsValue.negativeSignals),
+        }
+      : undefined,
   };
 };
 
@@ -370,8 +394,12 @@ const parseBooksIdentityProfile = (
   };
 };
 
-const toIdentityTraits = (signals: IdentitySignal[]): TasteProfileBarTrait[] => {
-  const total = signals.reduce((sum, item) => sum + item.weight, 0);
+export const toIdentityTraits = (
+  signals: IdentitySignal[],
+  denominator?: number,
+): TasteProfileBarTrait[] => {
+  const visibleTotal = signals.reduce((sum, item) => sum + item.weight, 0);
+  const total = denominator && denominator > visibleTotal ? denominator : visibleTotal;
   if (total <= 0) {
     return [];
   }
@@ -436,11 +464,26 @@ export default function CategoryTasteProfileCard({
     }))
     .filter(section => section.traits.length > 0);
   if (category === 'games' && gamesIdentity) {
-    const negativeTraits = toIdentityTraits(gamesIdentity.negativeSignals);
+    const negativeTraits = toIdentityTraits(
+      gamesIdentity.negativeSignals,
+      gamesIdentity.signalTotals?.negativeSignals,
+    );
     const identityBuckets: Array<{ label: string; traits: TasteProfileBarTrait[] }> = [
-      { label: 'Core Genres', traits: toIdentityTraits(gamesIdentity.coreGenres) },
-      { label: 'Top Themes', traits: toIdentityTraits(gamesIdentity.themes) },
-      { label: 'Player Styles', traits: toIdentityTraits(gamesIdentity.playerStyles) },
+      {
+        label: 'Core Genres',
+        traits: toIdentityTraits(gamesIdentity.coreGenres, gamesIdentity.signalTotals?.coreGenres),
+      },
+      {
+        label: 'Top Themes',
+        traits: toIdentityTraits(gamesIdentity.themes, gamesIdentity.signalTotals?.themes),
+      },
+      {
+        label: 'Player Styles',
+        traits: toIdentityTraits(
+          gamesIdentity.playerStyles,
+          gamesIdentity.signalTotals?.playerStyles,
+        ),
+      },
       ...(negativeTraits.length > 0
         ? [{ label: 'Lower-Confidence Avoid Patterns', traits: negativeTraits }]
         : []),

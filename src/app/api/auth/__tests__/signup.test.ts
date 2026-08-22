@@ -22,6 +22,10 @@ const userCategoryProfilesUpsertMock = jest.fn();
 const createUserMock = jest.fn();
 const deleteUserMock = jest.fn();
 const generateLinkMock = jest.fn();
+const createRouteHandlerClientMock = jest.fn();
+const setAuthCookiesMock = jest.fn();
+const sendVerificationEmailMock = jest.fn();
+const signInWithPasswordMock = jest.fn();
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -40,11 +44,28 @@ jest.mock('@/lib/observability/withApiRoute', () => ({
 
 jest.mock('@/lib/api/response', () => ({
   __esModule: true,
+  ok: jest.fn((data: unknown, init?: ResponseInit) => ({
+    status: (init as { status?: number } | undefined)?.status ?? 200,
+    headers: new Headers((init as { headers?: HeadersInit } | undefined)?.headers),
+    json: async () => ({ data }),
+  })),
   fail: jest.fn((body: unknown, status: number, init?: ResponseInit) => ({
     status,
     headers: new Headers((init as { headers?: HeadersInit } | undefined)?.headers),
     json: async () => body,
   })),
+}));
+
+jest.mock('@/lib/supabase-route-handler', () => ({
+  createRouteHandlerClient: (...args: unknown[]) => createRouteHandlerClientMock(...args),
+}));
+
+jest.mock('@/lib/auth', () => ({
+  setAuthCookies: (...args: unknown[]) => setAuthCookiesMock(...args),
+}));
+
+jest.mock('@/lib/auth/verification', () => ({
+  sendVerificationEmail: (...args: unknown[]) => sendVerificationEmailMock(...args),
 }));
 
 jest.mock('@/lib/rate-limit', () => ({
@@ -182,6 +203,17 @@ describe('app/api/auth/signup/route', () => {
       error: null,
     });
     sendConfirmEmailMock.mockResolvedValue(undefined);
+    sendVerificationEmailMock.mockResolvedValue(true);
+    setAuthCookiesMock.mockResolvedValue(undefined);
+    signInWithPasswordMock.mockResolvedValue({
+      data: {
+        session: { access_token: 'access-token', refresh_token: 'refresh-token' },
+      },
+      error: null,
+    });
+    createRouteHandlerClientMock.mockResolvedValue({
+      auth: { signInWithPassword: (...args: unknown[]) => signInWithPasswordMock(...args) },
+    });
 
     process.env.NODE_ENV = 'test';
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -382,30 +414,35 @@ describe('app/api/auth/signup/route', () => {
     });
   });
 
-  it('returns 500 when signup link generation fails or has no action link', async () => {
-    generateLinkMock.mockResolvedValueOnce({
-      data: null,
-      error: { message: 'link failed' },
-    });
-    const e1 = await POST(makeRequest());
-    expect(e1.status).toBe(500);
-
-    generateLinkMock.mockResolvedValueOnce({
-      data: { properties: {} },
-      error: null,
-    });
-    const e2 = await POST(makeRequest());
-    expect(e2.status).toBe(500);
-  });
-
-  it('returns 500 when sending confirmation email fails', async () => {
-    sendConfirmEmailMock.mockRejectedValueOnce(new Error('smtp down'));
+  it('still succeeds when the verification email cannot be sent', async () => {
+    // The account exists by this point; failing the request would tell the user
+    // their sign-up did not work when in fact it did.
+    sendVerificationEmailMock.mockResolvedValueOnce(false);
 
     const res = await POST(makeRequest());
-    expect(res.status).toBe(500);
-    await expect(res.json()).resolves.toEqual({
-      error: 'We could not send the confirmation email. Try again shortly.',
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.data.verificationEmailSent).toBe(false);
+    expect(body.data.session).toEqual({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
     });
+  });
+
+  it('falls back to the login screen when auto sign-in fails', async () => {
+    signInWithPasswordMock.mockResolvedValueOnce({
+      data: { session: null },
+      error: { message: 'sign-in unavailable' },
+    });
+
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.data.session).toBeNull();
+    expect(body.data.redirectUrl).toBe('/auth/login');
+    expect(setAuthCookiesMock).not.toHaveBeenCalled();
   });
 
   it('returns development catch message with step details', async () => {
@@ -428,24 +465,38 @@ describe('app/api/auth/signup/route', () => {
     await expect(res.json()).resolves.toEqual(API_ERRORS.INTERNAL);
   });
 
-  it('returns success and sends confirmation link on happy path', async () => {
-    process.env.NODE_ENV = 'development';
+  it('signs the new account in and sends it to onboarding on the happy path', async () => {
     createUserMock.mockResolvedValueOnce({ data: { user: { id: 'auth-user-3' } }, error: null });
 
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ ok: true });
 
+    const body = await res.json();
+    expect(body.data).toEqual(
+      expect.objectContaining({
+        ok: true,
+        redirectUrl: '/onboarding',
+        verificationEmailSent: true,
+        session: { access_token: 'access-token', refresh_token: 'refresh-token' },
+      }),
+    );
+
+    // Confirmed at the Supabase level so the session can be issued right away;
+    // address ownership is tracked by users.email_verified instead.
     expect(createUserMock).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'user@example.com',
         email_confirm: true,
       }),
     );
-    expect(sendConfirmEmailMock).toHaveBeenCalledWith(
+    expect(usersUpsertMock.mock.calls[0]?.[0].email_verified).toBe(false);
+
+    expect(sendVerificationEmailMock).toHaveBeenCalledWith(
+      expect.anything(),
       'user@example.com',
-      'https://example.com/confirm',
+      'https://example.com',
     );
+    expect(setAuthCookiesMock).toHaveBeenCalledWith('access-token', 'refresh-token', true);
   });
 
   it('upserts nullable profile fields as null when optional values are empty', async () => {

@@ -5,6 +5,7 @@
 
 export {
   setAuthCookies,
+  setAuthCookiesOnResponse,
   clearAuthCookies,
   getAuthCookieOptions,
   getPersistentAuthCookieOptions,

@@ -1,4 +1,4 @@
-import { buildGamesTasteProfile } from '../games/games-taste-engine';
+import { buildGamesTasteProfile, tasteWeight } from '../games/games-taste-engine';
 import type { GameHistoryEntry } from '../games/games-types';
 
 function entry(
@@ -25,6 +25,7 @@ function entry(
       title,
       genres,
       themes: [],
+      studios: [],
       platforms: ['PlayStation 5'],
       coverImageLarge: '',
       coverImageMedium: '',
@@ -55,5 +56,18 @@ describe('buildGamesTasteProfile', () => {
 
     const negatives = taste.profile.negativeSignals.map(item => item.name).join(' ').toLowerCase();
     expect(negatives).toContain('puzzle');
+  });
+
+  it('treats unknown statuses as neutral taste evidence', () => {
+    const unknownStatusEntry = entry(
+      1,
+      'Imported Status Game',
+      'on_hold' as GameHistoryEntry['status'],
+      ['Role-playing (RPG)'],
+      4,
+      false,
+    );
+
+    expect(tasteWeight(unknownStatusEntry)).toBe(0);
   });
 });

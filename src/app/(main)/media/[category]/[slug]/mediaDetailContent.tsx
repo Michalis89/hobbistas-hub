@@ -5,6 +5,7 @@ import { getBreadcrumbStructuredData } from '@/utils/seo/metadata/structuredData
 import { SITE_URL } from '@/config/site';
 import { buildMediaJsonLd } from '@/lib/seo/jsonld';
 import MediaDetailPageClient from './MediaDetailPageClient';
+import MediaArticlesSection from '@/app/components/media-detail/MediaArticlesSection';
 import { isMediaCategory } from '@/app/components/backlog/types';
 import {
   fetchMediaItem,
@@ -70,6 +71,7 @@ export async function MediaDetailContent({ params }: MediaDetailPageProps) {
       />
       <StructuredData data={getBreadcrumbStructuredData(breadcrumb)} />
       <MediaDetailPageClient category={normalizedCategory as MediaCategory} mediaItem={item} />
+      <MediaArticlesSection mediaId={item.id} title={title} />
     </>
   );
 }

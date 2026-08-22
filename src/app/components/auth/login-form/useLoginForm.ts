@@ -6,6 +6,7 @@ import { fetchSession } from '@/store/slices/authSlice';
 import type { AppDispatch } from '@/store/store';
 import { setAuthPersistence, supabase } from '@/lib/supabase-client';
 import { RETURN_URL_KEY } from '@/lib/hooks/useRequireAuth';
+import { ONBOARDING_PATH } from '@/lib/routes/authRoutes';
 import { EXPIRED_RESET_MESSAGE, isCaptchaDisabled } from './constants';
 
 export type AlertState = { type: 'success' | 'error'; message: string } | null;
@@ -26,7 +27,9 @@ export function useLoginForm() {
   const searchParams = useSearchParams();
   const dispatch = useDispatch<AppDispatch>();
 
-  const redirectParam = searchParams.get('redirect');
+  // Callers across the app emit both spellings; accept either so the return
+  // destination is never silently dropped.
+  const redirectParam = searchParams.get('redirect') ?? searchParams.get('redirectTo');
   const forgotMode = searchParams.get('forgot') === 'true';
   const expiredResetLink = searchParams.get('expired') === 'true';
   const resetError = searchParams.get('reset_error');
@@ -49,6 +52,8 @@ export function useLoginForm() {
   const [captchaError, setCaptchaError] = useState<string | null>(null);
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const [captchaVisible, setCaptchaVisible] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const submitInFlight = useRef(false);
 
   const revealCaptchaIfNeeded = () => {
@@ -192,33 +197,40 @@ export function useLoginForm() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    // preventDefault must run before the in-flight guard, otherwise a blocked
+    // submit falls through to a native GET submit that puts the password in the URL.
+    e.preventDefault();
+
     if (submitInFlight.current) {
       return;
     }
     submitInFlight.current = true;
-    e.preventDefault();
-    setAlert(null);
-    setIsRedirecting(false);
 
-    if (!isCaptchaDisabled && !captchaVisible) {
-      setCaptchaVisible(true);
-      setCaptchaError('Load the CAPTCHA first, then try again.');
-      return;
-    }
-
-    if (!validateForm()) {
-      return;
-    }
-
-    if (!isCaptchaDisabled && !captchaToken) {
-      setCaptchaError('Complete the CAPTCHA to continue.');
-      return;
-    }
-
-    setCaptchaError(null);
-    setLoading(true);
-
+    // Every exit path below runs through this finally, so the guard can never
+    // stay latched and permanently freeze the form.
     try {
+      setAlert(null);
+      setIsRedirecting(false);
+      setNeedsVerification(false);
+
+      if (!isCaptchaDisabled && !captchaVisible) {
+        setCaptchaVisible(true);
+        setCaptchaError('Load the CAPTCHA first, then try again.');
+        return;
+      }
+
+      if (!validateForm()) {
+        return;
+      }
+
+      if (!isCaptchaDisabled && !captchaToken) {
+        setCaptchaError('Complete the CAPTCHA to continue.');
+        return;
+      }
+
+      setCaptchaError(null);
+      setLoading(true);
+
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         credentials: 'include',
@@ -253,7 +265,7 @@ export function useLoginForm() {
       // 2. Saved URL from sessionStorage
       // 3. Server-provided redirectUrl based on profile completeness
       // 4. Default fallback
-      let redirectUrl = payload.redirectUrl || '/profile/edit';
+      let redirectUrl = payload.redirectUrl || ONBOARDING_PATH;
       if (redirectParam) {
         redirectUrl = decodeURIComponent(redirectParam);
       } else {
@@ -286,10 +298,17 @@ export function useLoginForm() {
       }
     } catch (error) {
       console.error('Login error:', error);
-      if (error instanceof Error && error.message.toLowerCase().includes('captcha')) {
-        setCaptchaError('CAPTCHA failed. Retry it, and refresh the page if it persists.');
+      setIsRedirecting(false);
+
+      // A consumed CAPTCHA token cannot be replayed, so any failed attempt needs
+      // a fresh challenge before the user can submit again.
+      if (!isCaptchaDisabled) {
         setCaptchaResetKey(prev => prev + 1);
         setCaptchaToken(null);
+      }
+
+      if (error instanceof Error && error.message.toLowerCase().includes('captcha')) {
+        setCaptchaError('CAPTCHA failed. Retry it, and refresh the page if it persists.');
         setAlert({
           type: 'error',
           message:
@@ -302,6 +321,15 @@ export function useLoginForm() {
         error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
 
       const normalizedError = errorMessage.toLowerCase();
+
+      // Legacy accounts created before instant sign-up can still be unconfirmed.
+      // Surface a resend action instead of leaving them at a dead end.
+      if (normalizedError.includes('not confirmed') || normalizedError.includes('not verified')) {
+        setNeedsVerification(true);
+        setAlert({ type: 'error', message: errorMessage });
+        return;
+      }
+
       if (
         expiredResetLink &&
         (normalizedError.includes('wrong email or password') ||
@@ -329,6 +357,36 @@ export function useLoginForm() {
     }
   };
 
+  const handleResendVerification = async () => {
+    setResendLoading(true);
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.identifier }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Could not send the verification email.');
+      }
+
+      setAlert({
+        type: 'success',
+        message: 'Verification email sent. Check your inbox (and spam folder).',
+      });
+      setNeedsVerification(false);
+    } catch (error) {
+      setAlert({
+        type: 'error',
+        message:
+          error instanceof Error ? error.message : 'Could not send the verification email.',
+      });
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   return {
     redirectParam,
     formData,
@@ -345,6 +403,9 @@ export function useLoginForm() {
     captchaError,
     captchaResetKey,
     captchaVisible,
+    needsVerification,
+    resendLoading,
+    handleResendVerification,
     setShowPassword,
     setShowResetPanel,
     setResetEmail,

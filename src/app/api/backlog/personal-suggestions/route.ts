@@ -43,7 +43,7 @@ async function GETHandler(req: Request) {
       subtitle: item.reason,
       status: 'planned' as const,
       score: (item.confidence * 10).toFixed(1),
-      tags: item.matchedSignals,
+      tags: item.matchedSignals ?? [],
       cover: item.cover || DEFAULT_COVER,
       description: item.reason,
     }));

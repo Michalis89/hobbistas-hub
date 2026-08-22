@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /out/
+/public/sitemap*.xml
+/public/robots.txt
 
 # PWA generated files (next-pwa build output)
 /public/sw.js
@@ -60,4 +62,4 @@ supabase/.temp
 /issues
 /generated_issues.txt
 /scripts
-.claude
+.claude/settings.local.json

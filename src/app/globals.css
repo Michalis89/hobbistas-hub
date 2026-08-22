@@ -490,6 +490,80 @@
     text-decoration: none !important;
     border-bottom: 0 !important;
   }
+
+  /* ---------------------------------------------------------------------------
+     Figures
+     Expressed as CSS rather than Tailwind arbitrary variants because the width
+     variants key off a data attribute, and because the same rules have to apply
+     inside the editor (.ProseMirror) and the reader (.article-content).
+     --------------------------------------------------------------------------- */
+  .article-content figure,
+  .ProseMirror figure {
+    margin: 2.5rem 0;
+  }
+
+  .article-content figure img,
+  .ProseMirror figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    border-radius: 1rem;
+  }
+
+  .article-content figcaption,
+  .ProseMirror figcaption {
+    margin-top: 0.75rem;
+    text-align: center;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .article-content figcaption:empty,
+  .ProseMirror figcaption:empty {
+    display: none;
+  }
+
+  /* Break out of the reading measure for emphasis. The reading column is 76ch,
+     so a wide figure reaches past it without touching the viewport edge. */
+  .article-content figure[data-align='wide'],
+  .ProseMirror figure[data-align='wide'] {
+    width: min(100vw - 3rem, 52rem);
+    margin-left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .article-content figure[data-align='full'],
+  .ProseMirror figure[data-align='full'] {
+    width: calc(100vw - 3rem);
+    margin-left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .article-content figure[data-align='full'] img,
+  .ProseMirror figure[data-align='full'] img {
+    border-radius: 0.75rem;
+  }
+
+  /* The editor shows the figure as a selectable block. */
+  .ProseMirror figure.ProseMirror-selectednode {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 4px;
+    border-radius: 1rem;
+  }
+
+  .ProseMirror figcaption:empty::before {
+    content: 'Add a caption...';
+    color: hsl(var(--muted-foreground));
+    display: block;
+    text-align: center;
+    font-size: 0.875rem;
+  }
+
+  .ProseMirror figcaption:empty {
+    display: block;
+  }
 }
 
 /* =============================================================================

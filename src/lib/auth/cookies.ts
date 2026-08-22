@@ -64,6 +64,27 @@ export async function clearAuthCookies() {
 }
 
 /**
+ * Set auth session cookies directly on a NextResponse.
+ *
+ * Use this instead of `setAuthCookies` whenever the handler returns a response
+ * it constructed itself (notably `NextResponse.redirect`): cookies written via
+ * `next/headers` are not reliably merged into such a response, which would send
+ * the user onward without a session.
+ */
+export function setAuthCookiesOnResponse(
+  response: import('next/server').NextResponse,
+  accessToken: string,
+  refreshToken: string,
+  persistent = false,
+) {
+  const options = persistent ? getPersistentAuthCookieOptions() : getAuthCookieOptions();
+
+  response.cookies.set(AUTH_COOKIE_NAMES.ACCESS_TOKEN, accessToken, options);
+  response.cookies.set(AUTH_COOKIE_NAMES.REFRESH_TOKEN, refreshToken, options);
+  return response;
+}
+
+/**
  * Clear auth cookies from NextResponse (for middleware)
  * Used when session is invalid or expired during middleware execution
  */

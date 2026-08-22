@@ -94,7 +94,7 @@ function ModuleButton({
     <Link
       href={href}
       onClick={handleClick}
-      className={`group/btn flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition hover:-translate-y-0.5 ${color}`}
+      className={`group/btn flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${color}`}
     >
       {needsLogin ? <Lock className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
       <span>{label}</span>
@@ -111,7 +111,7 @@ export function HobbiesCategoryCard({ category }: HobbiesCategoryCardProps) {
   const IconComponent = ICON_MAP[category.icon] || Gamepad2;
 
   return (
-    <div className="group rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md">
+    <div className="group rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:border-primary/50 hover:shadow-md">
       <div className="mb-4 flex items-start justify-between">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
           <IconComponent className="h-6 w-6" />

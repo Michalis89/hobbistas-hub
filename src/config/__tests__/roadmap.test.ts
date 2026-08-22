@@ -1,9 +1,4 @@
-import {
-  ROADMAP_ITEMS,
-  getStatusLabel,
-  getTeaserRoadmapItems,
-  type RoadmapItem,
-} from '@/config/roadmap';
+import { ROADMAP_ITEMS, getStatusLabel, type RoadmapItem } from '@/config/roadmap';
 
 describe('roadmap config', () => {
   it('defines roadmap items with valid statuses, areas, and icons', () => {
@@ -28,25 +23,6 @@ describe('roadmap config', () => {
     expect(getStatusLabel('planned', 'full')).toBe('In roadmap');
   });
 
-  it('returns only in-progress items and teaser-approved planned items', () => {
-    const teaserItems = getTeaserRoadmapItems();
-
-    expect(teaserItems.map(item => item.title)).toEqual([
-      'Import & Export',
-      'Profiles & Social Graph (Optional)',
-      'Direct Messages (Optional)',
-    ]);
-    expect(teaserItems.every(item => item.status === 'in-progress')).toBe(true);
-  });
-
-  it('keeps teaser items as references from the source roadmap list', () => {
-    const teaserItems = getTeaserRoadmapItems();
-
-    for (const item of teaserItems) {
-      expect(ROADMAP_ITEMS).toContain(item);
-    }
-  });
-
   it('includes the expected feature coverage by area', () => {
     const byArea = ROADMAP_ITEMS.reduce<Record<string, RoadmapItem[]>>((acc, item) => {
       acc[item.area] ??= [];
@@ -54,10 +30,10 @@ describe('roadmap config', () => {
       return acc;
     }, {});
 
-    expect(byArea.core).toHaveLength(6);
+    expect(byArea.core).toHaveLength(5);
     expect(byArea.community).toHaveLength(4);
     expect(byArea.dnd).toHaveLength(3);
-    expect(byArea.import).toHaveLength(1);
+    expect(byArea.import).toHaveLength(2);
     expect(byArea.ui).toHaveLength(1);
     expect(byArea.diary).toHaveLength(1);
   });

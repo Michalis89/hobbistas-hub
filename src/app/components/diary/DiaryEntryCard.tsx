@@ -28,7 +28,7 @@ function DiaryEntryCardComponent({ entry, isActive, onSelect }: DiaryEntryCardPr
     <button type="button" className="w-full text-left" onClick={() => onSelect(entry.id)}>
       <Card
         className={cn(
-          'transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md',
+          'transition-all duration-200 ease-out hover:shadow-md',
           isActive ? 'border-primary/60 shadow-sm' : 'border-border/80',
         )}
       >

@@ -8,17 +8,31 @@ const ARTICLE_DETAIL_OPTIONS: ArticleDetailPageOptions = {
   breadcrumbLabel: 'Articles',
 };
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   return buildArticleDetailMetadata({
     params,
+    searchParams,
     options: ARTICLE_DETAIL_OPTIONS,
   });
 }
 
-export default function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {
+export default function ArticlePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   return (
     <ArticleDetailPage
       params={params}
+      searchParams={searchParams}
       basePath={ARTICLE_DETAIL_OPTIONS.basePath}
       breadcrumbLabel={ARTICLE_DETAIL_OPTIONS.breadcrumbLabel}
     />

@@ -1,5 +1,13 @@
-const LOGIN_REQUIRED_PREFIXES = ['/profile', '/backlog', '/support', '/admin', '/diary'];
+const LOGIN_REQUIRED_PREFIXES = [
+  '/profile',
+  '/backlog',
+  '/support',
+  '/admin',
+  '/diary',
+  '/onboarding',
+];
 const DASHBOARD_PATH = '/dashboard';
+const ONBOARDING_PATH = '/onboarding';
 const HOME_PATHS = ['/home', '/pages/home'];
 const AUTH_ROUTES = [
   '/auth/login',
@@ -21,7 +29,16 @@ export const isAuthRoute = (pathname: string) =>
 export const shouldRedirectToLogin = (pathname: string) =>
   isProtectedRoute(pathname) && !isAuthRoute(pathname);
 
-export const getLoginUrl = (redirectTo?: string) =>
-  redirectTo ? `/auth/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/auth/login';
+/**
+ * Canonical query key for "where to go after signing in".
+ * The auth forms read this key; anything that builds a login URL must use it,
+ * otherwise the return destination is silently dropped.
+ */
+export const LOGIN_REDIRECT_PARAM = 'redirect';
 
-export { LOGIN_REQUIRED_PREFIXES, DASHBOARD_PATH, HOME_PATHS, AUTH_ROUTES };
+export const getLoginUrl = (redirectTo?: string) =>
+  redirectTo
+    ? `/auth/login?${LOGIN_REDIRECT_PARAM}=${encodeURIComponent(redirectTo)}`
+    : '/auth/login';
+
+export { LOGIN_REQUIRED_PREFIXES, DASHBOARD_PATH, ONBOARDING_PATH, HOME_PATHS, AUTH_ROUTES };

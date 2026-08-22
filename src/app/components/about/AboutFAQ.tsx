@@ -17,32 +17,52 @@ const faqItems: FAQItem[] = [
   {
     question: 'Is Hobbistas free?',
     answer:
-      'Yes. Tracking, backlog management, progress, ratings, and personal statistics are all completely free. There is no trial period and no credit card required.',
+      'Yes. Tracking, backlog management, progress, ratings, imports, and personal statistics are all completely free. There is no trial period and no credit card required.',
   },
   {
     question: 'Which hobby categories are supported?',
     answer:
-      'Games, Anime, Manga, Movies, TV Shows, and Books — each with its own metadata and progress fields. More categories are planned.',
+      'Games, Anime, Manga, Movies, TV Shows, and Books — each with its own metadata and the progress fields that suit it. More categories are planned.',
+  },
+  {
+    question: 'Is Hobbistas a social network?',
+    answer:
+      'Not by default. Every account starts solo: no public profile, no feed, no followers. A social layer with profiles, an explore feed, and messaging is opt-in behind a single switch in your settings, and it is still being built — so for now every account is private.',
+  },
+  {
+    question: 'Can I share my library without making my profile public?',
+    answer:
+      'Yes. You can generate a read-only share link to your backlog or dashboard and send it to anyone. The person opening it does not need an account, and you can set the link to expire. This works whether or not the social layer is enabled.',
   },
   {
     question: 'Can I import my backlog from other services?',
     answer:
-      'Steam import is fully supported — connect your account and your game library with playtime appears instantly. We are also working on MyAnimeList import for anime and manga.',
+      'Steam and MyAnimeList are both supported today. Connect Steam and your game library arrives with playtime; connect MyAnimeList and your anime and manga arrive with progress and scores. Export to portable formats is in development.',
+  },
+  {
+    question: 'How do recommendations work?',
+    answer:
+      'They are computed from your own library only — the genres, themes, and ratings you have already recorded — and read across all your categories at once, so your taste in one hobby can surface something in another. No other user’s behaviour is involved, and nothing is optimised to keep you in the app.',
   },
   {
     question: 'Is my data safe?',
     answer:
-      'Yes. Your data is stored securely and is only accessible through your account. We do not sell personal data. Your diary entries are encrypted locally on your device — we never see their contents.',
+      'Your data is stored securely and is only accessible through your account, and we do not sell personal data. The diary goes further: entries are encrypted in your browser with AES-256 before they are sent, so the server only ever stores ciphertext it has no key for. The trade-off is real — if you lose your diary passphrase, those entries cannot be recovered by anyone, including us.',
   },
   {
     question: 'Is there a mobile app?',
     answer:
-      'Hobbistas is a Progressive Web App (PWA). You can install it on your phone or desktop from your browser and it works offline. No app store required.',
+      'Hobbistas is a Progressive Web App. You can install it on your phone or desktop straight from the browser, and it keeps working offline — additions you make without a connection sync once you are back. No app store required.',
+  },
+  {
+    question: 'Do I need an account to read the articles and reviews?',
+    answer:
+      'No. Articles and reviews are public and readable by anyone. An account is only needed to track your own library, comment, or like.',
   },
   {
     question: 'How can I suggest a feature or report a bug?',
     answer:
-      'Use the Support page to send a request or report. Describe what you expected, what happened instead, and a screenshot if possible. Everything is read and prioritized.',
+      'Use the Support page to send a request or report. Describe what you expected, what happened instead, and add a screenshot if possible. Everything is read and prioritised.',
   },
 ];
 
@@ -56,7 +76,7 @@ export function AboutFAQ() {
             Frequently asked questions
           </h2>
           <p className="mx-auto max-w-xl text-muted-foreground">
-            Answers to the most common questions about Hobbista.
+            Answers to the most common questions about Hobbistas.
           </p>
         </div>
 

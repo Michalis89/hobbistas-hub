@@ -41,6 +41,7 @@ jest.mock('@/lib/api/auth', () => ({
 
 import { UnauthorizedError } from '@/lib/api/auth';
 import { POST } from '@/app/api/uploads/article-cover/route';
+import { MAX_IMAGE_BYTES } from '@/lib/api/uploads/articleImages';
 
 function makeTestFile(name: string, type: string, content = 'x'): File {
   const file = new File([content], name, { type });
@@ -188,7 +189,7 @@ describe('app/api/uploads/article-cover/route', () => {
     await expect(response.json()).resolves.toEqual({ message: 'We cannot return the image URL.' });
   });
 
-  it('uploads successfully and sanitizes extension and content type fallback', async () => {
+  it('uploads successfully and derives the extension from the MIME type', async () => {
     const supabase = makeSupabaseServerMock({
       userData: { roles: ['author'] },
       publicUrl: 'https://cdn.example.com/articles/cover-fixed.png',
@@ -196,7 +197,8 @@ describe('app/api/uploads/article-cover/route', () => {
     getSupabaseServerMock.mockReturnValue(supabase.client);
 
     const form = new FormData();
-    form.set('file', makeTestFile('My Cover.###', '', 'abc'));
+    // Hostile filename: the extension must come from the validated MIME type.
+    form.set('file', makeTestFile('My Cover.###', 'image/png', 'abc'));
     const response = await POST(makeRequest(form));
 
     expect(response.status).toBe(200);
@@ -204,29 +206,52 @@ describe('app/api/uploads/article-cover/route', () => {
       url: 'https://cdn.example.com/articles/cover-fixed.png',
     });
     expect(supabase.spies.upload).toHaveBeenCalledWith(
-      'articles/cover-fixed-uuid.jpg',
+      'articles/cover-fixed-uuid.png',
       expect.any(Buffer),
       expect.objectContaining({
         cacheControl: '3600',
         upsert: true,
-        contentType: 'image/jpeg',
+        contentType: 'image/png',
       }),
     );
   });
 
-  it('uses jpg fallback when filename has trailing dot', async () => {
-    const supabase = makeSupabaseServerMock({ userData: { roles: ['reviewer'] } });
+  it('rejects a non-image disguised with an image filename', async () => {
+    const supabase = makeSupabaseServerMock({ userData: { roles: ['author'] } });
     getSupabaseServerMock.mockReturnValue(supabase.client);
     const form = new FormData();
-    form.set('file', makeTestFile('cover.', 'image/png'));
+    form.set('file', makeTestFile('cover.png', 'text/html', '<script>alert(1)</script>'));
 
     const response = await POST(makeRequest(form));
-    expect(response.status).toBe(200);
-    expect(supabase.spies.upload).toHaveBeenCalledWith(
-      'articles/cover-fixed-uuid.jpg',
-      expect.any(Buffer),
-      expect.objectContaining({ contentType: 'image/png' }),
-    );
+
+    expect(response.status).toBe(415);
+    expect(supabase.spies.upload).not.toHaveBeenCalled();
+  });
+
+  it('rejects a file with no declared MIME type', async () => {
+    const supabase = makeSupabaseServerMock({ userData: { roles: ['author'] } });
+    getSupabaseServerMock.mockReturnValue(supabase.client);
+    const form = new FormData();
+    form.set('file', makeTestFile('cover.jpg', ''));
+
+    const response = await POST(makeRequest(form));
+
+    expect(response.status).toBe(415);
+    expect(supabase.spies.upload).not.toHaveBeenCalled();
+  });
+
+  it('rejects images above the size limit', async () => {
+    const supabase = makeSupabaseServerMock({ userData: { roles: ['author'] } });
+    getSupabaseServerMock.mockReturnValue(supabase.client);
+    const file = makeTestFile('cover.png', 'image/png');
+    Object.defineProperty(file, 'size', { value: MAX_IMAGE_BYTES + 1 });
+    const form = new FormData();
+    form.set('file', file);
+
+    const response = await POST(makeRequest(form));
+
+    expect(response.status).toBe(413);
+    expect(supabase.spies.upload).not.toHaveBeenCalled();
   });
 
   it('returns 500 for unexpected errors', async () => {

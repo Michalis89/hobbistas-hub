@@ -9,17 +9,31 @@ const REVIEW_DETAIL_OPTIONS: ArticleDetailPageOptions = {
   topicFilter: 'reviews',
 };
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   return buildArticleDetailMetadata({
     params,
+    searchParams,
     options: REVIEW_DETAIL_OPTIONS,
   });
 }
 
-export default function ReviewPage({ params }: { params: Promise<{ slug: string }> }) {
+export default function ReviewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   return (
     <ArticleDetailPage
       params={params}
+      searchParams={searchParams}
       basePath={REVIEW_DETAIL_OPTIONS.basePath}
       breadcrumbLabel={REVIEW_DETAIL_OPTIONS.breadcrumbLabel}
       topicFilter={REVIEW_DETAIL_OPTIONS.topicFilter}

@@ -47,6 +47,16 @@ type MediaDetailPageClientProps = {
   mediaItem: MediaItem;
 };
 
+/** Pulls the API's own explanation out of a failed response, if it has one. */
+async function readErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json();
+    return typeof body?.error === 'string' && body.error ? body.error : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function MediaDetailPageClient({
   category,
   mediaItem,
@@ -192,7 +202,7 @@ export default function MediaDetailPageClient({
         }
 
         if (!response.ok) {
-          throw new Error('Update failed');
+          throw new Error(await readErrorMessage(response, 'Update failed'));
         }
       } else {
         const response = await fetch(`${apiBase}/add`, {
@@ -203,6 +213,11 @@ export default function MediaDetailPageClient({
             mediaId: mediaItem.id,
             status: editState.status,
             is_favorite: editState.isFavorite,
+            // The API rejects games without a platform. This was omitted here
+            // while the update branch above sent it, so adding a game from this
+            // page always failed with 400.
+            selected_platform:
+              category === 'games' ? editState.selectedPlatform || null : undefined,
             progress: nextProgress ?? undefined,
             score: nextScore ?? undefined,
             notes: nextNotes,
@@ -210,7 +225,7 @@ export default function MediaDetailPageClient({
         });
 
         if (!response.ok) {
-          throw new Error('Add failed');
+          throw new Error(await readErrorMessage(response, 'Add failed'));
         }
       }
 
@@ -227,7 +242,12 @@ export default function MediaDetailPageClient({
       setAlert({
         type: 'error',
         title: 'Error',
-        message: 'Failed to save entry. Please try again.',
+        // Show what the server actually objected to. A blanket "try again"
+        // sends the user in circles when the fix is a missing platform.
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : 'Failed to save entry. Please try again.',
       });
     } finally {
       setActionLoading(false);
