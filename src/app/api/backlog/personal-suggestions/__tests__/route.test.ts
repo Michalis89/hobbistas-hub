@@ -16,6 +16,8 @@ jest.mock('next/server', () => ({
       json: async () => body,
     }),
   },
+  // Shadow work is scheduled, never awaited by the response path.
+  after: () => {},
 }));
 
 jest.mock('@/lib/observability/withApiRoute', () => ({
@@ -45,7 +47,8 @@ jest.mock('@/lib/api/response', () => ({
 
 jest.mock('@/lib/recommendations/v3/recommender', () => ({
   __esModule: true,
-  generateRecommendationsV3: (...args: unknown[]) => generateRecommendationsV3Mock(...args),
+  generateRecommendationsV3WithInternals: (...args: unknown[]) =>
+    generateRecommendationsV3Mock(...args),
 }));
 
 import { GET } from '@/app/api/backlog/personal-suggestions/route';
@@ -53,12 +56,17 @@ import { API_ERRORS } from '@/lib/api/errors';
 import { DEFAULT_COVER } from '@/lib/constants/messages';
 import { UnauthorizedError } from '@/lib/api/auth';
 
+/** The route now reads { response, gamesShadowContext }; shadow context is null in these cases. */
+function v3(possibleNext: unknown[]) {
+  return { response: { possibleNext }, gamesShadowContext: null };
+}
+
 describe('app/api/backlog/personal-suggestions/route', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     createRouteHandlerClientMock.mockResolvedValue({});
     requireAuthMock.mockResolvedValue({ user: { id: 'user-1' } });
-    generateRecommendationsV3Mock.mockResolvedValue({ possibleNext: [] });
+    generateRecommendationsV3Mock.mockResolvedValue(v3([]));
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
@@ -67,8 +75,7 @@ describe('app/api/backlog/personal-suggestions/route', () => {
   });
 
   it('uses games recommender for default/invalid category and maps items', async () => {
-    generateRecommendationsV3Mock.mockResolvedValueOnce({
-      possibleNext: [
+    generateRecommendationsV3Mock.mockResolvedValueOnce(v3([
       {
         id: 'personal-games-10',
         mediaDbId: 10,
@@ -95,7 +102,7 @@ describe('app/api/backlog/personal-suggestions/route', () => {
         matchedSignals: ['Roguelike'],
         cover: 'https://img/hades.jpg',
       },
-    ]});
+    ]));
 
     const res = await GET(
       new Request('http://localhost/api/backlog/personal-suggestions?category=INVALID'),
@@ -124,15 +131,13 @@ describe('app/api/backlog/personal-suggestions/route', () => {
   });
 
   it('uses generic recommender for non-games category and slices to max 4 items', async () => {
-    generateRecommendationsV3Mock.mockResolvedValueOnce({
-      possibleNext: [
+    generateRecommendationsV3Mock.mockResolvedValueOnce(v3([
         { id: 'personal-movies-1', mediaDbId: 1, title: 'A', reason: 'r1', confidence: 0.1, matchedSignals: [] },
         { id: 'personal-movies-2', mediaDbId: 2, title: 'B', reason: 'r2', confidence: 0.2, matchedSignals: [] },
         { id: 'personal-movies-3', mediaDbId: 3, title: 'C', reason: 'r3', confidence: 0.3, matchedSignals: [] },
         { id: 'personal-movies-4', mediaDbId: 4, title: 'D', reason: 'r4', confidence: 0.4, matchedSignals: [] },
         { id: 'personal-movies-5', mediaDbId: 5, title: 'E', reason: 'r5', confidence: 0.5, matchedSignals: [] },
-      ],
-    });
+      ]));
 
     const res = await GET(
       new Request('http://localhost/api/backlog/personal-suggestions?category=movies'),
@@ -147,8 +152,7 @@ describe('app/api/backlog/personal-suggestions/route', () => {
   });
 
   it('falls back to games when category query is missing and defaults tags to empty array', async () => {
-    generateRecommendationsV3Mock.mockResolvedValueOnce({
-      possibleNext: [
+    generateRecommendationsV3Mock.mockResolvedValueOnce(v3([
       {
         id: 'personal-games-77',
         mediaDbId: 77,
@@ -157,7 +161,7 @@ describe('app/api/backlog/personal-suggestions/route', () => {
         confidence: 0.66,
         cover: null,
       },
-    ]});
+    ]));
 
     const res = await GET(new Request('http://localhost/api/backlog/personal-suggestions'));
     expect(res.status).toBe(200);
@@ -169,12 +173,10 @@ describe('app/api/backlog/personal-suggestions/route', () => {
   });
 
   it('stamps every item of one response with the same serve id and its own slot index', async () => {
-    generateRecommendationsV3Mock.mockResolvedValueOnce({
-      possibleNext: [
+    generateRecommendationsV3Mock.mockResolvedValueOnce(v3([
         { id: 'p-1', mediaDbId: 1, title: 'A', reason: 'r', confidence: 0.5, matchedSignals: [] },
         { id: 'p-2', mediaDbId: 2, title: 'B', reason: 'r', confidence: 0.5, matchedSignals: [] },
-      ],
-    });
+      ]));
 
     const body = await (
       await GET(new Request('http://localhost/api/backlog/personal-suggestions?category=games'))
@@ -187,11 +189,9 @@ describe('app/api/backlog/personal-suggestions/route', () => {
   it('records impressions without blocking the response', async () => {
     const upsert = jest.fn().mockResolvedValue({ error: null });
     createRouteHandlerClientMock.mockResolvedValueOnce({ from: jest.fn(() => ({ upsert })) });
-    generateRecommendationsV3Mock.mockResolvedValueOnce({
-      possibleNext: [
+    generateRecommendationsV3Mock.mockResolvedValueOnce(v3([
         { id: 'p-1', mediaDbId: 1, title: 'A', reason: 'r', confidence: 0.5, matchedSignals: [] },
-      ],
-    });
+      ]));
 
     const res = await GET(
       new Request('http://localhost/api/backlog/personal-suggestions?category=games'),
@@ -213,11 +213,9 @@ describe('app/api/backlog/personal-suggestions/route', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const upsert = jest.fn().mockRejectedValue(new Error('db gone'));
     createRouteHandlerClientMock.mockResolvedValueOnce({ from: jest.fn(() => ({ upsert })) });
-    generateRecommendationsV3Mock.mockResolvedValueOnce({
-      possibleNext: [
+    generateRecommendationsV3Mock.mockResolvedValueOnce(v3([
         { id: 'p-1', mediaDbId: 1, title: 'A', reason: 'r', confidence: 0.5, matchedSignals: [] },
-      ],
-    });
+      ]));
 
     const res = await GET(
       new Request('http://localhost/api/backlog/personal-suggestions?category=games'),

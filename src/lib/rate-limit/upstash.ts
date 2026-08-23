@@ -150,6 +150,15 @@ export const LIMITER_CONFIGS: Record<string, LimiterConfig> = {
     windowSec: 60, // 1 minute
     prefix: 'rl:api:strict',
   },
+
+  // Shadow rerank provider calls. Deliberately its own budget: a burst of dashboard traffic must
+  // not be able to spend the rerank allowance, and a rerank must not be able to lock the user out
+  // of their own taste profile. Checked only inside shadow execution, never on a user response.
+  aiRerank: {
+    limit: 5,
+    windowSec: 60 * 60, // 1 hour
+    prefix: 'rl:ai:rerank',
+  },
 } as const;
 
 export type LimiterName = keyof typeof LIMITER_CONFIGS;

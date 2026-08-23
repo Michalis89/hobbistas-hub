@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { withApiRoute } from '@/lib/observability/withApiRoute';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { requireAuth, UnauthorizedError } from '@/lib/api/auth';
@@ -35,8 +35,13 @@ async function GETHandler(req: Request) {
     const session = await requireAuth(supabase);
     const userId = session.user.id;
 
-    const { generateRecommendationsV3 } = await import('@/lib/recommendations/v3/recommender');
-    const response = await generateRecommendationsV3(userId, category as RecommendationCategory);
+    const { generateRecommendationsV3WithInternals } = await import(
+      '@/lib/recommendations/v3/recommender'
+    );
+    const { response, gamesShadowContext } = await generateRecommendationsV3WithInternals(
+      userId,
+      category as RecommendationCategory,
+    );
 
     const served = response.possibleNext.slice(0, 4);
     const serve = buildRecommendationServe({
@@ -69,6 +74,27 @@ async function GETHandler(req: Request) {
 
     await recordRecommendationImpressions(supabase, serve);
 
+    // Everything above this line is deterministic and is what the user gets. The shadow rerank
+    // runs after the response has been flushed, reads nothing back into it, and is scheduled
+    // through `after` rather than a bare floating promise because a detached promise in a
+    // serverless invocation can be frozen or killed the moment the response is sent.
+    if (gamesShadowContext) {
+      const shadowInput = {
+        supabase,
+        userId,
+        shortlist: gamesShadowContext.discoveryShortlist,
+        continuationContext: gamesShadowContext.continuationContext,
+        servedDiscoveryIds: served
+          .filter(item => item.source === 'discovery')
+          .map(item => item.mediaDbId),
+      };
+
+      after(async () => {
+        const { runGamesRerankShadow } = await import('@/lib/ai/gaming-rerank/service');
+        await runGamesRerankShadow(shadowInput);
+      });
+    }
+
     return NextResponse.json({ items });
   } catch (error) {
     if (error instanceof UnauthorizedError) {
@@ -78,5 +104,11 @@ async function GETHandler(req: Request) {
     return fail(API_ERRORS.INTERNAL, API_ERRORS.INTERNAL.status);
   }
 }
+
+/**
+ * `after` work runs inside the route's max duration, so this has to cover the deterministic
+ * response plus a shadow rerank whose provider call is capped at 12s.
+ */
+export const maxDuration = 30;
 
 export const GET = withApiRoute(GETHandler);

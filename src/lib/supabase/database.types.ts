@@ -90,6 +90,7 @@ export type Database = {
           ai_weight: number | null;
           blend_version: string | null;
           blended_order: number[];
+          blended_slot_media_ids: number[];
           cache_hit: boolean;
           category: string;
           created_at: string;
@@ -114,6 +115,7 @@ export type Database = {
           ai_weight?: number | null;
           blend_version?: string | null;
           blended_order?: number[];
+          blended_slot_media_ids?: number[];
           cache_hit?: boolean;
           category: string;
           created_at?: string;
@@ -138,6 +140,7 @@ export type Database = {
           ai_weight?: number | null;
           blend_version?: string | null;
           blended_order?: number[];
+          blended_slot_media_ids?: number[];
           cache_hit?: boolean;
           category?: string;
           created_at?: string;

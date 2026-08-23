@@ -17,7 +17,7 @@
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import type { RecommendationCategory, RecommendationResponse, RecommendationItem, MediaHistoryEntry, UserScoringContext, TasteCluster, ToneProfile, ScoredItem } from './types';
 import { generateGamesRecommendationsV3 } from './games/games-recommender';
-import type { GamesRecommendationResult } from './games/games-types';
+import type { GamesRecommendationResult, GamesShadowContext } from './games/games-types';
 import { generateAnimeRecommendationsV3 } from './anime/anime-recommender';
 import type { AnimeRecommendationResult } from './anime/anime-types';
 import { extractClusters } from './pipeline/cluster-extractor';
@@ -67,13 +67,34 @@ export async function generateRecommendationsV3(
   userId: string,
   category: RecommendationCategory,
 ): Promise<RecommendationResponse> {
+  return (await generateRecommendationsV3WithInternals(userId, category)).response;
+}
+
+/**
+ * Same pipeline, plus the games engine's internal shadow context.
+ *
+ * Exists so shadow observation can see how `possibleNext` was assembled without that detail
+ * passing through `RecommendationResponse`, and without a second code path that could drift from
+ * the one users are served. Everything user-facing comes from `response`; `gamesShadowContext` is
+ * observation-only and is null for every category except games.
+ */
+export async function generateRecommendationsV3WithInternals(
+  userId: string,
+  category: RecommendationCategory,
+): Promise<{ response: RecommendationResponse; gamesShadowContext: GamesShadowContext | null }> {
   if (category === 'games') {
     const gamesResult = await generateGamesRecommendationsV3(userId);
-    return mapGamesResultToRecommendationResponse(gamesResult);
+    return {
+      response: mapGamesResultToRecommendationResponse(gamesResult),
+      gamesShadowContext: gamesResult.shadowContext ?? null,
+    };
   }
   if (category === 'anime') {
     const animeResult = await generateAnimeRecommendationsV3(userId);
-    return mapAnimeResultToRecommendationResponse(animeResult);
+    return {
+      response: mapAnimeResultToRecommendationResponse(animeResult),
+      gamesShadowContext: null,
+    };
   }
 
   const adapter = ADAPTERS[category];
@@ -166,7 +187,10 @@ export async function generateRecommendationsV3(
     : withExplanations.possibleNext;
 
   // ── 10. Assemble response ─────────────────────────────────────────────────
-  return assembleResponse(category, ctx, finalBacklog, finalPossibleNext);
+  return {
+    response: assembleResponse(category, ctx, finalBacklog, finalPossibleNext),
+    gamesShadowContext: null,
+  };
 }
 
 // ─── Context Builder ──────────────────────────────────────────────────────────

@@ -75,6 +75,10 @@ create table if not exists public.ai_rerank_shadow_runs (
   blended_order bigint[] not null default '{}',
   -- What the user actually saw in the discovery slots, so behaviour can be joined back.
   served_slot_media_ids bigint[] not null default '{}',
+  -- What the blend would have shown in those same slots, produced by replaying the deterministic
+  -- selection rules over the blended order. Stored rather than derived, because replaying it later
+  -- would need the continuation families this run happened to claim.
+  blended_slot_media_ids bigint[] not null default '{}',
   blend_version text,
   ai_weight numeric,
   -- { "<mediaId>": "one-line reason" }. Model text about the user's taste: user data, RLS-only.
