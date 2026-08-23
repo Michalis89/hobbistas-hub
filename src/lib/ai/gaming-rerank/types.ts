@@ -24,14 +24,13 @@ export const GAME_RERANK_MAX_SHORTLIST = 20;
 /**
  * How many candidates are actually sent, by default.
  *
- * Below the ceiling on purpose. Twenty candidates on a thinking model overran the 12s budget on
- * the first live run, and every candidate costs reasoning time, output tokens and a rationale.
- * Twelve keeps a real field of alternatives for two visible slots while roughly halving the work.
- *
- * Widening it is one environment variable, so the funnel can be opened back up once the latency
- * behaviour of the configured model is actually known rather than assumed.
+ * Back at the ceiling. Dropping this to twelve to buy latency moved a live run by seven
+ * milliseconds — the cost is reasoning time, which barely scales with list length — so the
+ * narrower funnel was paying for nothing. Kept configurable via
+ * `GAMES_RERANK_SHORTLIST_SIZE` because it is still the right lever if the constraint ever
+ * becomes output size rather than reasoning.
  */
-export const DEFAULT_GAME_RERANK_SHORTLIST_SIZE = 12;
+export const DEFAULT_GAME_RERANK_SHORTLIST_SIZE = GAME_RERANK_MAX_SHORTLIST;
 
 /**
  * Bounds shared by the Zod contract and the Gemini `responseSchema`. Keep both sides in step.

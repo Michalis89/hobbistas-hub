@@ -126,6 +126,7 @@ export class GeminiGameRerankProvider implements GameRerankAiProvider {
             maxOutputTokens: getGeminiRerankMaxOutputTokens(),
             responseMimeType: 'application/json',
             responseSchema: buildGeminiRerankResponseSchema(tokens),
+            ...buildThinkingConfig(),
           },
         }),
         signal,
@@ -192,6 +193,41 @@ export function buildRerankPrompt(payload: GameRerankRequestPayload): string {
     'Input:',
     JSON.stringify(payload),
   ].join('\n\n');
+}
+
+/**
+ * Reasoning budget for the ranking call.
+ *
+ * Three live runs put the cost squarely here: cutting the candidate set from twenty to twelve
+ * moved latency by seven milliseconds, while the one run that completed did so only because it
+ * hit a token cap and stopped. The model spends thousands of tokens reasoning before it emits any
+ * JSON, and neither a shorter list nor a shorter rationale touches that.
+ *
+ * Ranking twelve games against a taste profile does not need extended reasoning, so this asks for
+ * none. `GEMINI_RERANK_THINKING_BUDGET=off` omits the field entirely — the escape hatch if the
+ * configured model rejects it, which shows up as an immediate, free 400 rather than a slow
+ * failure.
+ */
+export const DEFAULT_GEMINI_RERANK_THINKING_BUDGET = 0;
+
+export function getGeminiRerankThinkingBudget(): number | null {
+  const raw = process.env.GEMINI_RERANK_THINKING_BUDGET;
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_GEMINI_RERANK_THINKING_BUDGET;
+  }
+  if (raw.trim().toLowerCase() === 'off') {
+    return null;
+  }
+  const configured = Number(raw);
+  if (!Number.isFinite(configured) || configured < 0) {
+    return DEFAULT_GEMINI_RERANK_THINKING_BUDGET;
+  }
+  return Math.min(Math.floor(configured), 8_192);
+}
+
+function buildThinkingConfig(): { thinkingConfig?: { thinkingBudget: number } } {
+  const thinkingBudget = getGeminiRerankThinkingBudget();
+  return thinkingBudget === null ? {} : { thinkingConfig: { thinkingBudget } };
 }
 
 export function normalizeGeminiModelId(model: string): string {
