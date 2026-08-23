@@ -1816,6 +1816,59 @@ export type Database = {
           },
         ];
       };
+      recommendation_events: {
+        Row: {
+          category: string;
+          created_at: string;
+          deterministic_rank: number | null;
+          event_type: string;
+          id: number;
+          media_id: number;
+          serve_id: string;
+          slot_index: number;
+          source: string;
+          subtype: string;
+          surface: string;
+          user_id: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          deterministic_rank?: number | null;
+          event_type: string;
+          id?: never;
+          media_id: number;
+          serve_id: string;
+          slot_index: number;
+          source: string;
+          subtype: string;
+          surface: string;
+          user_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          deterministic_rank?: number | null;
+          event_type?: string;
+          id?: never;
+          media_id?: number;
+          serve_id?: string;
+          slot_index?: number;
+          source?: string;
+          subtype?: string;
+          surface?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'recommendation_events_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       share_tokens: {
         Row: {
           created_at: string;
