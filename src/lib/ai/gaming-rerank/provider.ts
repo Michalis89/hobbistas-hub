@@ -30,7 +30,12 @@ type GeminiErrorResponse = {
   error?: { code?: number; message?: string; status?: string };
 };
 
-export const DEFAULT_GEMINI_RERANK_MAX_OUTPUT_TOKENS = 6_000;
+/**
+ * A full 20-item ranking costs roughly 700 output tokens at the current rationale bound. 2,500
+ * leaves generous headroom without letting a runaway generation burn the whole timeout budget
+ * before the abort fires.
+ */
+export const DEFAULT_GEMINI_RERANK_MAX_OUTPUT_TOKENS = 2_500;
 
 export class GeminiRerankProviderError extends Error {
   readonly status: number;
@@ -157,7 +162,7 @@ export function buildRerankPrompt(payload: GameRerankRequestPayload): string {
     'Treat each negative signal as a demotion criterion, not an exclusion: a matching candidate should rank low, but must still appear in the output.',
     'Weigh pillars by their strengthBand. A Defining pillar should dominate an Emerging one when the two disagree.',
     'Reason comparatively. Each rationale should say why this candidate sits above or below its neighbours, naming a pillar or negative signal.',
-    `Each rationale must be one clause, at most ${GAME_RERANK_TEXT_LIMITS.rationale} characters.`,
+    `Each rationale must be a single short clause of at most ${GAME_RERANK_TEXT_LIMITS.rationale} characters. Be terse: no full sentences, no restating the title.`,
     'Do not output percentages, scores, star ratings or any numeric confidence in rationale text.',
     'You may use general knowledge about the supplied titles, but rank only the candidates given.',
     'Return only raw JSON. Do not wrap the response in Markdown fences, prose or comments.',
@@ -177,7 +182,7 @@ export function getGeminiRerankMaxOutputTokens(): number {
   if (!Number.isFinite(configured) || configured <= 0) {
     return DEFAULT_GEMINI_RERANK_MAX_OUTPUT_TOKENS;
   }
-  return Math.max(2_000, Math.min(Math.floor(configured), 12_000));
+  return Math.max(1_500, Math.min(Math.floor(configured), 12_000));
 }
 
 async function readGeminiError(

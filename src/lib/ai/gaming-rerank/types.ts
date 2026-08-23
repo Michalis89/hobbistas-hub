@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const GAME_RERANK_PROMPT_VERSION = 'games-ai-rerank-prompt-v1';
+export const GAME_RERANK_PROMPT_VERSION = 'games-ai-rerank-prompt-v2';
 export const GAME_RERANK_SCHEMA_VERSION = 1;
 export const GAME_RERANK_PAYLOAD_VERSION = 'games-rerank-payload-v1';
 export const GAME_RERANK_SHUFFLE_SEED_VERSION = 'games-rerank-shuffle-v1';
@@ -21,9 +21,17 @@ export const GAME_RERANK_MIN_SHORTLIST = 3;
 /** Upper bound on what is sent, matching the engine's own shortlist cap. */
 export const GAME_RERANK_MAX_SHORTLIST = 20;
 
-/** Bounds shared by the Zod contract and the Gemini `responseSchema`. Keep both sides in step. */
+/**
+ * Bounds shared by the Zod contract and the Gemini `responseSchema`. Keep both sides in step.
+ *
+ * The rationale cap is a latency control as much as a formatting one. Output generation dominates
+ * this call: twenty entries under constrained decoding with a per-item enum is roughly a thousand
+ * tokens at 160 characters, which overran a 12s budget on the first live run. Eighty characters
+ * still holds one comparative clause — which is all a debug-only rationale needs — and cuts the
+ * output roughly in half.
+ */
 export const GAME_RERANK_TEXT_LIMITS = {
-  rationale: 160,
+  rationale: 80,
 } as const;
 
 /** Candidate summaries are truncated before they are sent; free text is the bulk of the payload. */

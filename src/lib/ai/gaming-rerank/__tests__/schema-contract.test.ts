@@ -7,7 +7,12 @@
  */
 jest.mock('server-only', () => ({}), { virtual: true });
 
-import { buildGeminiRerankResponseSchema, buildRerankPrompt } from '../provider';
+import {
+  buildGeminiRerankResponseSchema,
+  buildRerankPrompt,
+  DEFAULT_GEMINI_RERANK_MAX_OUTPUT_TOKENS,
+} from '../provider';
+import { getRerankTimeoutMs } from '../service';
 import {
   AiGameRerankResultSchema,
   GAME_RERANK_PAYLOAD_VERSION,
@@ -88,6 +93,29 @@ describe('gemini rerank responseSchema parity', () => {
     };
 
     expect(AiGameRerankResultSchema.safeParse(decoded).success).toBe(false);
+  });
+});
+
+/**
+ * Output generation dominates this call's latency: twenty entries under constrained decoding with
+ * a per-item enum overran a 12s budget on the first live run at a 160-character rationale bound.
+ * These are the numbers that keep it inside the budget, pinned so a later edit has to notice.
+ */
+describe('latency budget', () => {
+  it('keeps the rationale bound short enough for a 20-item ranking', () => {
+    expect(GAME_RERANK_TEXT_LIMITS.rationale).toBeLessThanOrEqual(80);
+  });
+
+  it('keeps the estimated output well inside the token ceiling', () => {
+    const perItem = Math.ceil((GAME_RERANK_TEXT_LIMITS.rationale + 20) / 4) + 8;
+    expect(perItem * 20).toBeLessThan(DEFAULT_GEMINI_RERANK_MAX_OUTPUT_TOKENS);
+  });
+
+  it('never lets the provider timeout exceed the documented cap', () => {
+    const original = process.env.GEMINI_RERANK_TIMEOUT_MS;
+    process.env.GEMINI_RERANK_TIMEOUT_MS = '60000';
+    expect(getRerankTimeoutMs()).toBeLessThanOrEqual(12_000);
+    process.env.GEMINI_RERANK_TIMEOUT_MS = original;
   });
 });
 
