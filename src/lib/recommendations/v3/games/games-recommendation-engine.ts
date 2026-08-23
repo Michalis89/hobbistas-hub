@@ -14,6 +14,7 @@ import type {
   GameHistoryEntry,
   GameRecommendation,
   RecommendationEngineInput,
+  ScoredGameCandidate,
   TasteComputation,
 } from './games-types';
 
@@ -164,6 +165,46 @@ function pickBacklogRecommendations(
   return selected.slice(0, BACKLOG_LIMIT);
 }
 
+/**
+ * Fills the remaining `possibleNext` slots from score-sorted discovery candidates.
+ *
+ * Lifted verbatim out of the discovery fill loop so the selection rules — one entry per franchise
+ * family, families already claimed by continuations excluded, hard slot budget — live in one place
+ * and can be replayed over an alternative ordering of the same candidates.
+ *
+ * Pure and synchronous by contract. Nothing here may become async or reach outside its arguments:
+ * that is what keeps an alternative ordering from ever influencing the deterministic path.
+ */
+export function selectDiscoveryPicks(
+  sortedCandidates: readonly ScoredGameCandidate[],
+  usedFamilyKeys: ReadonlySet<string>,
+  remainingSlots: number,
+): ScoredGameCandidate[] {
+  if (remainingSlots <= 0) {
+    return [];
+  }
+
+  const claimedFamilies = new Set(usedFamilyKeys);
+  const picks: ScoredGameCandidate[] = [];
+
+  for (const item of sortedCandidates) {
+    if (picks.length >= remainingSlots) {
+      break;
+    }
+    const family = normalizeFranchiseFamilyKey(item.candidate.title);
+    if (family && claimedFamilies.has(family)) {
+      continue;
+    }
+    if (family) {
+      claimedFamilies.add(family);
+    }
+
+    picks.push(item);
+  }
+
+  return picks;
+}
+
 function pickPossibleNextRecommendations(
   candidates: GameCandidate[],
   history: GameHistoryEntry[],
@@ -174,21 +215,9 @@ function pickPossibleNextRecommendations(
     history.map(item => normalizeGameIdentityKey(item.media.title)).filter(Boolean),
   );
   const backlogIds = new Set(backlog.map(item => item.mediaId));
-  const continuationCandidates: Array<{
-    candidate: GameCandidate;
-    score: number;
-    confidence: number;
-    matchedSignals: string[];
-    debug: Record<string, unknown>;
-  }> = [];
+  const continuationCandidates: ScoredGameCandidate[] = [];
 
-  const discoveryCandidates: Array<{
-    candidate: GameCandidate;
-    score: number;
-    confidence: number;
-    matchedSignals: string[];
-    debug: Record<string, unknown>;
-  }> = [];
+  const discoveryCandidates: ScoredGameCandidate[] = [];
 
   for (const candidate of candidates) {
     const candidateIdentity = normalizeGameIdentityKey(candidate.title || candidate.slug);
@@ -263,18 +292,13 @@ function pickPossibleNextRecommendations(
     });
   }
 
-  for (const item of discoveryCandidates) {
-    if (selected.length >= POSSIBLE_NEXT_LIMIT) {
-      break;
-    }
-    const family = normalizeFranchiseFamilyKey(item.candidate.title);
-    if (family && selectedFamilyKeys.has(family)) {
-      continue;
-    }
-    if (family) {
-      selectedFamilyKeys.add(family);
-    }
+  const discoveryPicks = selectDiscoveryPicks(
+    discoveryCandidates,
+    selectedFamilyKeys,
+    POSSIBLE_NEXT_LIMIT - selected.length,
+  );
 
+  for (const item of discoveryPicks) {
     selected.push({
       mediaId: item.candidate.id,
       title: item.candidate.title,

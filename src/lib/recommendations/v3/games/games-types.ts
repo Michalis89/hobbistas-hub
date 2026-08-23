@@ -79,6 +79,20 @@ export type GameCandidate = {
   popularityScore: number;
 };
 
+/**
+ * A candidate paired with its deterministic discovery/continuation score.
+ *
+ * Shared shape for the two buckets `pickPossibleNextRecommendations` builds, so the selection
+ * rules can be applied by a standalone helper instead of an inline loop.
+ */
+export type ScoredGameCandidate = {
+  candidate: GameCandidate;
+  score: number;
+  confidence: number;
+  matchedSignals: string[];
+  debug: Record<string, unknown>;
+};
+
 export type TasteSignals = {
   coreGenreKeys: Set<string>;
   secondaryGenreKeys: Set<string>;
