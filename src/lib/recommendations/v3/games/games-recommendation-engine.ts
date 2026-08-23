@@ -13,6 +13,9 @@ import type {
   GameCandidate,
   GameHistoryEntry,
   GameRecommendation,
+  GamesContinuationContext,
+  GamesDiscoveryShortlistEntry,
+  GamesShadowContext,
   RecommendationEngineInput,
   ScoredGameCandidate,
   TasteComputation,
@@ -23,9 +26,18 @@ const POSSIBLE_NEXT_LIMIT = 4;
 const MAX_EXTERNAL_CONTINUATIONS = 2;
 const DISCOVERY_MIN_SCORE = 58;
 
+/**
+ * How many franchise-distinct discovery candidates are carried on the shadow context.
+ *
+ * Wide enough that the two or so slots discovery actually gets are drawn from a real field of
+ * alternatives, small enough to stay a bounded payload.
+ */
+export const DISCOVERY_SHORTLIST_LIMIT = 20;
+
 export function buildGamesRecommendations(input: RecommendationEngineInput): {
   backlogPicks: GameRecommendation[];
   possibleNext: GameRecommendation[];
+  shadowContext: GamesShadowContext;
 } {
   const backlogPicks = pickBacklogRecommendations(input.backlog, input.history, input.taste);
   const possibleNext = pickPossibleNextRecommendations(
@@ -37,7 +49,8 @@ export function buildGamesRecommendations(input: RecommendationEngineInput): {
 
   return {
     backlogPicks,
-    possibleNext,
+    possibleNext: possibleNext.picks,
+    shadowContext: possibleNext.shadowContext,
   };
 }
 
@@ -205,12 +218,45 @@ export function selectDiscoveryPicks(
   return picks;
 }
 
+/**
+ * Collapses score-sorted discovery candidates to one entry per franchise family.
+ *
+ * The highest-scoring member wins because the input is already sorted descending, which is also
+ * the member the selection loop would have taken. Candidates whose title yields no family key are
+ * all kept — there is nothing to collapse them on, and the selection loop treats them the same way.
+ */
+export function collapseDiscoveryShortlist(
+  sortedCandidates: readonly ScoredGameCandidate[],
+  limit: number = DISCOVERY_SHORTLIST_LIMIT,
+): GamesDiscoveryShortlistEntry[] {
+  const seenFamilies = new Set<string>();
+  const shortlist: GamesDiscoveryShortlistEntry[] = [];
+
+  for (const item of sortedCandidates) {
+    if (shortlist.length >= limit) {
+      break;
+    }
+
+    const familyKey = normalizeFranchiseFamilyKey(item.candidate.title);
+    if (familyKey) {
+      if (seenFamilies.has(familyKey)) {
+        continue;
+      }
+      seenFamilies.add(familyKey);
+    }
+
+    shortlist.push({ ...item, familyKey, deterministicRank: shortlist.length + 1 });
+  }
+
+  return shortlist;
+}
+
 function pickPossibleNextRecommendations(
   candidates: GameCandidate[],
   history: GameHistoryEntry[],
   backlog: GameHistoryEntry[],
   taste: TasteComputation,
-): GameRecommendation[] {
+): { picks: GameRecommendation[]; shadowContext: GamesShadowContext } {
   const libraryIdentityKeys = new Set(
     history.map(item => normalizeGameIdentityKey(item.media.title)).filter(Boolean),
   );
@@ -292,10 +338,17 @@ function pickPossibleNextRecommendations(
     });
   }
 
+  const continuationContext: GamesContinuationContext = {
+    chosenFamilyKeys: Array.from(selectedFamilyKeys),
+    continuationSlotsUsed: selected.length,
+    remainingDiscoverySlots: POSSIBLE_NEXT_LIMIT - selected.length,
+    possibleNextLimit: POSSIBLE_NEXT_LIMIT,
+  };
+
   const discoveryPicks = selectDiscoveryPicks(
     discoveryCandidates,
     selectedFamilyKeys,
-    POSSIBLE_NEXT_LIMIT - selected.length,
+    continuationContext.remainingDiscoverySlots,
   );
 
   for (const item of discoveryPicks) {
@@ -315,12 +368,20 @@ function pickPossibleNextRecommendations(
     });
   }
 
-  return selected
+  const picks = selected
     .filter(item => {
       const identity = normalizeGameIdentityKey(item.title || item.slug || '');
       return identity ? !libraryIdentityKeys.has(identity) : true;
     })
     .slice(0, POSSIBLE_NEXT_LIMIT);
+
+  return {
+    picks,
+    shadowContext: {
+      discoveryShortlist: collapseDiscoveryShortlist(discoveryCandidates),
+      continuationContext,
+    },
+  };
 }
 
 function scoreBestFitBacklog(

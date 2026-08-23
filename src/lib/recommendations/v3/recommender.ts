@@ -728,6 +728,9 @@ function mapGamesResultToRecommendationResponse(
     signalTotals: result.tasteProfile.signalTotals,
   };
 
+  // `result.shadowContext` stops here on purpose: this object is built field by field, so the
+  // internal discovery shortlist and continuation context are dropped at the API boundary rather
+  // than being filtered out of it. Nothing downstream can see them by accident.
   return {
     category: 'games',
     tasteProfile: mappedTasteProfile as RecommendationResponse['tasteProfile'],
