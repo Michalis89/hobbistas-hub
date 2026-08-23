@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DASHBOARD_TAB_CATEGORIES } from '@/lib/dashboard/category-data';
 import type { CategoryDashboardSection, DashboardCategoryKey } from '@/lib/dashboard/category-data';
 import type { PersonalStats } from '@/app/components/home/types';
+import { isAiTasteEligible } from '@/lib/ai/taste-eligibility';
 import CategorySuggestions from './CategorySuggestions';
 import MediaSuggestions from './MediaSuggestions';
 import DashboardCategoryStats from './DashboardCategoryStats';
@@ -97,6 +98,31 @@ export default function CategoryDashboardTabs({
     return { total, completed, current, planned, dropped, favorites, hours };
   };
 
+  /**
+   * Whether to mount the AI taste section for a tab.
+   *
+   * Three separate reasons to say no, all of which used to be missing:
+   *   - the tab is not the one being looked at. Radix unmounts inactive `TabsContent`, but relying
+   *     on that would mean an implementation detail of the tab library decides whether we spend an
+   *     AI request, so the check is explicit.
+   *   - the category has no AI taste implementation. Only games does today.
+   *   - the library is too sparse for the server to produce anything, so asking only burns a
+   *     request to be told no.
+   */
+  const isAiTasteSectionVisible = (category: DashboardCategoryKey): boolean => {
+    if (category !== activeCategory) {
+      return false;
+    }
+
+    const categoryStats = resolveStatsForCategory(category);
+
+    return isAiTasteEligible({
+      category,
+      engagedEntryCount: categoryStats.completed + categoryStats.current + categoryStats.dropped,
+      isReadOnly,
+    });
+  };
+
   return (
     <Tabs
       value={activeCategory}
@@ -145,9 +171,9 @@ export default function CategoryDashboardTabs({
                   }
                 />
               </div>
-              {category === 'games' && !isReadOnly ? (
+              {isAiTasteSectionVisible(category) ? (
                 <div className="mt-9 md:mt-11">
-                  <AiGamingIdentitySection />
+                  <AiGamingIdentitySection enabled />
                 </div>
               ) : null}
               <div className="mt-11 md:mt-14">

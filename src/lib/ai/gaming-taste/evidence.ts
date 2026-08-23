@@ -4,6 +4,7 @@ import {
   normalizeGameIdentityKey,
 } from '@/lib/recommendations/v3/games/games-normalizers';
 import type { GameHistoryEntry } from '@/lib/recommendations/v3/games/games-types';
+import { AI_TASTE_MIN_EVIDENCE_TITLES } from '@/lib/ai/taste-eligibility';
 import {
   DEFAULT_GEMINI_TASTE_MODEL,
   GAME_AI_EVIDENCE_PREPROCESSING_VERSION,
@@ -255,7 +256,11 @@ function buildDataQuality(entries: GameAiEvidenceEntry[]): GameAiEvidenceDocumen
   const titleCount = entries.length;
   const ratedRatio = titleCount > 0 ? Number((ratedCount / titleCount).toFixed(3)) : 0;
   const sufficiency =
-    titleCount >= 15 && ratedRatio >= 0.4 ? 'rich' : titleCount >= 6 ? 'adequate' : 'sparse';
+    titleCount >= 15 && ratedRatio >= 0.4
+      ? 'rich'
+      : titleCount >= AI_TASTE_MIN_EVIDENCE_TITLES
+        ? 'adequate'
+        : 'sparse';
 
   return {
     titleCount,

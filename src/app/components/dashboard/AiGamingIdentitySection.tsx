@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import DashboardSectionHeader from './DashboardSectionHeader';
 import {
@@ -9,65 +8,17 @@ import {
   DASH_RADIUS_SECTION,
   DASH_SURFACE_CARD,
 } from './dashboard-ui-tokens';
+import { useAiTasteProfile } from './useAiTasteProfile';
 
-type AiGamingTasteProfile = {
-  identity: {
-    label: string;
-    description: string;
-  };
-  pillars: Array<{
-    name: string;
-    kind: 'content' | 'behavior';
-    description: string;
-    evidenceTitles: string[];
-    strengthBand: 'Defining' | 'Strong' | 'Present' | 'Emerging';
-  }>;
-  negativeSignals: Array<{
-    name: string;
-    description: string;
-    evidenceTitles: string[];
-  }>;
-  summary: string;
-  openQuestions: string[];
-  source: 'ai' | 'deterministic';
-};
-
-type AiTasteProfileResponse = {
-  profile: AiGamingTasteProfile | null;
-};
-
-export default function AiGamingIdentitySection() {
-  const [profile, setProfile] = useState<AiGamingTasteProfile | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadProfile() {
-      try {
-        const response = await fetch('/api/dashboard/ai-taste-profile?category=games', {
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          return;
-        }
-        const payload = (await response.json()) as AiTasteProfileResponse;
-        // Only ever replace with a profile. A null means the AI layer is unavailable this
-        // request — under StrictMode's double mount that would otherwise wipe a profile the
-        // first request already delivered.
-        if (payload.profile) {
-          setProfile(payload.profile);
-        }
-      } catch {
-        // Aborted or offline: keep whatever is already rendered.
-      }
-    }
-
-    void loadProfile();
-    return () => {
-      controller.abort();
-    };
-  }, []);
+/**
+ * Renders the Games AI identity, and nothing at all when there is no profile.
+ *
+ * `enabled` defaults to false so that mounting this component is never by itself enough to spend
+ * an AI request — the caller has to say the category is active and the library is substantial
+ * enough, via `isAiTasteEligible`.
+ */
+export default function AiGamingIdentitySection({ enabled = false }: { enabled?: boolean }) {
+  const profile = useAiTasteProfile('games', { enabled });
 
   if (!profile) {
     return null;
