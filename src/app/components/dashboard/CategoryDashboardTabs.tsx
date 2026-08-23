@@ -21,6 +21,10 @@ const CategoryInsightsGrid = dynamic(() => import('./CategoryInsightsGrid'), {
   loading: () => <Skeleton className="h-96 w-full rounded-2xl" />,
 });
 
+const AiGamingIdentitySection = dynamic(() => import('./AiGamingIdentitySection'), {
+  ssr: false,
+});
+
 const CATEGORY_TITLES: Record<DashboardCategoryKey, string> = {
   games: 'Games',
   books: 'Books',
@@ -141,6 +145,11 @@ export default function CategoryDashboardTabs({
                   }
                 />
               </div>
+              {category === 'games' && !isReadOnly ? (
+                <div className="mt-9 md:mt-11">
+                  <AiGamingIdentitySection />
+                </div>
+              ) : null}
               <div className="mt-11 md:mt-14">
                 <MediaSuggestions
                   suggestions={sections[category]?.mediaSuggestions ?? []}

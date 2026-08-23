@@ -97,7 +97,7 @@ export async function generateGamesRecommendationsV3(
   };
 }
 
-async function loadUserMediaHistory(
+export async function loadUserMediaHistory(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<GameHistoryEntry[]> {

@@ -61,6 +61,50 @@ export type Database = {
         };
         Relationships: [];
       };
+      ai_taste_profiles: {
+        Row: {
+          category: string;
+          created_at: string;
+          input_hash: string;
+          model: string;
+          profile: Json;
+          prompt_version: string;
+          schema_version: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          input_hash: string;
+          model: string;
+          profile: Json;
+          prompt_version: string;
+          schema_version: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          input_hash?: string;
+          model?: string;
+          profile?: Json;
+          prompt_version?: string;
+          schema_version?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_taste_profiles_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       application_logs: {
         Row: {
           created_at: string;

@@ -723,6 +723,9 @@ function mapGamesResultToRecommendationResponse(
     themes: result.tasteProfile.themes,
     playerStyles: result.tasteProfile.playerStyles,
     negativeSignals: result.tasteProfile.negativeSignals,
+    // Full unsliced signal mass per bucket. The dashboard card divides by these instead of the
+    // visible top-N sum, so percentages stop being forced to 100%.
+    signalTotals: result.tasteProfile.signalTotals,
   };
 
   return {

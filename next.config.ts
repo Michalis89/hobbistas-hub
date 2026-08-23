@@ -39,6 +39,10 @@ const withPWA = withPWAInit({
         handler: 'NetworkOnly',
       },
       {
+        urlPattern: /\/api\/dashboard\/ai-taste-profile(?:\/|$|\?)/i,
+        handler: 'NetworkOnly',
+      },
+      {
         urlPattern: /\/api\/(articles|public)\//i,
         handler: 'StaleWhileRevalidate',
         options: {
@@ -274,6 +278,10 @@ const nextConfig: NextConfigWithInstrumentation = {
       },
       {
         source: '/api/me/:path*',
+        headers: [{ key: 'Cache-Control', value: 'no-store' }],
+      },
+      {
+        source: '/api/dashboard/ai-taste-profile',
         headers: [{ key: 'Cache-Control', value: 'no-store' }],
       },
     ];
