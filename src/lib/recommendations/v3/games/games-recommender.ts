@@ -51,7 +51,21 @@ type MediaItemRow = {
   cover_url_thumb: string | null;
   cover_image_large: string | null;
   cover_image_medium: string | null;
+  developer: string | null;
+  studios: unknown;
+  first_release_date: string | null;
+  release_date: string | null;
+  igdb_game_modes: string[] | null;
+  igdb_player_perspectives: string[] | null;
 };
+
+/** `media_items.studios` is jsonb, so it arrives as unknown rather than a typed array. */
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
 
 type CategoryProfile = {
   games?: {
@@ -238,7 +252,13 @@ async function loadDatabaseGames(
         cover_url_big,
         cover_url_thumb,
         cover_image_large,
-        cover_image_medium
+        cover_image_medium,
+        developer,
+        studios,
+        first_release_date,
+        release_date,
+        igdb_game_modes,
+        igdb_player_perspectives
       `,
       )
       .in('category', ['games', 'game'])
@@ -292,6 +312,11 @@ async function loadDatabaseGames(
     cover:
       row.cover_url_big ?? row.cover_image_large ?? row.cover_url_thumb ?? row.cover_image_medium ?? '',
     popularityScore: popularityMap.get(row.id) ?? 0,
+    developer: row.developer ?? null,
+    studios: toStringArray(row.studios),
+    releaseDate: row.first_release_date ?? row.release_date ?? null,
+    gameModes: row.igdb_game_modes ?? [],
+    playerPerspectives: row.igdb_player_perspectives ?? [],
   }));
 
   if (!preferredPlatformKey) {
@@ -312,6 +337,40 @@ async function loadDatabaseGames(
   }
 
   return [...compatible, ...fallback];
+}
+
+/**
+ * Fetches `media_items.summary` for a specific set of candidates.
+ *
+ * Kept out of `loadDatabaseGames` on purpose. That loader pages the entire games table on every
+ * dashboard render and every backlog suggestions fetch; summaries are free-text and would add
+ * megabytes to a hot serverless path to serve a handful of rows anyone actually looks at. A
+ * shortlist is at most a couple of dozen ids, so fetching them on demand costs one small query.
+ */
+export async function loadCandidateSummaries(
+  supabase: SupabaseClient,
+  mediaIds: number[],
+): Promise<Map<number, string | null>> {
+  if (mediaIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from('media_items')
+    .select('id, summary')
+    .in('id', mediaIds);
+
+  if (error) {
+    console.error('[GamesRecommenderV3] Error loading candidate summaries:', error);
+    return new Map();
+  }
+
+  const summaries = new Map<number, string | null>();
+  for (const row of (data ?? []) as Array<{ id: number; summary: string | null }>) {
+    summaries.set(row.id, row.summary ?? null);
+  }
+
+  return summaries;
 }
 
 async function loadPopularityScores(

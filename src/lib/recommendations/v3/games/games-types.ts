@@ -79,6 +79,20 @@ export type GameCandidate = {
   platforms: string[];
   cover: string;
   popularityScore: number;
+  /**
+   * Semantic metadata carried alongside the scoring inputs.
+   *
+   * Deliberately optional and deliberately unread by the deterministic scorers: these fields exist
+   * so a candidate can be described to something other than the genre/theme matcher without
+   * changing what the matcher does. `scoreDiscoveryCandidate` and `scoreBestFitBacklog` must never
+   * reference them — that is what keeps populating them a no-op for rankings.
+   */
+  developer?: string | null;
+  studios?: string[];
+  releaseDate?: string | null;
+  gameModes?: string[];
+  playerPerspectives?: string[];
+  summary?: string | null;
 };
 
 /**
