@@ -31,11 +31,14 @@ type GeminiErrorResponse = {
 };
 
 /**
- * A full 20-item ranking costs roughly 700 output tokens at the current rationale bound. 2,500
- * leaves generous headroom without letting a runaway generation burn the whole timeout budget
- * before the abort fires.
+ * Must cover reasoning tokens as well as the JSON.
+ *
+ * Lowering this to 2,500 on the theory that ~700 tokens of ranking needed little headroom produced
+ * a truncated body and a `malformed_json` failure at 9.8s: on a thinking model the reasoning is
+ * charged to the same budget, so a cap sized for the visible answer cuts the answer off. Sized
+ * back to match the taste provider, which has run against this family without truncating.
  */
-export const DEFAULT_GEMINI_RERANK_MAX_OUTPUT_TOKENS = 2_500;
+export const DEFAULT_GEMINI_RERANK_MAX_OUTPUT_TOKENS = 6_000;
 
 export class GeminiRerankProviderError extends Error {
   readonly status: number;
@@ -135,12 +138,30 @@ export class GeminiGameRerankProvider implements GameRerankAiProvider {
     }
 
     const body = (await response.json()) as GeminiGenerateContentResponse;
-    const text = body.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('');
-    if (!text) {
-      throw new Error('Gemini rerank response was empty');
+    const candidate = body.candidates?.[0];
+    const finishReason = candidate?.finishReason ?? null;
+    const text = candidate?.content?.parts?.map(part => part.text ?? '').join('');
+
+    // Distinguish "we cut the model off" from "the model wrote something unparseable". These
+    // demand opposite responses — raise the budget versus fix the contract — and both previously
+    // surfaced as the same malformed_json category.
+    if (finishReason === 'MAX_TOKENS') {
+      throw new GeminiRerankTruncatedError(getGeminiRerankMaxOutputTokens(), text?.length ?? 0);
     }
 
-    return parseGeminiJson(text);
+    if (!text) {
+      throw new Error(`Gemini rerank response was empty (finishReason: ${finishReason ?? 'none'})`);
+    }
+
+    try {
+      return parseGeminiJson(text);
+    } catch (error) {
+      // Shape only — never the response body itself.
+      console.warn(
+        `[gaming-rerank] unparseable body: finishReason=${finishReason ?? 'none'}, chars=${text.length}`,
+      );
+      throw error;
+    }
   }
 }
 
@@ -222,6 +243,19 @@ export class GeminiRerankJsonError extends Error {
   constructor() {
     super('Gemini rerank response was not valid JSON');
     this.name = 'GeminiRerankJsonError';
+  }
+}
+
+/** The generation hit `maxOutputTokens`; the body is a fragment, not a malformed answer. */
+export class GeminiRerankTruncatedError extends Error {
+  readonly maxOutputTokens: number;
+  readonly textLength: number;
+
+  constructor(maxOutputTokens: number, textLength: number) {
+    super(`Gemini rerank output truncated at ${maxOutputTokens} tokens (${textLength} chars)`);
+    this.name = 'GeminiRerankTruncatedError';
+    this.maxOutputTokens = maxOutputTokens;
+    this.textLength = textLength;
   }
 }
 

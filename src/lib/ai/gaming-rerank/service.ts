@@ -10,6 +10,8 @@ import { selectDiscoveryPicks } from '@/lib/recommendations/v3/games/games-recom
 import { loadCandidateSummaries } from '@/lib/recommendations/v3/games/games-recommender';
 import { rateLimit } from '@/lib/rate-limit';
 import {
+  DEFAULT_GAME_RERANK_SHORTLIST_SIZE,
+  GAME_RERANK_MAX_SHORTLIST,
   GAME_RERANK_MIN_SHORTLIST,
   GAME_RERANK_PROMPT_VERSION,
   type GameRerankRanking,
@@ -68,6 +70,7 @@ export type GamesRerankShadowOptions = {
   model?: string;
   timeoutMs?: number;
   sampleRate?: number;
+  shortlistSize?: number;
   /** Injectable for tests; defaults to Math.random. */
   random?: () => number;
 };
@@ -92,9 +95,19 @@ export async function runGamesRerankShadow(
 }
 
 async function runShadow(
-  { supabase, userId, shortlist, continuationContext, servedDiscoveryIds }: GamesRerankShadowInput,
+  {
+    supabase,
+    userId,
+    shortlist: fullShortlist,
+    continuationContext,
+    servedDiscoveryIds,
+  }: GamesRerankShadowInput,
   options: GamesRerankShadowOptions,
 ): Promise<void> {
+  // Trimmed once, here, so the tokens, the payload, the hash and the recorded orders all describe
+  // the same candidate set. Truncating later would leave deterministic_order longer than ai_order
+  // and quietly corrupt the blend.
+  const shortlist = fullShortlist.slice(0, options.shortlistSize ?? getRerankShortlistSize());
   const configured = getConfiguredGameRerankProvider();
   const enabled = options.enabled ?? configured.enabled;
   const provider = options.provider ?? configured.provider;
@@ -374,9 +387,7 @@ async function callProviderAndPersist({
     // Message only — never the provider's response body.
     console.warn('[gaming-rerank] provider call failed:', (error as Error)?.message ?? 'unknown');
     startCooldown(cooldownKey, RERANK_PROVIDER_COOLDOWN_MS);
-    const category = error instanceof Error && error.name === 'GeminiRerankJsonError'
-      ? 'malformed_json'
-      : 'provider';
+    const category = classifyProviderError(error);
     await writeShadowRun(
       supabase,
       record({ status: 'failed', failureCategory: category, latencyMs }),
@@ -445,6 +456,26 @@ async function persistBlendedRun({
   );
 }
 
+/**
+ * Names the provider failure precisely enough to act on.
+ *
+ * `output_truncated` and `malformed_json` are deliberately separate: one says raise the token
+ * budget, the other says the contract is wrong. Collapsing them sent the first live truncation to
+ * the wrong diagnosis.
+ */
+function classifyProviderError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'provider';
+  }
+  if (error.name === 'GeminiRerankTruncatedError') {
+    return 'output_truncated';
+  }
+  if (error.name === 'GeminiRerankJsonError') {
+    return 'malformed_json';
+  }
+  return 'provider';
+}
+
 function startCooldown(key: string, cooldownMs: number): void {
   rerankCooldowns.set(key, Date.now() + cooldownMs);
 }
@@ -465,6 +496,17 @@ export function getRerankTimeoutMs(): number {
     return DEFAULT_GEMINI_RERANK_TIMEOUT_MS;
   }
   return Math.max(3_000, Math.min(Math.floor(configured), DEFAULT_GEMINI_RERANK_TIMEOUT_MS));
+}
+
+export function getRerankShortlistSize(): number {
+  const configured = Number(process.env.GAMES_RERANK_SHORTLIST_SIZE);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_GAME_RERANK_SHORTLIST_SIZE;
+  }
+  return Math.max(
+    GAME_RERANK_MIN_SHORTLIST,
+    Math.min(Math.floor(configured), GAME_RERANK_MAX_SHORTLIST),
+  );
 }
 
 export function getConfiguredSampleRate(): number {

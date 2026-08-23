@@ -18,8 +18,20 @@ export const DEFAULT_GEMINI_RERANK_MODEL = 'gemini-3.6-flash';
  */
 export const GAME_RERANK_MIN_SHORTLIST = 3;
 
-/** Upper bound on what is sent, matching the engine's own shortlist cap. */
+/** Hard ceiling on what is sent, matching the engine's own shortlist cap. */
 export const GAME_RERANK_MAX_SHORTLIST = 20;
+
+/**
+ * How many candidates are actually sent, by default.
+ *
+ * Below the ceiling on purpose. Twenty candidates on a thinking model overran the 12s budget on
+ * the first live run, and every candidate costs reasoning time, output tokens and a rationale.
+ * Twelve keeps a real field of alternatives for two visible slots while roughly halving the work.
+ *
+ * Widening it is one environment variable, so the funnel can be opened back up once the latency
+ * behaviour of the configured model is actually known rather than assumed.
+ */
+export const DEFAULT_GAME_RERANK_SHORTLIST_SIZE = 12;
 
 /**
  * Bounds shared by the Zod contract and the Gemini `responseSchema`. Keep both sides in step.

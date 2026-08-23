@@ -316,6 +316,51 @@ describe('runGamesRerankShadow', () => {
     expect(lastRun()).toMatchObject({ status: 'failed', failureCategory: 'timeout' });
   });
 
+  it('separates a truncated body from a malformed one', async () => {
+    // These demand opposite responses — raise the token budget versus fix the contract — so they
+    // must not collapse into one category, as they did on the first live truncation.
+    const truncated = new Error('Gemini rerank output truncated at 2500 tokens (900 chars)');
+    truncated.name = 'GeminiRerankTruncatedError';
+    provider.rerank.mockRejectedValue(truncated);
+
+    await runGamesRerankShadow(input(), opts());
+
+    expect(lastRun()).toMatchObject({ status: 'failed', failureCategory: 'output_truncated' });
+  });
+
+  it('classifies an unparseable body as malformed json', async () => {
+    const malformed = new Error('Gemini rerank response was not valid JSON');
+    malformed.name = 'GeminiRerankJsonError';
+    provider.rerank.mockRejectedValue(malformed);
+
+    await runGamesRerankShadow(input(), opts());
+
+    expect(lastRun()).toMatchObject({ status: 'failed', failureCategory: 'malformed_json' });
+  });
+
+  it('trims the shortlist to the configured size before doing anything with it', async () => {
+    const wide = Array.from({ length: 20 }, (_, i) => entry(100 + i, `Game ${i}`, 90 - i));
+    provider.rerank.mockImplementation(({ tokens }: { tokens: string[] }) => ({
+      schemaVersion: 1,
+      ranking: tokens.map((token, index) => ({
+        candidateId: token,
+        rank: index + 1,
+        rationale: 'ok',
+      })),
+    }));
+
+    await runGamesRerankShadow(input({ shortlist: wide }), opts({ shortlistSize: 5 }));
+
+    expect(provider.rerank.mock.calls[0][0].tokens).toHaveLength(5);
+    const run = lastRun();
+    // Every recorded order must describe the same candidate set, or the blend is meaningless.
+    expect(run.shortlistMediaIds).toHaveLength(5);
+    expect(run.deterministicOrder).toHaveLength(5);
+    expect(run.deterministicRawScores).toHaveLength(5);
+    expect(run.aiOrder).toHaveLength(5);
+    expect(run.blendedOrder).toHaveLength(5);
+  });
+
   it('classifies any other provider error generically', async () => {
     provider.rerank.mockRejectedValue(new Error('socket hang up'));
 
