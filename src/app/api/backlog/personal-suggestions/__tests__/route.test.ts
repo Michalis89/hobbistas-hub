@@ -116,6 +116,8 @@ describe('app/api/backlog/personal-suggestions/route', () => {
       tags: ['RPG'],
       cover: DEFAULT_COVER,
       description: 'Popular in your backlog cluster',
+      serveId: expect.any(String),
+      slotIndex: 0,
     });
     expect(body.items[2].id).toBe('personal-games-12');
     expect(body.items[2].tags).toEqual(['Roguelike']);
@@ -164,6 +166,65 @@ describe('app/api/backlog/personal-suggestions/route', () => {
     expect(body.items[0].id).toBe('personal-games-77');
     expect(body.items[0].tags).toEqual([]);
     expect(body.items[0].cover).toBe(DEFAULT_COVER);
+  });
+
+  it('stamps every item of one response with the same serve id and its own slot index', async () => {
+    generateRecommendationsV3Mock.mockResolvedValueOnce({
+      possibleNext: [
+        { id: 'p-1', mediaDbId: 1, title: 'A', reason: 'r', confidence: 0.5, matchedSignals: [] },
+        { id: 'p-2', mediaDbId: 2, title: 'B', reason: 'r', confidence: 0.5, matchedSignals: [] },
+      ],
+    });
+
+    const body = await (
+      await GET(new Request('http://localhost/api/backlog/personal-suggestions?category=games'))
+    ).json();
+
+    expect(body.items[0].serveId).toBe(body.items[1].serveId);
+    expect(body.items.map((item: { slotIndex: number }) => item.slotIndex)).toEqual([0, 1]);
+  });
+
+  it('records impressions without blocking the response', async () => {
+    const upsert = jest.fn().mockResolvedValue({ error: null });
+    createRouteHandlerClientMock.mockResolvedValueOnce({ from: jest.fn(() => ({ upsert })) });
+    generateRecommendationsV3Mock.mockResolvedValueOnce({
+      possibleNext: [
+        { id: 'p-1', mediaDbId: 1, title: 'A', reason: 'r', confidence: 0.5, matchedSignals: [] },
+      ],
+    });
+
+    const res = await GET(
+      new Request('http://localhost/api/backlog/personal-suggestions?category=games'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(upsert.mock.calls[0][0][0]).toMatchObject({
+      user_id: 'user-1',
+      media_id: 1,
+      category: 'games',
+      surface: 'backlog_personal_suggestions',
+      slot_index: 0,
+      event_type: 'impression',
+    });
+  });
+
+  it('still returns recommendations when the impression write fails', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const upsert = jest.fn().mockRejectedValue(new Error('db gone'));
+    createRouteHandlerClientMock.mockResolvedValueOnce({ from: jest.fn(() => ({ upsert })) });
+    generateRecommendationsV3Mock.mockResolvedValueOnce({
+      possibleNext: [
+        { id: 'p-1', mediaDbId: 1, title: 'A', reason: 'r', confidence: 0.5, matchedSignals: [] },
+      ],
+    });
+
+    const res = await GET(
+      new Request('http://localhost/api/backlog/personal-suggestions?category=games'),
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ items: [{ id: 'p-1' }] });
   });
 
   it('returns unauthorized fail response when auth fails', async () => {

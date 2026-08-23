@@ -7,6 +7,10 @@ import { fail } from '@/lib/api/response';
 import type { DashboardCategoryKey } from '@/lib/dashboard/category-data';
 import { DEFAULT_COVER } from '@/lib/constants/messages';
 import type { RecommendationCategory } from '@/lib/recommendations/v3/types';
+import {
+  buildRecommendationServe,
+  recordRecommendationImpressions,
+} from '@/lib/recommendations/instrumentation/serve';
 
 const ALLOWED_CATEGORIES: DashboardCategoryKey[] = [
   'games',
@@ -34,8 +38,21 @@ async function GETHandler(req: Request) {
     const { generateRecommendationsV3 } = await import('@/lib/recommendations/v3/recommender');
     const response = await generateRecommendationsV3(userId, category as RecommendationCategory);
 
+    const served = response.possibleNext.slice(0, 4);
+    const serve = buildRecommendationServe({
+      userId,
+      category,
+      surface: 'backlog_personal_suggestions',
+      slots: served.map((item, index) => ({
+        mediaId: item.mediaDbId,
+        source: item.source,
+        subtype: item.source,
+        deterministicRank: index + 1,
+      })),
+    });
+
     // Map V3 response to the existing API shape consumed by the dashboard
-    const items = response.possibleNext.slice(0, 4).map(item => ({
+    const items = served.map((item, index) => ({
       source: 'local' as const,
       id: item.id,
       mediaId: item.mediaDbId,
@@ -46,7 +63,11 @@ async function GETHandler(req: Request) {
       tags: item.matchedSignals ?? [],
       cover: item.cover || DEFAULT_COVER,
       description: item.reason,
+      serveId: serve.serveId,
+      slotIndex: index,
     }));
+
+    await recordRecommendationImpressions(supabase, serve);
 
     return NextResponse.json({ items });
   } catch (error) {

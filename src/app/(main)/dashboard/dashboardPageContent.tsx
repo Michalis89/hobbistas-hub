@@ -11,6 +11,7 @@ import {
   fetchCategoryDashboardData,
 } from '@/lib/dashboard/category-data';
 import type { PersonalStats } from '@/app/components/home/types';
+import { instrumentOwnDashboardSuggestions } from '@/lib/recommendations/instrumentation/dashboard';
 
 type DashboardBasePayload = {
   userId: string;
@@ -112,7 +113,11 @@ export async function DashboardSectionsData({
   }
 
   const categorySections: Record<DashboardCategoryKey, CategoryDashboardSection> =
-    await fetchCategoryDashboardData(supabase, userId, mediaCategories);
+    await instrumentOwnDashboardSuggestions(
+      supabase,
+      userId,
+      await fetchCategoryDashboardData(supabase, userId, mediaCategories),
+    );
 
   return (
     <HomeDashboardSections

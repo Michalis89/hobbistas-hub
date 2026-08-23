@@ -149,6 +149,12 @@ export type MediaSuggestion = {
   genres?: string[];
   tags?: string[];
   bucketTags?: Partial<Record<InsightTagBucket, string[]>>;
+  /**
+   * Set only when the viewer is the owner of these recommendations. Public and shared dashboards
+   * leave it undefined, which is what stops them recording interactions against the owner.
+   */
+  serveId?: string;
+  slotIndex?: number;
 };
 
 export type CategoryDashboardSection = {
