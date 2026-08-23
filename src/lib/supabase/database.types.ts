@@ -40,6 +40,133 @@ export type Database = {
           },
         ];
       };
+      ai_rerank_cache: {
+        Row: {
+          category: string;
+          created_at: string;
+          model: string;
+          payload_version: string;
+          prompt_version: string;
+          ranking: Json;
+          rerank_input_hash: string;
+          schema_version: number;
+          user_id: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          model: string;
+          payload_version: string;
+          prompt_version: string;
+          ranking: Json;
+          rerank_input_hash: string;
+          schema_version: number;
+          user_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          model?: string;
+          payload_version?: string;
+          prompt_version?: string;
+          ranking?: Json;
+          rerank_input_hash?: string;
+          schema_version?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_rerank_cache_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ai_rerank_shadow_runs: {
+        Row: {
+          ai_order: number[];
+          ai_weight: number | null;
+          blend_version: string | null;
+          blended_order: number[];
+          cache_hit: boolean;
+          category: string;
+          created_at: string;
+          deterministic_order: number[];
+          deterministic_raw_scores: number[];
+          failure_category: string | null;
+          id: number;
+          latency_ms: number | null;
+          model: string | null;
+          prompt_version: string | null;
+          rank_one_guard_triggered: boolean;
+          rationales: Json | null;
+          rerank_input_hash: string;
+          served_slot_media_ids: number[];
+          shortlist_media_ids: number[];
+          status: string;
+          taste_input_hash: string | null;
+          user_id: string;
+        };
+        Insert: {
+          ai_order?: number[];
+          ai_weight?: number | null;
+          blend_version?: string | null;
+          blended_order?: number[];
+          cache_hit?: boolean;
+          category: string;
+          created_at?: string;
+          deterministic_order?: number[];
+          deterministic_raw_scores?: number[];
+          failure_category?: string | null;
+          id?: never;
+          latency_ms?: number | null;
+          model?: string | null;
+          prompt_version?: string | null;
+          rank_one_guard_triggered?: boolean;
+          rationales?: Json | null;
+          rerank_input_hash: string;
+          served_slot_media_ids?: number[];
+          shortlist_media_ids?: number[];
+          status: string;
+          taste_input_hash?: string | null;
+          user_id: string;
+        };
+        Update: {
+          ai_order?: number[];
+          ai_weight?: number | null;
+          blend_version?: string | null;
+          blended_order?: number[];
+          cache_hit?: boolean;
+          category?: string;
+          created_at?: string;
+          deterministic_order?: number[];
+          deterministic_raw_scores?: number[];
+          failure_category?: string | null;
+          id?: never;
+          latency_ms?: number | null;
+          model?: string | null;
+          prompt_version?: string | null;
+          rank_one_guard_triggered?: boolean;
+          rationales?: Json | null;
+          rerank_input_hash?: string;
+          served_slot_media_ids?: number[];
+          shortlist_media_ids?: number[];
+          status?: string;
+          taste_input_hash?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_rerank_shadow_runs_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       ai_taste_profiles: {
         Row: {
           category: string;
