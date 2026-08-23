@@ -58,12 +58,18 @@ const IMPRESSION = {
   deterministic_rank: 3,
 };
 
+type QueryChain = {
+  select: jest.Mock;
+  eq: jest.Mock;
+  maybeSingle: jest.Mock;
+  upsert: jest.Mock;
+};
+
 function buildClient(impression: unknown, upsert = jest.fn().mockResolvedValue({ error: null })) {
-  const maybeSingle = jest.fn().mockResolvedValue({ data: impression, error: null });
-  const chain = {
+  const chain: QueryChain = {
     select: jest.fn(() => chain),
     eq: jest.fn(() => chain),
-    maybeSingle,
+    maybeSingle: jest.fn().mockResolvedValue({ data: impression, error: null }),
     upsert,
   };
   return { supabase: { from: jest.fn(() => chain) }, upsert, chain };

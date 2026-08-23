@@ -40,27 +40,6 @@ export type Database = {
           },
         ];
       };
-      api_cache: {
-        Row: {
-          created_at: string;
-          data: Json;
-          expires_at: string;
-          key: string;
-        };
-        Insert: {
-          created_at?: string;
-          data: Json;
-          expires_at: string;
-          key: string;
-        };
-        Update: {
-          created_at?: string;
-          data?: Json;
-          expires_at?: string;
-          key?: string;
-        };
-        Relationships: [];
-      };
       ai_taste_profiles: {
         Row: {
           category: string;
@@ -104,6 +83,27 @@ export type Database = {
             referencedColumns: ['id'];
           },
         ];
+      };
+      api_cache: {
+        Row: {
+          created_at: string;
+          data: Json;
+          expires_at: string;
+          key: string;
+        };
+        Insert: {
+          created_at?: string;
+          data: Json;
+          expires_at: string;
+          key: string;
+        };
+        Update: {
+          created_at?: string;
+          data?: Json;
+          expires_at?: string;
+          key?: string;
+        };
+        Relationships: [];
       };
       application_logs: {
         Row: {
