@@ -57,7 +57,7 @@ jest.mock('@/lib/recommendations/v3/recommender', () => ({
     generateWithInternalsMock(...args),
 }));
 
-jest.mock('@/lib/ai/gaming-rerank/service', () => ({
+jest.mock('@/lib/ai/categories/games/rerank/service', () => ({
   __esModule: true,
   runGamesRerankShadow: (...args: unknown[]) => runGamesRerankShadowMock(...args),
 }));

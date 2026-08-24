@@ -5,11 +5,11 @@ import {
 } from '../taste-eligibility';
 
 describe('isAiTasteSupportedCategory', () => {
-  it('supports games only', () => {
-    expect(isAiTasteSupportedCategory('games')).toBe(true);
+  it.each(['games', 'anime', 'manga'])('supports %s', category => {
+    expect(isAiTasteSupportedCategory(category)).toBe(true);
   });
 
-  it.each(['anime', 'manga', 'movies', 'tv', 'books', 'coding', 'pet', 'vape', ''])(
+  it.each(['movies', 'tv', 'books', 'coding', 'pet', 'vape', ''])(
     'does not support %s',
     category => {
       expect(isAiTasteSupportedCategory(category)).toBe(false);
@@ -34,12 +34,40 @@ describe('isAiTasteEligible', () => {
     expect(isAiTasteEligible({ category: 'games', engagedEntryCount: 0 })).toBe(false);
   });
 
-  it.each(['anime', 'manga', 'movies', 'tv', 'books'])(
+  it.each(['movies', 'tv', 'books'])(
     'refuses %s however large the library',
     category => {
       expect(isAiTasteEligible({ category, engagedEntryCount: 5000 })).toBe(false);
     },
   );
+
+  it('holds anime to its own, higher evidence floor rather than the games one', () => {
+    expect(isAiTasteEligible({ category: 'anime', engagedEntryCount: 8 })).toBe(true);
+    expect(isAiTasteEligible({ category: 'anime', engagedEntryCount: 7 })).toBe(false);
+    // The same count that clears the bar for games does not clear it for anime.
+    expect(isAiTasteEligible({ category: 'games', engagedEntryCount: 6 })).toBe(true);
+    expect(isAiTasteEligible({ category: 'anime', engagedEntryCount: 6 })).toBe(false);
+  });
+
+  it('holds manga to its own floor, which is neither the games nor the anime one', () => {
+    expect(isAiTasteEligible({ category: 'manga', engagedEntryCount: 7 })).toBe(true);
+    expect(isAiTasteEligible({ category: 'manga', engagedEntryCount: 6 })).toBe(false);
+    // Six clears the bar for games and seven does not clear it for anime; manga sits between.
+    expect(isAiTasteEligible({ category: 'games', engagedEntryCount: 6 })).toBe(true);
+    expect(isAiTasteEligible({ category: 'anime', engagedEntryCount: 7 })).toBe(false);
+  });
+
+  it('refuses a read-only manga dashboard however large the library', () => {
+    expect(
+      isAiTasteEligible({ category: 'manga', engagedEntryCount: 5000, isReadOnly: true }),
+    ).toBe(false);
+  });
+
+  it('refuses a read-only anime dashboard however large the library', () => {
+    expect(
+      isAiTasteEligible({ category: 'anime', engagedEntryCount: 5000, isReadOnly: true }),
+    ).toBe(false);
+  });
 
   it('refuses a read-only dashboard', () => {
     expect(isAiTasteEligible({ ...eligible, isReadOnly: true })).toBe(false);

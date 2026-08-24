@@ -10,7 +10,15 @@ export type AiTasteProfile = {
   };
   pillars: Array<{
     name: string;
-    kind: 'content' | 'behavior';
+    /**
+     * What sort of preference the pillar describes.
+     *
+     * A union across categories rather than one shared vocabulary: games distinguish content from
+     * player behaviour, anime distinguishes content from narrative form. The field is carried but
+     * not rendered, so widening it costs nothing and forcing a single enum would have made one
+     * category mislabel its own observations.
+     */
+    kind: 'content' | 'behavior' | 'form';
     description: string;
     evidenceTitles: string[];
     strengthBand: 'Defining' | 'Strong' | 'Present' | 'Emerging';

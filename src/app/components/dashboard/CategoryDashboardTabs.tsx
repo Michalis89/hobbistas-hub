@@ -26,6 +26,32 @@ const AiGamingIdentitySection = dynamic(() => import('./AiGamingIdentitySection'
   ssr: false,
 });
 
+const AiAnimeIdentitySection = dynamic(() => import('./AiAnimeIdentitySection'), {
+  ssr: false,
+});
+
+const AiMangaIdentitySection = dynamic(() => import('./AiMangaIdentitySection'), {
+  ssr: false,
+});
+
+/**
+ * Which AI identity card belongs to which tab.
+ *
+ * A lookup rather than a conditional chain, and deliberately partial: a category with no entry
+ * renders no card at all. That is what keeps an unsupported or not-yet-built category from
+ * showing an empty placeholder, and it means adding one later is an entry here plus a registry
+ * edit — never a change to the eligibility logic below.
+ *
+ * All three components are dynamically imported, so a tab whose card never mounts never downloads it.
+ */
+const AI_IDENTITY_SECTIONS: Partial<
+  Record<DashboardCategoryKey, React.ComponentType<{ enabled?: boolean }>>
+> = {
+  games: AiGamingIdentitySection,
+  anime: AiAnimeIdentitySection,
+  manga: AiMangaIdentitySection,
+};
+
 const CATEGORY_TITLES: Record<DashboardCategoryKey, string> = {
   games: 'Games',
   books: 'Books',
@@ -105,7 +131,8 @@ export default function CategoryDashboardTabs({
    *   - the tab is not the one being looked at. Radix unmounts inactive `TabsContent`, but relying
    *     on that would mean an implementation detail of the tab library decides whether we spend an
    *     AI request, so the check is explicit.
-   *   - the category has no AI taste implementation. Only games does today.
+   *   - the category has no AI taste implementation. The capability registry decides this, not
+   *     a literal here.
    *   - the library is too sparse for the server to produce anything, so asking only burns a
    *     request to be told no.
    */
@@ -121,6 +148,27 @@ export default function CategoryDashboardTabs({
       engagedEntryCount: categoryStats.completed + categoryStats.current + categoryStats.dropped,
       isReadOnly,
     });
+  };
+
+  /**
+   * Mounts the category's AI identity card, or nothing.
+   *
+   * Returns null for a category with no registered card even if it were somehow eligible, so a
+   * registry entry added ahead of its UI cannot produce an empty section.
+   */
+  const renderAiIdentitySection = (category: DashboardCategoryKey) => {
+    if (!isAiTasteSectionVisible(category)) {
+      return null;
+    }
+    const Section = AI_IDENTITY_SECTIONS[category];
+    if (!Section) {
+      return null;
+    }
+    return (
+      <div className="mt-9 md:mt-11">
+        <Section enabled />
+      </div>
+    );
   };
 
   return (
@@ -171,11 +219,7 @@ export default function CategoryDashboardTabs({
                   }
                 />
               </div>
-              {isAiTasteSectionVisible(category) ? (
-                <div className="mt-9 md:mt-11">
-                  <AiGamingIdentitySection enabled />
-                </div>
-              ) : null}
+              {renderAiIdentitySection(category)}
               <div className="mt-11 md:mt-14">
                 <MediaSuggestions
                   suggestions={sections[category]?.mediaSuggestions ?? []}

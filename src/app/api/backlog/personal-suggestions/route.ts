@@ -90,8 +90,11 @@ async function GETHandler(req: Request) {
       };
 
       after(async () => {
-        const { runGamesRerankShadow } = await import('@/lib/ai/gaming-rerank/service');
-        await runGamesRerankShadow(shadowInput);
+        // Dispatched by category rather than calling the games reranker directly. The dispatcher
+        // consults the capability registry first, so a category without a registered reranker
+        // performs no AI work of any kind — including loading its provider module.
+        const { dispatchRerankShadow } = await import('@/lib/ai/dispatch/rerank-shadow');
+        await dispatchRerankShadow('games', shadowInput);
       });
     }
 
