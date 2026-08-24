@@ -142,11 +142,15 @@ type MalTestItem = {
     };
     genres: Array<{ name: string }>;
     num_episodes?: number;
+    /** Series totals. Shared metadata, identical for every MAL user. */
+    num_chapters?: number | null;
+    num_volumes?: number | null;
   };
   list_status: {
     status: string;
     score: number | null;
     num_episodes_watched: number;
+    /** This user's own bookmark. Must never reach media_items. */
     num_chapters_read: number;
   };
 };
@@ -176,7 +180,7 @@ function makeAdminClient(config: AdminClientConfig = {}) {
     throw new Error(`Unexpected table: ${table}`);
   });
 
-  return { from, spies: { mediaIn, mediaUpsert, mediaUpsertSelect } };
+  return { from, spies: { mediaIn, mediaSelect, mediaUpsert, mediaUpsertSelect } };
 }
 
 function makeMalItem(id: number, overrides?: Partial<MalTestItem>) {
@@ -695,5 +699,236 @@ describe('app/api/integrations/mal/sync/route', () => {
         score: 7,
       }),
     );
+  });
+});
+
+/**
+ * Regression cover for the manga chapter-total corruption.
+ *
+ * `media_items` is shared entity metadata, written here through the service-role client and read
+ * by every user of the app. The sync previously wrote `list_status.num_chapters_read` — the
+ * importing user's own bookmark — into `media_items.chapters`, a row keyed only by
+ * `(mal_id, category)`. Whoever synced last published their reading position as the series' total
+ * chapter count, for everyone, and for the AI taste layer that reads it as a denominator.
+ *
+ * These tests are deliberately blunt about the *number*, not just the field name: the personal
+ * value and the shared value are given distinct, recognisable magnitudes so a regression shows up
+ * as the wrong integer rather than as a subtle shape change.
+ */
+describe('mal sync: per-user data never reaches shared media_items', () => {
+  const baseIntegration = {
+    user_id: 'user-1',
+    provider: 'mal',
+    access_token: 'token-old',
+    refresh_token: 'refresh-1',
+    expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    scopes: ['read'],
+  };
+
+  /** This user has read 99 chapters. Nothing shared may ever equal this. */
+  const PERSONAL_CHAPTERS_READ = 99;
+  /** The series really has 364 chapters across 42 volumes. */
+  const SERIES_TOTAL_CHAPTERS = 364;
+  const SERIES_TOTAL_VOLUMES = 42;
+
+  beforeEach(() => {
+    createRouteHandlerClientMock.mockReset();
+    createSupabaseAdminClientMock.mockReset();
+    requireAuthMock.mockReset();
+    fetchMalListMock.mockReset();
+    getMalOAuthConfigMock.mockReset();
+    mapMalStatusToBacklogStatusMock.mockReset();
+    refreshMalAccessTokenMock.mockReset();
+    refreshGenreAffinityMock.mockReset();
+    requireAuthMock.mockResolvedValue({ user: { id: 'user-1' } });
+    getMalOAuthConfigMock.mockReturnValue({ clientId: 'cid', clientSecret: 'secret' });
+    mapMalStatusToBacklogStatusMock.mockImplementation((status: string) => `mapped-${status}`);
+    refreshGenreAffinityMock.mockResolvedValue(undefined);
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function mangaItem(overrides: {
+    num_chapters?: number | null;
+    num_volumes?: number | null;
+    num_chapters_read?: number;
+  }) {
+    return makeMalItem(4242, {
+      node: {
+        media_type: 'manga',
+        num_chapters: overrides.num_chapters,
+        num_volumes: overrides.num_volumes,
+      } as never,
+      list_status: {
+        status: 'reading',
+        score: 8,
+        num_chapters_read: overrides.num_chapters_read ?? PERSONAL_CHAPTERS_READ,
+      } as never,
+    });
+  }
+
+  /** Runs one manga sync and hands back both write payloads. */
+  async function syncManga(options: {
+    item: ReturnType<typeof makeMalItem>;
+    existingMediaRows?: unknown[];
+  }) {
+    const userClient = makeUserClient({ integrationData: baseIntegration });
+    const adminClient = makeAdminClient({
+      existingMediaRows: options.existingMediaRows ?? [],
+      mediaRows: [{ id: 500, mal_id: options.item.node.id }],
+    });
+    createRouteHandlerClientMock.mockResolvedValue(userClient);
+    createSupabaseAdminClientMock.mockReturnValue(adminClient);
+    fetchMalListMock.mockResolvedValue([options.item]);
+
+    const res = await POST(
+      new Request('http://localhost/api/integrations/mal/sync?category=manga'),
+    );
+    expect(res.status).toBe(200);
+
+    return {
+      mediaPayload: adminClient.spies.mediaUpsert.mock.calls[0][0][0],
+      entryPayload: userClient.spies.entryInsert.mock.calls[0]?.[0]?.[0],
+      adminClient,
+      userClient,
+    };
+  }
+
+  it('never writes the user reading progress into media_items.chapters', async () => {
+    const { mediaPayload } = await syncManga({
+      item: mangaItem({
+        num_chapters: SERIES_TOTAL_CHAPTERS,
+        num_volumes: SERIES_TOTAL_VOLUMES,
+        num_chapters_read: PERSONAL_CHAPTERS_READ,
+      }),
+    });
+
+    expect(mediaPayload.chapters).not.toBe(PERSONAL_CHAPTERS_READ);
+    // Nothing personal at all: the bookmark must not appear in any shared column.
+    expect(Object.values(mediaPayload)).not.toContain(PERSONAL_CHAPTERS_READ);
+  });
+
+  it('writes the real chapter total into media_items.chapters', async () => {
+    const { mediaPayload } = await syncManga({
+      item: mangaItem({ num_chapters: SERIES_TOTAL_CHAPTERS, num_volumes: SERIES_TOTAL_VOLUMES }),
+    });
+
+    expect(mediaPayload.chapters).toBe(SERIES_TOTAL_CHAPTERS);
+  });
+
+  it('writes the real volume total into media_items.volumes', async () => {
+    const { mediaPayload } = await syncManga({
+      item: mangaItem({ num_chapters: SERIES_TOTAL_CHAPTERS, num_volumes: SERIES_TOTAL_VOLUMES }),
+    });
+
+    // Previously never written at all, which is why volume totals are absent on synced rows.
+    expect(mediaPayload.volumes).toBe(SERIES_TOTAL_VOLUMES);
+  });
+
+  it('still records the user reading progress on their own entry', async () => {
+    const { entryPayload } = await syncManga({
+      item: mangaItem({
+        num_chapters: SERIES_TOTAL_CHAPTERS,
+        num_volumes: SERIES_TOTAL_VOLUMES,
+        num_chapters_read: PERSONAL_CHAPTERS_READ,
+      }),
+    });
+
+    // The fix moves the value, it does not discard it.
+    expect(entryPayload).toEqual(
+      expect.objectContaining({
+        user_id: 'user-1',
+        media_id: 500,
+        progress: PERSONAL_CHAPTERS_READ,
+        import_source: 'mal',
+      }),
+    );
+  });
+
+  /**
+   * The multi-user case, which is what made the original bug damaging rather than merely wrong.
+   *
+   * A second reader syncs the same series. MAL reports it as ongoing, so `num_chapters` and
+   * `num_volumes` come back as 0 — MAL's way of saying "unknown". Their own bookmark is 99. The
+   * row already holds real totals established by the admin importer.
+   *
+   * Both failure modes must be refused: writing 99 (their progress), and writing 0 or null
+   * (their fetch's ignorance) over a total the database already knew.
+   */
+  it('cannot overwrite shared totals when a second user syncs an ongoing series', async () => {
+    requireAuthMock.mockResolvedValue({ user: { id: 'user-2' } });
+
+    const { mediaPayload, entryPayload } = await syncManga({
+      item: mangaItem({
+        num_chapters: 0,
+        num_volumes: 0,
+        num_chapters_read: PERSONAL_CHAPTERS_READ,
+      }),
+      existingMediaRows: [
+        {
+          id: 500,
+          mal_id: 4242,
+          chapters: SERIES_TOTAL_CHAPTERS,
+          volumes: SERIES_TOTAL_VOLUMES,
+        },
+      ],
+    });
+
+    expect(mediaPayload.chapters).toBe(SERIES_TOTAL_CHAPTERS);
+    expect(mediaPayload.volumes).toBe(SERIES_TOTAL_VOLUMES);
+    expect(mediaPayload.chapters).not.toBe(PERSONAL_CHAPTERS_READ);
+    // Their own progress is still recorded, on their own row.
+    expect(entryPayload.progress).toBe(PERSONAL_CHAPTERS_READ);
+  });
+
+  it('treats a zero total as unknown rather than writing zero', async () => {
+    // MAL reports unknown length as 0. Zero is a real integer a completion ratio would divide by,
+    // so it must not survive as a stored total.
+    const { mediaPayload } = await syncManga({
+      item: mangaItem({ num_chapters: 0, num_volumes: 0 }),
+    });
+
+    expect(mediaPayload.chapters).toBeNull();
+    expect(mediaPayload.volumes).toBeNull();
+  });
+
+  it('upgrades an unknown total to a known one once MAL publishes it', async () => {
+    const { mediaPayload } = await syncManga({
+      item: mangaItem({ num_chapters: SERIES_TOTAL_CHAPTERS, num_volumes: SERIES_TOTAL_VOLUMES }),
+      existingMediaRows: [{ id: 500, mal_id: 4242, chapters: null, volumes: null }],
+    });
+
+    // Preservation must not become a freeze: unknown to known is the one direction allowed.
+    expect(mediaPayload.chapters).toBe(SERIES_TOTAL_CHAPTERS);
+    expect(mediaPayload.volumes).toBe(SERIES_TOTAL_VOLUMES);
+  });
+
+  it('reads the existing totals it needs in order to preserve them', async () => {
+    const { adminClient } = await syncManga({
+      item: mangaItem({ num_chapters: SERIES_TOTAL_CHAPTERS, num_volumes: SERIES_TOTAL_VOLUMES }),
+    });
+
+    const selectArg = adminClient.spies.mediaSelect.mock.calls[0][0] as string;
+    expect(selectArg).toContain('chapters');
+    expect(selectArg).toContain('volumes');
+  });
+
+  it('leaves anime series totals alone', async () => {
+    const userClient = makeUserClient({ integrationData: baseIntegration });
+    const adminClient = makeAdminClient({ mediaRows: [{ id: 600, mal_id: 7 }] });
+    createRouteHandlerClientMock.mockResolvedValue(userClient);
+    createSupabaseAdminClientMock.mockReturnValue(adminClient);
+    fetchMalListMock.mockResolvedValue([makeMalItem(7, { node: { num_episodes: 24 } as never })]);
+
+    const res = await POST(new Request('http://localhost/api/integrations/mal/sync'));
+    expect(res.status).toBe(200);
+
+    const mediaPayload = adminClient.spies.mediaUpsert.mock.calls[0][0][0];
+    expect(mediaPayload.episodes).toBe(24);
+    expect(mediaPayload.chapters).toBeNull();
+    expect(mediaPayload.volumes).toBeNull();
   });
 });

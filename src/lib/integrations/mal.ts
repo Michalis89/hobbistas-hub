@@ -16,6 +16,9 @@ export type MalSyncCategory = 'anime' | 'manga';
    Types
 ================================ */
 
+/**
+ * Per-user list state. Never a source for `media_items` — see {@link MalAnimeListItem}.
+ */
 export type MalListStatus = {
   status:
     | 'watching'
@@ -31,12 +34,28 @@ export type MalListStatus = {
   score?: number | null;
 };
 
+/**
+ * One list row: the work, and this user's relationship to it.
+ *
+ * The split is the important part and is worth stating, because collapsing it is what caused the
+ * manga chapter-total corruption. `node` is **shared entity metadata** — the same object for every
+ * MAL user, and the only thing that may ever be written to `media_items`. `list_status` is **this
+ * user's own reading state** and belongs exclusively in `user_media_entries`.
+ *
+ * `num_chapters` and `num_volumes` live on `node`; `num_chapters_read` lives on `list_status`. The
+ * names are one word apart and the values are wildly different, which is precisely why both are
+ * declared here rather than left implicit.
+ */
 export type MalAnimeListItem = {
   node: {
     id: number;
     title?: string | null;
     synopsis?: string | null;
     num_episodes?: number | null;
+    /** Total chapters the series has published. Zero or absent when unknown or ongoing. */
+    num_chapters?: number | null;
+    /** Total volumes the series has published. Zero or absent when unknown or ongoing. */
+    num_volumes?: number | null;
     media_type?: string | null;
     status?: string | null;
     start_date?: string | null;

@@ -39,11 +39,54 @@ function getSeasonYear(dateString?: string | null): number | null {
   return Number.isFinite(year) ? year : null;
 }
 
+/**
+ * Series totals already stored for a shared media row, keyed by MAL id.
+ *
+ * Read before the upsert so a sync can decline to overwrite a known total with an unknown one.
+ */
+type ExistingMediaTotals = Map<number, { chapters: number | null; volumes: number | null }>;
+
+/**
+ * MAL reports "unknown" as zero rather than null, so both mean the same thing here.
+ *
+ * Normalising at the boundary matters because zero is not a harmless value downstream: it is a
+ * legitimate integer that a completion ratio would happily divide by, and the AI evidence layer
+ * already treats a zero total as absent. Writing null keeps one meaning of "we do not know".
+ */
+function normalizeTotal(value?: number | null): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+/**
+ * Builds the **shared entity** row for one MAL item.
+ *
+ * Every field here must come from `item.node`, which is the same object for every MAL user. Not
+ * one may come from `item.list_status`, which is this user's own reading state — `media_items` is
+ * shared by every user of this app, and the upsert below writes it through the service-role
+ * client, so anything personal that lands here is published to everyone.
+ *
+ * That is not hypothetical. `chapters` was previously written from
+ * `item.list_status.num_chapters_read` — the importing user's bookmark — into a row keyed only by
+ * `(mal_id, category)`. Whoever synced last stamped their reading position onto the series' total
+ * chapter count for every other user, and for the AI taste layer that reads it as a denominator.
+ *
+ * `existingTotals` is what stops the reverse failure. MAL reports an ongoing or unmeasured series
+ * as zero chapters, so a sync that simply wrote what it fetched would erase a real total that the
+ * admin importer or the in-app search had already established. A total is therefore only ever
+ * upgraded from unknown to known, never back.
+ */
 function buildMediaPayload(
   item: MalAnimeListItem,
   category: MalSyncCategory,
+  existingTotals: ExistingMediaTotals,
 ): Database['public']['Tables']['media_items']['Insert'] {
   const node = item.node;
+  const isManga = category === 'manga';
+  const existing = existingTotals.get(node.id);
+
   return {
     category,
     source: 'mal',
@@ -56,7 +99,11 @@ function buildMediaPayload(
     status: node.status ?? null,
     season_year: getSeasonYear(node.start_date),
     episodes: category === 'anime' ? (node.num_episodes ?? null) : null,
-    chapters: category === 'manga' ? (item.list_status.num_chapters_read ?? null) : null,
+    // Series totals, from the shared node. Never from list_status.
+    chapters: isManga
+      ? (normalizeTotal(node.num_chapters) ?? existing?.chapters ?? null)
+      : null,
+    volumes: isManga ? (normalizeTotal(node.num_volumes) ?? existing?.volumes ?? null) : null,
     start_date: node.start_date ?? null,
     cover_image_large: node.main_picture?.large ?? null,
     cover_image_medium: node.main_picture?.medium ?? null,
@@ -163,7 +210,9 @@ async function POSTHandler(req: Request) {
     const malIds = uniqueMalItems.map(item => item.node.id);
     const { data: existingMediaRows, error: existingMediaError } = await adminSupabase
       .from('media_items')
-      .select('id,mal_id')
+      // `chapters` and `volumes` are selected so the upsert can preserve a total it already knows
+      // when MAL reports the series length as unknown. See `buildMediaPayload`.
+      .select('id,mal_id,chapters,volumes')
       .eq('source', 'mal')
       .eq('category', syncCategory)
       .in('mal_id', malIds);
@@ -178,7 +227,18 @@ async function POSTHandler(req: Request) {
         .filter((value): value is number => typeof value === 'number'),
     );
 
-    const mediaPayload = uniqueMalItems.map(item => buildMediaPayload(item, syncCategory));
+    const existingMediaTotals: ExistingMediaTotals = new Map(
+      (existingMediaRows ?? [])
+        .filter((row): row is typeof row & { mal_id: number } => typeof row.mal_id === 'number')
+        .map(row => [
+          row.mal_id,
+          { chapters: normalizeTotal(row.chapters), volumes: normalizeTotal(row.volumes) },
+        ]),
+    );
+
+    const mediaPayload = uniqueMalItems.map(item =>
+      buildMediaPayload(item, syncCategory, existingMediaTotals),
+    );
     const { data: mediaRows, error: mediaUpsertError } = await adminSupabase
       .from('media_items')
       .upsert(mediaPayload, { onConflict: 'mal_id,category' })
