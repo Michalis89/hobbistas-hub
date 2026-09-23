@@ -26,7 +26,13 @@ const ACCESS_TOKEN_COOKIE = 'sb-access-token';
  * rebuild server error stacks in the browser.
  */
 function buildCsp(isDev: boolean) {
-  const scriptSrc = [`'self'`, `'unsafe-inline'`, ...(isDev ? [`'unsafe-eval'`] : [])];
+  const turnstileOrigin = 'https://challenges.cloudflare.com';
+  const scriptSrc = [
+    `'self'`,
+    turnstileOrigin,
+    `'unsafe-inline'`,
+    ...(isDev ? [`'unsafe-eval'`] : []),
+  ];
 
   return [
     `default-src 'self'`,
@@ -37,6 +43,7 @@ function buildCsp(isDev: boolean) {
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob: https:`,
     `font-src 'self' data:`,
+    `frame-src ${turnstileOrigin}`,
     `connect-src 'self' https: wss:`,
     `media-src 'self' https:`,
     `worker-src 'self' blob:`,

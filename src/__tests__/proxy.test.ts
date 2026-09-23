@@ -33,8 +33,15 @@ describe('proxy content security policy', () => {
     // Without this the framework bootstrap is blocked, nothing hydrates, and
     // every page renders as a permanent skeleton.
     expect(cspOf(proxy(request('/home')))).toContain(
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' https://challenges.cloudflare.com 'unsafe-inline' 'unsafe-eval'",
     );
+  });
+
+  it('allows Cloudflare Turnstile to load its script and challenge iframe', () => {
+    const csp = cspOf(proxy(request('/auth/login')));
+
+    expect(csp).toContain("script-src 'self' https://challenges.cloudflare.com");
+    expect(csp).toContain('frame-src https://challenges.cloudflare.com');
   });
 
   it('keeps the policy on redirects, not just on rendered pages', () => {
