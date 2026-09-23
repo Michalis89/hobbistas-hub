@@ -56,9 +56,9 @@ import { API_ERRORS } from '@/lib/api/errors';
 import { DEFAULT_COVER } from '@/lib/constants/messages';
 import { UnauthorizedError } from '@/lib/api/auth';
 
-/** The route now reads { response, gamesShadowContext }; shadow context is null in these cases. */
+/** The route reads { response, shadowContext }; there is no shadow context in these cases. */
 function v3(possibleNext: unknown[]) {
-  return { response: { possibleNext }, gamesShadowContext: null };
+  return { response: { possibleNext }, shadowContext: null };
 }
 
 describe('app/api/backlog/personal-suggestions/route', () => {

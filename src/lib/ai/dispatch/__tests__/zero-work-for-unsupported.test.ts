@@ -16,8 +16,13 @@ jest.mock('server-only', () => ({}), { virtual: true });
 
 const gamesTasteService = jest.fn();
 const gamesRerankService = jest.fn();
+const animeRerankService = jest.fn();
+const mangaRerankService = jest.fn();
 const animeTasteService = jest.fn();
 const mangaTasteService = jest.fn();
+const moviesTasteService = jest.fn();
+const tvTasteService = jest.fn();
+const booksTasteService = jest.fn();
 
 jest.mock('@/lib/ai/categories/games/taste/service', () => ({
   __esModule: true,
@@ -27,6 +32,16 @@ jest.mock('@/lib/ai/categories/games/taste/service', () => ({
 jest.mock('@/lib/ai/categories/games/rerank/service', () => ({
   __esModule: true,
   runGamesRerankShadow: (...args: unknown[]) => gamesRerankService(...args),
+}));
+
+jest.mock('@/lib/ai/categories/anime/rerank/service', () => ({
+  __esModule: true,
+  runAnimeRerankShadow: (...args: unknown[]) => animeRerankService(...args),
+}));
+
+jest.mock('@/lib/ai/categories/manga/rerank/service', () => ({
+  __esModule: true,
+  runMangaRerankShadow: (...args: unknown[]) => mangaRerankService(...args),
 }));
 
 jest.mock('@/lib/ai/categories/anime/taste/service', () => ({
@@ -39,27 +54,58 @@ jest.mock('@/lib/ai/categories/manga/taste/service', () => ({
   generateMangaAiTasteProfile: (...args: unknown[]) => mangaTasteService(...args),
 }));
 
+jest.mock('@/lib/ai/categories/movies/taste/service', () => ({
+  __esModule: true,
+  generateMoviesAiTasteProfile: (...args: unknown[]) => moviesTasteService(...args),
+}));
+
+jest.mock('@/lib/ai/categories/tv/taste/service', () => ({
+  __esModule: true,
+  generateTvAiTasteProfile: (...args: unknown[]) => tvTasteService(...args),
+}));
+
+jest.mock('@/lib/ai/categories/books/taste/service', () => ({
+  __esModule: true,
+  generateBooksAiTasteProfile: (...args: unknown[]) => booksTasteService(...args),
+}));
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { dispatchRerankShadow } from '../rerank-shadow';
 import { generateAiTasteProfileForCategory } from '../taste-profile';
 
-/** Categories with no taste adapter. Anime and manga both have one now. */
-const TASTE_UNSUPPORTED_CATEGORIES = ['movies', 'tv', 'books'];
+/**
+ * Categories with no taste adapter.
+ *
+ * Every media category has one now, so what is left are the hobby verticals with no library to
+ * reason about. They are still worth testing: the gate that refuses them is the registry, not a
+ * flag, and a stray registry entry would be caught here before it reached a provider.
+ */
+const TASTE_UNSUPPORTED_CATEGORIES = ['coding', 'pet', 'vape'];
 
 /**
- * Categories with no reranker — which is every category except games.
+ * Categories with a taste profile but no reranker.
  *
- * Anime belongs here even though its taste profile is live. That difference is the whole reason
- * the registry carries two independent fields, and this list is where it is enforced.
+ * This list is the whole reason the registry carries two fields. All three profile taste; none may
+ * be reranked, because none has a reranker, a corpus or any evidence a model improves its ordering.
  */
-const RERANK_UNSUPPORTED_CATEGORIES = ['anime', 'manga', 'movies', 'tv', 'books'];
+const RERANK_UNSUPPORTED_CATEGORIES = ['movies', 'tv', 'books'];
+
+/** Every reranker, so a test can assert that exactly one of them ran. */
+const RERANK_SERVICES = {
+  games: gamesRerankService,
+  anime: animeRerankService,
+  manga: mangaRerankService,
+};
 
 /** Every taste generator, so a test can assert that exactly one of them ran. */
 const TASTE_SERVICES = {
   games: gamesTasteService,
   anime: animeTasteService,
   manga: mangaTasteService,
+  movies: moviesTasteService,
+  tv: tvTasteService,
+  books: booksTasteService,
 };
 
 /** Any touch is a failure, so the trap is the assertion. */
@@ -118,7 +164,7 @@ describe('taste dispatch for unsupported categories', () => {
     expect(animeTasteService).not.toHaveBeenCalled();
   });
 
-  it.each(['games', 'anime', 'manga'] as const)(
+  it.each(['games', 'anime', 'manga', 'movies', 'tv', 'books'] as const)(
     'routes %s to its own generator, and only that one',
     async category => {
       const supabase = {} as SupabaseClient<Database>;
@@ -168,55 +214,35 @@ describe('shadow rerank dispatch for unsupported categories', () => {
     ).resolves.toBeUndefined();
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(gamesRerankService).not.toHaveBeenCalled();
+    for (const service of Object.values(RERANK_SERVICES)) {
+      expect(service).not.toHaveBeenCalled();
+    }
   });
 
-  it.each(['anime', 'manga'])(
-    'refuses %s reranking even though its taste profile is supported',
+  it.each(['games', 'anime', 'manga'] as const)(
+    'routes %s to its own reranker, and only that one',
     async category => {
-      // The separation, asserted directly: taste support must never imply rerank support.
-      await dispatchRerankShadow(category as 'games', {
-        supabase: forbiddenSupabase(),
+      RERANK_SERVICES[category].mockResolvedValue(undefined);
+      const context = {
+        supabase: {} as SupabaseClient<Database>,
         userId: 'user-1',
         shortlist: [],
         continuationContext: { chosenFamilyKeys: [], remainingDiscoverySlots: 2 },
         servedDiscoveryIds: [],
-      } as never);
+      };
 
-      expect(fetchSpy).not.toHaveBeenCalled();
-      expect(gamesRerankService).not.toHaveBeenCalled();
+      await dispatchRerankShadow(category, context as never);
+
+      expect(RERANK_SERVICES[category]).toHaveBeenCalledWith(context);
+      for (const [other, service] of Object.entries(RERANK_SERVICES)) {
+        if (other !== category) {
+          expect(service).not.toHaveBeenCalled();
+        }
+      }
+      // Reranking must never trigger a taste generation.
       for (const service of Object.values(TASTE_SERVICES)) {
         expect(service).not.toHaveBeenCalled();
       }
     },
   );
-
-  it('refuses anime reranking even though anime taste is supported', async () => {
-    await dispatchRerankShadow('anime' as 'games', {
-      supabase: forbiddenSupabase(),
-      userId: 'user-1',
-      shortlist: [],
-      continuationContext: { chosenFamilyKeys: [], remainingDiscoverySlots: 2 },
-      servedDiscoveryIds: [],
-    } as never);
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(gamesRerankService).not.toHaveBeenCalled();
-    expect(animeTasteService).not.toHaveBeenCalled();
-  });
-
-  it('still reaches the games reranker for games', async () => {
-    gamesRerankService.mockResolvedValue(undefined);
-    const context = {
-      supabase: {} as SupabaseClient<Database>,
-      userId: 'user-1',
-      shortlist: [],
-      continuationContext: { chosenFamilyKeys: [], remainingDiscoverySlots: 2 },
-      servedDiscoveryIds: [],
-    };
-
-    await dispatchRerankShadow('games', context as never);
-
-    expect(gamesRerankService).toHaveBeenCalledWith(context);
-  });
 });

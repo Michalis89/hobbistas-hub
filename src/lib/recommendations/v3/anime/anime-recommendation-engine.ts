@@ -10,9 +10,13 @@ import {
   titleToSlug,
 } from './anime-normalizers';
 import type {
+  AnimeContinuationContext,
+  AnimeDiscoveryShortlistEntry,
   AnimeRecommendation,
   AnimeRecommendationEngineInput,
+  AnimeShadowContext,
   AnimeTasteComputation,
+  ScoredAnimeCandidate,
 } from './anime-types';
 
 const BACKLOG_LIMIT = 4;
@@ -21,9 +25,18 @@ const MAX_CONTINUATION_BACKLOG = 2;
 const MAX_CONTINUATION_EXTERNAL = 2;
 const DISCOVERY_MIN_SCORE = 40;
 
+/**
+ * How many franchise-distinct discovery candidates are carried on the shadow context.
+ *
+ * Wide enough that the two or so slots discovery actually gets are drawn from a real field of
+ * alternatives, small enough to stay a bounded payload. Same figure as games, for the same reason.
+ */
+export const ANIME_DISCOVERY_SHORTLIST_LIMIT = 20;
+
 export function buildAnimeRecommendations(input: AnimeRecommendationEngineInput): {
   backlogPicks: AnimeRecommendation[];
   possibleNext: AnimeRecommendation[];
+  shadowContext: AnimeShadowContext;
 } {
   const backlogPicks = pickBacklogRecommendations(input.backlog, input.history, input.taste);
   const possibleNext = pickPossibleNextRecommendations(
@@ -35,8 +48,82 @@ export function buildAnimeRecommendations(input: AnimeRecommendationEngineInput)
 
   return {
     backlogPicks,
-    possibleNext,
+    possibleNext: possibleNext.picks,
+    shadowContext: possibleNext.shadowContext,
   };
+}
+
+/**
+ * Fills the remaining `possibleNext` slots from score-sorted discovery candidates.
+ *
+ * Lifted verbatim out of the discovery fill loop so the selection rules — one entry per franchise
+ * family, families already claimed by continuations excluded, hard slot budget — live in one place
+ * and can be replayed over an alternative ordering of the same candidates.
+ *
+ * Pure and synchronous by contract. Nothing here may become async or reach outside its arguments:
+ * that is what keeps an alternative ordering from ever influencing the deterministic path.
+ *
+ * Note the family check is unconditional, unlike the games engine's. `getAnimeFranchiseKey` can
+ * return an empty string for a title it cannot parse, and the deterministic loop this was lifted
+ * from treats that empty key as a family like any other — so the first unparseable title claims it
+ * and later ones are skipped. Preserved deliberately: the replay has to reproduce what the user
+ * was actually served, not a tidier version of it.
+ */
+export function selectAnimeDiscoveryPicks(
+  sortedCandidates: readonly ScoredAnimeCandidate[],
+  usedFamilyKeys: ReadonlySet<string>,
+  remainingSlots: number,
+): ScoredAnimeCandidate[] {
+  if (remainingSlots <= 0) {
+    return [];
+  }
+
+  const claimedFamilies = new Set(usedFamilyKeys);
+  const picks: ScoredAnimeCandidate[] = [];
+
+  for (const item of sortedCandidates) {
+    if (picks.length >= remainingSlots) {
+      break;
+    }
+    const family = getAnimeFranchiseKey(item.candidate.title);
+    if (claimedFamilies.has(family)) {
+      continue;
+    }
+    claimedFamilies.add(family);
+    picks.push(item);
+  }
+
+  return picks;
+}
+
+/**
+ * Collapses score-sorted discovery candidates to one entry per franchise family.
+ *
+ * The highest-scoring member wins because the input is already sorted descending, which is also
+ * the member the selection loop would have taken.
+ */
+export function collapseAnimeDiscoveryShortlist(
+  sortedCandidates: readonly ScoredAnimeCandidate[],
+  limit: number = ANIME_DISCOVERY_SHORTLIST_LIMIT,
+): AnimeDiscoveryShortlistEntry[] {
+  const seenFamilies = new Set<string>();
+  const shortlist: AnimeDiscoveryShortlistEntry[] = [];
+
+  for (const item of sortedCandidates) {
+    if (shortlist.length >= limit) {
+      break;
+    }
+
+    const familyKey = getAnimeFranchiseKey(item.candidate.title);
+    if (seenFamilies.has(familyKey)) {
+      continue;
+    }
+    seenFamilies.add(familyKey);
+
+    shortlist.push({ ...item, familyKey, deterministicRank: shortlist.length + 1 });
+  }
+
+  return shortlist;
 }
 
 function pickBacklogRecommendations(
@@ -262,7 +349,7 @@ function pickPossibleNextRecommendations(
   history: MediaHistoryEntry[],
   backlog: MediaHistoryEntry[],
   taste: AnimeTasteComputation,
-): AnimeRecommendation[] {
+): { picks: AnimeRecommendation[]; shadowContext: AnimeShadowContext } {
   const ownedKeys = new Set(history.map(item => normalizeIdentityKey(item.media.title)));
   const backlogKeys = new Set(backlog.map(item => normalizeIdentityKey(item.media.title)));
   const backlogFamiliesWithContinuation = new Set(
@@ -279,11 +366,7 @@ function pickPossibleNextRecommendations(
     matchedSignals: string[];
   }> = [];
 
-  const discoveryCandidates: Array<{
-    candidate: MediaCandidate;
-    score: number;
-    matchedSignals: string[];
-  }> = [];
+  const discoveryCandidates: ScoredAnimeCandidate[] = [];
 
   for (const candidate of candidates) {
     const identity = normalizeIdentityKey(candidate.title);
@@ -368,16 +451,20 @@ function pickPossibleNextRecommendations(
     usedFamilies.add(family);
   }
 
-  for (const item of discoveryCandidates) {
-    if (selected.length >= POSSIBLE_NEXT_LIMIT) {
-      break;
-    }
+  const continuationContext: AnimeContinuationContext = {
+    chosenFamilyKeys: Array.from(usedFamilies),
+    continuationSlotsUsed: selected.length,
+    remainingDiscoverySlots: POSSIBLE_NEXT_LIMIT - selected.length,
+    possibleNextLimit: POSSIBLE_NEXT_LIMIT,
+  };
 
-    const family = getAnimeFranchiseKey(item.candidate.title);
-    if (usedFamilies.has(family)) {
-      continue;
-    }
+  const discoveryPicks = selectAnimeDiscoveryPicks(
+    discoveryCandidates,
+    usedFamilies,
+    continuationContext.remainingDiscoverySlots,
+  );
 
+  for (const item of discoveryPicks) {
     selected.push({
       mediaId: item.candidate.id,
       title: item.candidate.title,
@@ -396,10 +483,16 @@ function pickPossibleNextRecommendations(
       genres: item.candidate.genres,
       matchedSignals: item.matchedSignals,
     });
-    usedFamilies.add(family);
+    usedFamilies.add(getAnimeFranchiseKey(item.candidate.title));
   }
 
-  return selected.slice(0, POSSIBLE_NEXT_LIMIT);
+  return {
+    picks: selected.slice(0, POSSIBLE_NEXT_LIMIT),
+    shadowContext: {
+      discoveryShortlist: collapseAnimeDiscoveryShortlist(discoveryCandidates),
+      continuationContext,
+    },
+  };
 }
 
 function scoreBacklogBestFit(

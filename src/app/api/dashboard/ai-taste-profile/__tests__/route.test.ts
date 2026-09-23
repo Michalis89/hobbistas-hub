@@ -103,7 +103,7 @@ describe('supported categories', () => {
 });
 
 describe('unsupported categories', () => {
-  it.each(['movies', 'tv', 'books', 'coding', 'nonsense'])(
+  it.each(['coding', 'pet', 'vape', 'nonsense'])(
     'rejects %s without authenticating, rate limiting or dispatching',
     async category => {
       const response = await GET(request(category));

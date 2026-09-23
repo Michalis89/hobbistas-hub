@@ -38,7 +38,7 @@ async function GETHandler(req: Request) {
     const { generateRecommendationsV3WithInternals } = await import(
       '@/lib/recommendations/v3/recommender'
     );
-    const { response, gamesShadowContext } = await generateRecommendationsV3WithInternals(
+    const { response, shadowContext } = await generateRecommendationsV3WithInternals(
       userId,
       category as RecommendationCategory,
     );
@@ -78,23 +78,22 @@ async function GETHandler(req: Request) {
     // runs after the response has been flushed, reads nothing back into it, and is scheduled
     // through `after` rather than a bare floating promise because a detached promise in a
     // serverless invocation can be frozen or killed the moment the response is sent.
-    if (gamesShadowContext) {
-      const shadowInput = {
-        supabase,
-        userId,
-        shortlist: gamesShadowContext.discoveryShortlist,
-        continuationContext: gamesShadowContext.continuationContext,
-        servedDiscoveryIds: served
-          .filter(item => item.source === 'discovery')
-          .map(item => item.mediaDbId),
-      };
+    if (shadowContext) {
+      const servedDiscoveryIds = served
+        .filter(item => item.source === 'discovery')
+        .map(item => item.mediaDbId);
 
       after(async () => {
-        // Dispatched by category rather than calling the games reranker directly. The dispatcher
-        // consults the capability registry first, so a category without a registered reranker
-        // performs no AI work of any kind — including loading its provider module.
-        const { dispatchRerankShadow } = await import('@/lib/ai/dispatch/rerank-shadow');
-        await dispatchRerankShadow('games', shadowInput);
+        // Dispatched by category rather than calling a reranker directly. The dispatcher consults
+        // the capability registry first, so a category without a registered reranker performs no
+        // AI work of any kind — including loading its provider module.
+        const { dispatchRerankShadowForServe } = await import('@/lib/ai/dispatch/rerank-shadow');
+        await dispatchRerankShadowForServe({
+          supabase,
+          userId,
+          servedDiscoveryIds,
+          shadow: shadowContext,
+        });
       });
     }
 

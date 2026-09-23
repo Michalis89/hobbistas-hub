@@ -166,7 +166,7 @@ describe('personal-suggestions shadow invariance', () => {
   async function baselineBody(): Promise<string> {
     generateWithInternalsMock.mockResolvedValue({
       response: recommendationResponse(),
-      gamesShadowContext: null,
+      shadowContext: null,
     });
     const body = await callRoute();
     await drainAfterCallbacks();
@@ -185,7 +185,7 @@ describe('personal-suggestions shadow invariance', () => {
 
     generateWithInternalsMock.mockResolvedValue({
       response: recommendationResponse(),
-      gamesShadowContext: SHADOW_CONTEXT,
+      shadowContext: { category: 'games', context: SHADOW_CONTEXT },
     });
     const on = await callRoute();
     await drainAfterCallbacks();
@@ -197,7 +197,7 @@ describe('personal-suggestions shadow invariance', () => {
   it('returns the response before the shadow work runs', async () => {
     generateWithInternalsMock.mockResolvedValue({
       response: recommendationResponse(),
-      gamesShadowContext: SHADOW_CONTEXT,
+      shadowContext: { category: 'games', context: SHADOW_CONTEXT },
     });
 
     await callRoute();
@@ -218,7 +218,7 @@ describe('personal-suggestions shadow invariance', () => {
     runGamesRerankShadowMock.mockImplementation(behaviour);
     generateWithInternalsMock.mockResolvedValue({
       response: recommendationResponse(),
-      gamesShadowContext: SHADOW_CONTEXT,
+      shadowContext: { category: 'games', context: SHADOW_CONTEXT },
     });
 
     const on = await callRoute();
@@ -230,7 +230,7 @@ describe('personal-suggestions shadow invariance', () => {
   it('passes only discovery items to the shadow run, never continuations', async () => {
     generateWithInternalsMock.mockResolvedValue({
       response: recommendationResponse(),
-      gamesShadowContext: SHADOW_CONTEXT,
+      shadowContext: { category: 'games', context: SHADOW_CONTEXT },
     });
 
     await callRoute();
@@ -245,7 +245,7 @@ describe('personal-suggestions shadow invariance', () => {
   it('never lets shadow output reach the serialised response', async () => {
     generateWithInternalsMock.mockResolvedValue({
       response: recommendationResponse(),
-      gamesShadowContext: SHADOW_CONTEXT,
+      shadowContext: { category: 'games', context: SHADOW_CONTEXT },
     });
 
     const body = await callRoute();
@@ -267,7 +267,7 @@ describe('personal-suggestions shadow invariance', () => {
   it('keeps the deterministic ordering of the visible items', async () => {
     generateWithInternalsMock.mockResolvedValue({
       response: recommendationResponse(),
-      gamesShadowContext: SHADOW_CONTEXT,
+      shadowContext: { category: 'games', context: SHADOW_CONTEXT },
     });
 
     const parsed = JSON.parse(await callRoute());

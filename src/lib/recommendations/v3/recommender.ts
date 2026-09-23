@@ -19,12 +19,16 @@ import type { RecommendationCategory, RecommendationResponse, RecommendationItem
 import { generateGamesRecommendationsV3 } from './games/games-recommender';
 import type { GamesRecommendationResult, GamesShadowContext } from './games/games-types';
 import { generateAnimeRecommendationsV3 } from './anime/anime-recommender';
-import type { AnimeRecommendationResult } from './anime/anime-types';
+import type { AnimeRecommendationResult, AnimeShadowContext } from './anime/anime-types';
 import { extractClusters } from './pipeline/cluster-extractor';
 import { inferToneProfile } from './pipeline/tone-inferrer';
 import { detectContinuationCandidates } from './pipeline/continuation-detector';
 import { scoreBacklogItems } from './pipeline/backlog-scorer';
 import { scoreDiscoveryCandidates, selectDiverseDiscovery } from './pipeline/discovery-scorer';
+import {
+  buildPipelineDiscoveryShortlist,
+  type PipelineShadowContext,
+} from './pipeline/shadow-context';
 import { generateExplanations, generateTasteSummary } from './pipeline/explanation-generator';
 import { getCanonicalKey } from './utils/genre';
 import { extractBaseTitle, isEditionVariant } from './utils/franchise';
@@ -71,29 +75,52 @@ export async function generateRecommendationsV3(
 }
 
 /**
- * Same pipeline, plus the games engine's internal shadow context.
+ * A bespoke engine's internal account of how `possibleNext` was assembled.
+ *
+ * Tagged by category rather than flattened into one shape. Games and anime fill their discovery
+ * slots under different rules, and an observation is only worth recording if it can be replayed
+ * under the rules that actually applied — so each category carries its own context and says which
+ * it is. Categories still served by the generic pipeline report none.
+ */
+export type RecommendationShadowContext =
+  | { category: 'games'; context: GamesShadowContext }
+  | { category: 'anime'; context: AnimeShadowContext }
+  | { category: PipelineShadowCategory; context: PipelineShadowContext };
+
+/** Every category still served by the shared pipeline rather than by an engine of its own. */
+export type PipelineShadowCategory = Exclude<RecommendationCategory, 'games' | 'anime'>;
+
+/**
+ * Same pipeline, plus the bespoke engines' internal shadow context.
  *
  * Exists so shadow observation can see how `possibleNext` was assembled without that detail
  * passing through `RecommendationResponse`, and without a second code path that could drift from
- * the one users are served. Everything user-facing comes from `response`; `gamesShadowContext` is
- * observation-only and is null for every category except games.
+ * the one users are served. Everything user-facing comes from `response`; `shadowContext` is
+ * observation-only and is null for every category whose engine does not produce one.
  */
 export async function generateRecommendationsV3WithInternals(
   userId: string,
   category: RecommendationCategory,
-): Promise<{ response: RecommendationResponse; gamesShadowContext: GamesShadowContext | null }> {
+): Promise<{
+  response: RecommendationResponse;
+  shadowContext: RecommendationShadowContext | null;
+}> {
   if (category === 'games') {
     const gamesResult = await generateGamesRecommendationsV3(userId);
     return {
       response: mapGamesResultToRecommendationResponse(gamesResult),
-      gamesShadowContext: gamesResult.shadowContext ?? null,
+      shadowContext: gamesResult.shadowContext
+        ? { category: 'games', context: gamesResult.shadowContext }
+        : null,
     };
   }
   if (category === 'anime') {
     const animeResult = await generateAnimeRecommendationsV3(userId);
     return {
       response: mapAnimeResultToRecommendationResponse(animeResult),
-      gamesShadowContext: null,
+      shadowContext: animeResult.shadowContext
+        ? { category: 'anime', context: animeResult.shadowContext }
+        : null,
     };
   }
 
@@ -159,13 +186,28 @@ export async function generateRecommendationsV3WithInternals(
   const eligibleDiscovery = scoredDiscovery;
 
   // ── 7. Compose possibleNext with continuation-first slot strategy ─────────
+  const continuationItems = continuationCandidates.map(c => continuationToScoredItem(c));
   const possibleNextItems = composePossibleNext(
-    continuationCandidates.map(c => continuationToScoredItem(c)),
+    continuationItems,
     selectDiverseDiscovery(eligibleDiscovery, DISCOVERY_SLOTS * 2), // pass extra for diversity
     POSSIBLE_NEXT_LIMIT,
     CONTINUATION_SLOTS,
     DISCOVERY_SLOTS,
   );
+
+  // Observation only. Mirrors the slot arithmetic `composePossibleNext` just applied, so a shadow
+  // rerank can replay the selection over a different ordering of the same candidates. Nothing
+  // below this point may influence `possibleNextItems`, which is already decided.
+  const pipelineShadowContext: PipelineShadowContext = {
+    discoveryShortlist: buildPipelineDiscoveryShortlist(eligibleDiscovery),
+    continuationContext: {
+      continuationSlotsUsed: Math.min(continuationItems.length, CONTINUATION_SLOTS),
+      remainingDiscoverySlots:
+        POSSIBLE_NEXT_LIMIT - Math.min(continuationItems.length, CONTINUATION_SLOTS),
+      discoveryPreselectLimit: DISCOVERY_SLOTS * 2,
+      possibleNextLimit: POSSIBLE_NEXT_LIMIT,
+    },
+  };
 
   // ── 8. Generate explanations ──────────────────────────────────────────────
   const allItems = [
@@ -189,7 +231,7 @@ export async function generateRecommendationsV3WithInternals(
   // ── 10. Assemble response ─────────────────────────────────────────────────
   return {
     response: assembleResponse(category, ctx, finalBacklog, finalPossibleNext),
-    gamesShadowContext: null,
+    shadowContext: { category, context: pipelineShadowContext },
   };
 }
 

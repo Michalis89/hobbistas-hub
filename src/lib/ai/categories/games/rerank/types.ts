@@ -1,4 +1,10 @@
-import { z } from 'zod';
+import {
+  buildRankingResultSchema,
+  type RankingContractConfig,
+} from '@/lib/ai/shared/rank/contract';
+import type { RerankRequestPayload } from '@/lib/ai/shared/rank/rerank-payload';
+import type { RerankRanking } from '@/lib/ai/shared/rank/rerank-validation';
+import type { RerankTastePayload } from '@/lib/ai/shared/rank/taste-payload';
 
 export const GAME_RERANK_PROMPT_VERSION = 'games-ai-rerank-prompt-v2';
 export const GAME_RERANK_SCHEMA_VERSION = 1;
@@ -48,9 +54,24 @@ export const GAME_RERANK_TEXT_LIMITS = {
 /** Candidate summaries are truncated before they are sent; free text is the bulk of the payload. */
 export const GAME_RERANK_SUMMARY_MAX_CHARS = 300;
 
+/** The games binding of the shared ranking contract. Drives Zod and Gemini alike. */
+export const GAME_RERANK_CONTRACT: RankingContractConfig = {
+  schemaVersion: GAME_RERANK_SCHEMA_VERSION,
+  minItems: GAME_RERANK_MIN_SHORTLIST,
+  maxItems: GAME_RERANK_MAX_SHORTLIST,
+  rationaleMaxChars: GAME_RERANK_TEXT_LIMITS.rationale,
+};
+
 /** Opaque per-run identifier for a candidate: `c01`..`c20`. Real media ids never leave the app. */
 export type GameRerankToken = string;
 
+/**
+ * What the model is told about one candidate.
+ *
+ * The genuinely games-specific part of the payload — modes and perspectives describe what a player
+ * *does*, which is the axis the prompt asks the model to rank on. A category with a different
+ * shape of experience declares its own.
+ */
 export type GameRerankCandidatePayload = {
   token: GameRerankToken;
   title: string;
@@ -63,46 +84,14 @@ export type GameRerankCandidatePayload = {
   summary: string | null;
 };
 
-export type GameRerankTastePayload = {
-  identity: { label: string; description: string };
-  pillars: Array<{
-    name: string;
-    kind: 'content' | 'behavior';
-    description: string;
-    strengthBand: string;
-  }>;
-  negativeSignals: Array<{ name: string; description: string }>;
-  summary: string;
-  sufficiency: string;
-};
+/** Structural across categories — see `shared/rank/taste-payload.ts`. */
+export type GameRerankTastePayload = RerankTastePayload;
 
-export type GameRerankRequestPayload = {
-  payloadVersion: typeof GAME_RERANK_PAYLOAD_VERSION;
-  taste: GameRerankTastePayload;
-  /** Shuffled, so list position cannot leak the deterministic ordering. */
-  candidates: GameRerankCandidatePayload[];
-};
+export type GameRerankRequestPayload = RerankRequestPayload<GameRerankCandidatePayload>;
 
-export const AiGameRerankResultSchema = z.object({
-  schemaVersion: z.literal(GAME_RERANK_SCHEMA_VERSION),
-  ranking: z
-    .array(
-      z.object({
-        candidateId: z.string().trim().min(1),
-        rank: z.number().int().min(1),
-        rationale: z.string().trim().min(1).max(GAME_RERANK_TEXT_LIMITS.rationale),
-      }),
-    )
-    .min(GAME_RERANK_MIN_SHORTLIST)
-    .max(GAME_RERANK_MAX_SHORTLIST),
-});
+export const AiGameRerankResultSchema = buildRankingResultSchema(GAME_RERANK_CONTRACT);
 
-export type AiGameRerankResult = z.infer<typeof AiGameRerankResultSchema>;
+export type AiGameRerankResult = ReturnType<typeof AiGameRerankResultSchema.parse>;
 
 /** A validated ranking, resolved back to real media ids. */
-export type GameRerankRanking = {
-  /** Media ids in AI-preferred order, best first. */
-  order: number[];
-  /** mediaId → one-line reason. Model text about the user's taste: never logged. */
-  rationales: Record<number, string>;
-};
+export type GameRerankRanking = RerankRanking;

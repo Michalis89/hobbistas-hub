@@ -5,16 +5,15 @@ import {
 } from '../taste-eligibility';
 
 describe('isAiTasteSupportedCategory', () => {
-  it.each(['games', 'anime', 'manga'])('supports %s', category => {
+  it.each(['games', 'anime', 'manga', 'movies', 'tv', 'books'])('supports %s', category => {
     expect(isAiTasteSupportedCategory(category)).toBe(true);
   });
 
-  it.each(['movies', 'tv', 'books', 'coding', 'pet', 'vape', ''])(
-    'does not support %s',
-    category => {
-      expect(isAiTasteSupportedCategory(category)).toBe(false);
-    },
-  );
+  it.each(['coding', 'pet', 'vape', ''])('does not support %s', category => {
+    // Hobbies without a media library have nothing to profile. Their absence from the registry is
+    // the reason the gate refuses them, not a flag.
+    expect(isAiTasteSupportedCategory(category)).toBe(false);
+  });
 });
 
 describe('isAiTasteEligible', () => {
@@ -34,12 +33,26 @@ describe('isAiTasteEligible', () => {
     expect(isAiTasteEligible({ category: 'games', engagedEntryCount: 0 })).toBe(false);
   });
 
-  it.each(['movies', 'tv', 'books'])(
-    'refuses %s however large the library',
-    category => {
-      expect(isAiTasteEligible({ category, engagedEntryCount: 5000 })).toBe(false);
-    },
-  );
+  it.each(['coding', 'pet', 'vape'])('refuses %s however large the library', category => {
+    expect(isAiTasteEligible({ category, engagedEntryCount: 5000 })).toBe(false);
+  });
+
+  it('holds each media category to its own floor rather than to a shared one', () => {
+    // The floors are the rollout control for these three, so they are asserted at the boundary in
+    // both directions rather than merely "greater than the default".
+    expect(isAiTasteEligible({ category: 'movies', engagedEntryCount: 8 })).toBe(true);
+    expect(isAiTasteEligible({ category: 'movies', engagedEntryCount: 7 })).toBe(false);
+    expect(isAiTasteEligible({ category: 'tv', engagedEntryCount: 7 })).toBe(true);
+    expect(isAiTasteEligible({ category: 'tv', engagedEntryCount: 6 })).toBe(false);
+    expect(isAiTasteEligible({ category: 'books', engagedEntryCount: 6 })).toBe(true);
+    expect(isAiTasteEligible({ category: 'books', engagedEntryCount: 5 })).toBe(false);
+  });
+
+  it('refuses a read-only movies dashboard however large the library', () => {
+    expect(
+      isAiTasteEligible({ category: 'movies', engagedEntryCount: 5000, isReadOnly: true }),
+    ).toBe(false);
+  });
 
   it('holds anime to its own, higher evidence floor rather than the games one', () => {
     expect(isAiTasteEligible({ category: 'anime', engagedEntryCount: 8 })).toBe(true);

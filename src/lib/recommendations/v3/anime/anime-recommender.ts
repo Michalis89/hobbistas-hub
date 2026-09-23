@@ -25,6 +25,7 @@ export async function generateAnimeRecommendationsV3(
     tasteProfile: taste.profile,
     backlogPicks: recommendations.backlogPicks,
     possibleNext: recommendations.possibleNext,
+    shadowContext: recommendations.shadowContext,
     debug: buildResultDebug(history),
   };
 }

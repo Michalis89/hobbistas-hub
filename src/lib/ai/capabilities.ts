@@ -90,11 +90,63 @@ export const ANIME_MIN_TASTE_EVIDENCE_TITLES = 8;
 export const MANGA_MIN_TASTE_EVIDENCE_TITLES = 7;
 
 /**
+ * Films: eight collapsed franchise families.
+ *
+ * The same figure as anime, reached from the opposite direction. A film is the *smallest* commitment
+ * in the library — two hours against a game's thirty — which argues for a higher bar, and a film row
+ * carries the thinnest metadata of any category: genres, a runtime, and nothing else. There are no
+ * themes, no studios, no credits on the row at all.
+ *
+ * What pulls it back down to eight is the one thing films have that nothing else does: derived
+ * authorship. Directors and actors arrive from `user_category_profiles` already franchise-deduped,
+ * with single-franchise actors already excluded, and that is a genuinely strong signal per title. It
+ * also only exists once the deterministic profile has enough data to compute it — which happens at
+ * the same threshold — so eight is where both signals become available together.
+ */
+export const MOVIES_MIN_TASTE_EVIDENCE_TITLES = 8;
+
+/**
+ * Television: seven collapsed series.
+ *
+ * Below anime's eight and above the games default of six, and it is genuinely between them rather
+ * than a compromise.
+ *
+ * *A tv family is the heaviest unit in the app.* Anime's eight is counted after a collapse that
+ * folds seasons, cours, OVAs and films into one entry, where a single family may be one twelve-episode
+ * cour — roughly four hours. A collapsed tv series is typically three to five seasons, so seven
+ * families is well over a hundred hours of watching. Seven here is a larger commitment than eight
+ * there.
+ *
+ * *The metadata is thin but structured.* A tv row carries genres, an episode total and a season
+ * count. The season count in particular is a real signal no other category has: it says whether this
+ * viewer stays with long-running shows or prefers limited series.
+ *
+ * *Below seven the strength bands stop meaning anything.* With a reference denominator of ten, a
+ * library of six lets one series exceed a fifth of the denominator on its own and read as `Strong`
+ * on no evidence but its own length.
+ */
+export const TV_MIN_TASTE_EVIDENCE_TITLES = 7;
+
+/**
+ * Books: six works, the shared default.
+ *
+ * The only category that earns the default rather than an adjustment, and for a reason worth stating
+ * so nobody "harmonises" it upward later. A book is a ten-hour commitment that barely collapses — a
+ * series contributes one entry per volume — so six entries is six real reading decisions. And books
+ * are the only category with a true per-row authorship signal: `media_items.tags` holds author names,
+ * so every entry arrives naming who wrote it. Six titles with six authors is a denser document than
+ * eight anime rows with genres alone.
+ */
+export const BOOKS_MIN_TASTE_EVIDENCE_TITLES = DEFAULT_MIN_TASTE_EVIDENCE_TITLES;
+
+/**
  * The registry. Adding a category here is the *only* place support is declared.
  *
- * Registering a category is a claim that the server implementation exists — a flag flipped ahead
- * of the code produces requests that can only fail. Movies, tv and books are deliberately absent:
- * they have no adapter yet.
+ * Registering a category is a claim that the server implementation exists — a flag flipped ahead of
+ * the code produces requests that can only fail. Every media category the app tracks now has a
+ * taste adapter; the `rerank` column is what still separates them, and every category starts at
+ * `off` there until it has a reranker of its own, a prompt of its own and a replay of its own slot
+ * rules.
  */
 const AI_CATEGORY_CAPABILITIES = {
   games: {
@@ -103,35 +155,63 @@ const AI_CATEGORY_CAPABILITIES = {
     minTasteEvidenceTitles: DEFAULT_MIN_TASTE_EVIDENCE_TITLES,
   },
   /**
-   * Anime: taste only.
+   * Anime: taste live, reranking observed.
    *
-   * `rerank: 'off'` is the point of having two fields. Anime taste is live; anime reranking has
-   * no implementation, no shadow corpus and no evidence that a model improves its ordering, so
-   * the reranking dispatcher must refuse it outright rather than rely on a caller not asking.
+   * `shadow` is not a softer `true`. The anime reranker asks the provider and records the answer
+   * beside what the viewer was actually shown; the served ordering stays byte-for-byte
+   * deterministic. It earns `shadow` rather than `off` because the implementation exists — an
+   * adapter, a prompt of its own, and a replay of the anime engine's slot rules — and it stays out
+   * of `isAiRerankUserVisibleCategory` until the recorded comparisons say the blend is an
+   * improvement.
    *
    * The evidence floor is eight rather than the default six, and the difference is deliberate —
    * see `ANIME_MIN_TASTE_EVIDENCE_TITLES`.
    */
   anime: {
     taste: true,
-    rerank: 'off',
+    rerank: 'shadow',
     minTasteEvidenceTitles: ANIME_MIN_TASTE_EVIDENCE_TITLES,
   },
   /**
-   * Manga: taste only.
+   * Manga: taste live, reranking observed.
    *
-   * `rerank: 'off'` for the same reason anime's is, and it is worth restating rather than
-   * inferring. Manga reranking has no implementation, no shadow corpus and no evidence that a
-   * model improves its ordering. Taste shipping for a category must never be the thing that
-   * enables reranking for it — the two capabilities are separate fields precisely so that the
-   * reranking dispatcher refuses manga outright rather than relying on no caller asking.
+   * The first category reranked off the *shared pipeline's* shadow context rather than a bespoke
+   * engine's — manga has no engine of its own, so its slot replay re-runs the pipeline's
+   * cluster-diversity selection. Registering it as `shadow` is still a claim that the
+   * implementation exists, not that it is trusted: the served ordering stays byte-for-byte
+   * deterministic until the recorded comparisons say otherwise.
    *
    * The evidence floor is seven rather than six or eight — see `MANGA_MIN_TASTE_EVIDENCE_TITLES`.
    */
   manga: {
     taste: true,
-    rerank: 'off',
+    rerank: 'shadow',
     minTasteEvidenceTitles: MANGA_MIN_TASTE_EVIDENCE_TITLES,
+  },
+  /**
+   * Movies: taste only.
+   *
+   * `rerank: 'off'` is not an oversight, and this is the third time it is worth restating. A film
+   * taste profile existing says nothing about whether a model improves film *ordering*: there is no
+   * movies reranker, no shadow corpus and no evidence either way. The reranking dispatcher must
+   * refuse movies outright rather than rely on no caller asking.
+   */
+  movies: {
+    taste: true,
+    rerank: 'off',
+    minTasteEvidenceTitles: MOVIES_MIN_TASTE_EVIDENCE_TITLES,
+  },
+  /** Television: taste only, for the same reason movies is. See `TV_MIN_TASTE_EVIDENCE_TITLES`. */
+  tv: {
+    taste: true,
+    rerank: 'off',
+    minTasteEvidenceTitles: TV_MIN_TASTE_EVIDENCE_TITLES,
+  },
+  /** Books: taste only, at the shared evidence floor. See `BOOKS_MIN_TASTE_EVIDENCE_TITLES`. */
+  books: {
+    taste: true,
+    rerank: 'off',
+    minTasteEvidenceTitles: BOOKS_MIN_TASTE_EVIDENCE_TITLES,
   },
 } as const satisfies Record<string, AiCategoryCapability>;
 

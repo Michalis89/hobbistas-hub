@@ -21,11 +21,11 @@ jest.mock('../taste-source', () => ({
 const mockReadCache = jest.fn();
 const mockWriteCache = jest.fn();
 const mockWriteShadowRun = jest.fn();
-jest.mock('../cache', () => ({
+jest.mock('@/lib/ai/shared/cache/rerank-cache', () => ({
   __esModule: true,
-  readRerankCache: (...args: unknown[]) => mockReadCache(...args),
-  writeRerankCache: (...args: unknown[]) => mockWriteCache(...args),
-  writeShadowRun: (...args: unknown[]) => mockWriteShadowRun(...args),
+  readRerankCacheRow: (...args: unknown[]) => mockReadCache(...args),
+  writeRerankCacheRow: (...args: unknown[]) => mockWriteCache(...args),
+  writeShadowRunRow: (...args: unknown[]) => mockWriteShadowRun(...args),
 }));
 
 import {
@@ -121,7 +121,8 @@ function input(overrides: Partial<GamesRerankShadowInput> = {}): GamesRerankShad
 }
 
 function lastRun() {
-  return mockWriteShadowRun.mock.calls[mockWriteShadowRun.mock.calls.length - 1][1];
+  // writeShadowRunRow(supabase, scope, run) — the record is the third argument.
+  return mockWriteShadowRun.mock.calls[mockWriteShadowRun.mock.calls.length - 1][2];
 }
 
 describe('runGamesRerankShadow', () => {
@@ -229,7 +230,8 @@ describe('runGamesRerankShadow', () => {
     await runGamesRerankShadow(input(), opts());
 
     expect(mockWriteCache).toHaveBeenCalledTimes(1);
-    expect(mockWriteCache.mock.calls[0][5].order).toEqual([22, 33, 11]);
+    // writeRerankCacheRow(supabase, scope, key, versions, ranking)
+    expect(mockWriteCache.mock.calls[0][4].order).toEqual([22, 33, 11]);
   });
 
   it('records a cache write failure without losing the observation', async () => {

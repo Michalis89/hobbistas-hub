@@ -9,3 +9,11 @@
 export const MANGA_AI_CATEGORY = 'manga';
 
 export const MANGA_TASTE_LOG_SCOPE = 'manga-ai-taste';
+
+/**
+ * Log scope for manga reranking.
+ *
+ * Separate from the taste scope on purpose: the two features fail for different reasons and are
+ * rolled out independently, so a grep for one must not surface the other's warnings.
+ */
+export const MANGA_RERANK_LOG_SCOPE = 'manga-ai-rerank';

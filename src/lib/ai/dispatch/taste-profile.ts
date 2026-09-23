@@ -52,6 +52,22 @@ const TASTE_GENERATORS: Record<
     );
     return (supabase, userId) => generateMangaAiTasteProfile(supabase, userId);
   },
+  movies: async () => {
+    const { generateMoviesAiTasteProfile } = await import(
+      '@/lib/ai/categories/movies/taste/service'
+    );
+    return (supabase, userId) => generateMoviesAiTasteProfile(supabase, userId);
+  },
+  tv: async () => {
+    const { generateTvAiTasteProfile } = await import('@/lib/ai/categories/tv/taste/service');
+    return (supabase, userId) => generateTvAiTasteProfile(supabase, userId);
+  },
+  books: async () => {
+    const { generateBooksAiTasteProfile } = await import(
+      '@/lib/ai/categories/books/taste/service'
+    );
+    return (supabase, userId) => generateBooksAiTasteProfile(supabase, userId);
+  },
 };
 
 /**

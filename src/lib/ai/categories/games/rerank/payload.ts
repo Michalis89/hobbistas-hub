@@ -1,6 +1,13 @@
-import { sha256Hex, stableStringify } from '@/lib/ai/shared/hashing';
 import { buildRerankTokenMap, type RerankTokenMap } from '@/lib/ai/shared/rank/tokens';
-import { seededShuffle } from '@/lib/ai/shared/shuffle';
+import {
+  buildRerankRequestEnvelope,
+  fingerprintRerankCandidates,
+  fingerprintRerankTaste,
+  shuffleRerankCandidates,
+  stableStringify,
+  truncateNarrativeText,
+} from '@/lib/ai/shared/rank/rerank-payload';
+import { buildRerankTastePayload } from '@/lib/ai/shared/rank/taste-payload';
 import type { GamesDiscoveryShortlistEntry } from '@/lib/recommendations/v3/games/games-types';
 import type { EnrichedAiGamingTasteProfile } from '@/lib/ai/categories/games/taste/types';
 import {
@@ -24,28 +31,9 @@ export function buildTokenMap(
   );
 }
 
-/**
- * Truncates a summary at a word boundary where possible.
- *
- * Cutting mid-word produces a fragment the model may treat as a real title or term; backing up to
- * the last space keeps the text honest at the cost of a few characters.
- */
+/** Games binding of the shared truncation rule. */
 export function truncateSummary(summary: string | null | undefined): string | null {
-  if (!summary) {
-    return null;
-  }
-  const collapsed = summary.replace(/\s+/g, ' ').trim();
-  if (!collapsed) {
-    return null;
-  }
-  if (collapsed.length <= GAME_RERANK_SUMMARY_MAX_CHARS) {
-    return collapsed;
-  }
-
-  const hardCut = collapsed.slice(0, GAME_RERANK_SUMMARY_MAX_CHARS);
-  const lastSpace = hardCut.lastIndexOf(' ');
-  const body = lastSpace > GAME_RERANK_SUMMARY_MAX_CHARS * 0.6 ? hardCut.slice(0, lastSpace) : hardCut;
-  return `${body.replace(/[\s.,;:—-]+$/, '')}…`;
+  return truncateNarrativeText(summary, GAME_RERANK_SUMMARY_MAX_CHARS);
 }
 
 function releaseYear(releaseDate: string | null | undefined): number | null {
@@ -82,55 +70,32 @@ export function buildCandidatePayload(
   };
 }
 
+/**
+ * Games binding of the shared taste mapper.
+ *
+ * Kept as a named export rather than inlined at the call site because the enriched games profile
+ * satisfies `RerankTasteProfileSource` structurally, and a named binding is where a future
+ * divergence would be caught by the compiler instead of at runtime.
+ */
 export function buildTastePayload(profile: EnrichedAiGamingTasteProfile): GameRerankTastePayload {
-  return {
-    identity: {
-      label: profile.identity.label,
-      description: profile.identity.description,
-    },
-    // evidenceTitles are omitted on purpose: the descriptions already carry the semantic claim,
-    // and re-supplying library titles invites "more games like X", which is the franchise-
-    // similarity behaviour the deterministic side already handles.
-    pillars: profile.pillars.map(pillar => ({
-      name: pillar.name,
-      kind: pillar.kind,
-      description: pillar.description,
-      strengthBand: pillar.strengthBand,
-    })),
-    negativeSignals: profile.negativeSignals.map(signal => ({
-      name: signal.name,
-      description: signal.description,
-    })),
-    summary: profile.summary,
-    // openQuestions are omitted: they are ambiguities the profile itself flags as unresolved, and
-    // feeding them in would silently turn a stated uncertainty into a ranking criterion.
-    sufficiency: profile.dataQuality.sufficiency,
-  };
+  return buildRerankTastePayload(profile);
 }
 
-/**
- * Shuffles candidates so their input position cannot leak the deterministic ordering.
- *
- * Hiding the score is not enough on its own: models anchor on list order at least as hard as on
- * stated numbers, and sending the list in rank order would make "the AI agrees" indistinguishable
- * from "the AI copied the order it was given". The seed is derived from the payload itself, so
- * identical input always produces an identical shuffle — a refresh cannot reshuffle its way to a
- * different answer, and the cache stays meaningful.
- */
 export function shuffleCandidates(
   candidates: readonly GameRerankCandidatePayload[],
   seed: string,
 ): GameRerankCandidatePayload[] {
-  return seededShuffle(candidates, seed);
+  return shuffleRerankCandidates(candidates, seed);
 }
 
-/** Stable digest of exactly the fields that will be sent, used for both the seed and the hash. */
-export function fingerprintCandidates(candidates: readonly GameRerankCandidatePayload[]): string {
-  return sha256Hex(stableStringify(candidates));
+export function fingerprintCandidates(
+  candidates: readonly GameRerankCandidatePayload[],
+): string {
+  return fingerprintRerankCandidates(candidates);
 }
 
 export function fingerprintTaste(taste: GameRerankTastePayload): string {
-  return sha256Hex(stableStringify(taste));
+  return fingerprintRerankTaste(taste);
 }
 
 export function buildRerankRequestPayload(
@@ -138,11 +103,7 @@ export function buildRerankRequestPayload(
   candidates: readonly GameRerankCandidatePayload[],
   seed: string,
 ): GameRerankRequestPayload {
-  return {
-    payloadVersion: GAME_RERANK_PAYLOAD_VERSION,
-    taste,
-    candidates: shuffleCandidates(candidates, seed),
-  };
+  return buildRerankRequestEnvelope(GAME_RERANK_PAYLOAD_VERSION, taste, candidates, seed);
 }
 
 /** Re-exported so the hash module keeps one obvious source for its digest input. */

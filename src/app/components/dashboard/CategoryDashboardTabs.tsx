@@ -34,15 +34,27 @@ const AiMangaIdentitySection = dynamic(() => import('./AiMangaIdentitySection'),
   ssr: false,
 });
 
+const AiMoviesIdentitySection = dynamic(() => import('./AiMoviesIdentitySection'), {
+  ssr: false,
+});
+
+const AiTvIdentitySection = dynamic(() => import('./AiTvIdentitySection'), {
+  ssr: false,
+});
+
+const AiBooksIdentitySection = dynamic(() => import('./AiBooksIdentitySection'), {
+  ssr: false,
+});
+
 /**
  * Which AI identity card belongs to which tab.
  *
- * A lookup rather than a conditional chain, and deliberately partial: a category with no entry
- * renders no card at all. That is what keeps an unsupported or not-yet-built category from
- * showing an empty placeholder, and it means adding one later is an entry here plus a registry
- * edit — never a change to the eligibility logic below.
+ * A lookup rather than a conditional chain, and still deliberately partial even now that every
+ * media category has an entry: the map is what keeps an unsupported or not-yet-built category from
+ * showing an empty placeholder, and it means adding one is an entry here plus a registry edit —
+ * never a change to the eligibility logic below.
  *
- * All three components are dynamically imported, so a tab whose card never mounts never downloads it.
+ * Every component is dynamically imported, so a tab whose card never mounts never downloads it.
  */
 const AI_IDENTITY_SECTIONS: Partial<
   Record<DashboardCategoryKey, React.ComponentType<{ enabled?: boolean }>>
@@ -50,6 +62,9 @@ const AI_IDENTITY_SECTIONS: Partial<
   games: AiGamingIdentitySection,
   anime: AiAnimeIdentitySection,
   manga: AiMangaIdentitySection,
+  movies: AiMoviesIdentitySection,
+  tv: AiTvIdentitySection,
+  books: AiBooksIdentitySection,
 };
 
 const CATEGORY_TITLES: Record<DashboardCategoryKey, string> = {
