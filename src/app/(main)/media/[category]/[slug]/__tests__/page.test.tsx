@@ -68,6 +68,15 @@ jest.mock('@/app/(main)/media/[category]/[slug]/MediaDetailPageClient', () => ({
   default: ({ category }: { category: string }) => <div data-testid="media-client">{category}</div>,
 }));
 
+// An async server component: it cannot be rendered by this synchronous test,
+// and its own behaviour is covered separately.
+jest.mock('@/app/components/media-detail/MediaArticlesSection', () => ({
+  __esModule: true,
+  default: ({ mediaId }: { mediaId: number }) => (
+    <div data-testid="media-articles">{mediaId}</div>
+  ),
+}));
+
 describe('media detail page route', () => {
   const mockItem = {
     id: 42,
@@ -166,6 +175,7 @@ describe('media detail page route', () => {
 
     expect(screen.getByTestId('media-client')).toHaveTextContent('games');
     expect(screen.getAllByTestId('structured')).toHaveLength(2);
+    expect(screen.getByTestId('media-articles')).toHaveTextContent('42');
   });
 
   it('MediaDetailContent uses publishedAt fallback for updatedAt and null image fallback', async () => {

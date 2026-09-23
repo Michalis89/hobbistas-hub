@@ -1,11 +1,12 @@
+import { getLoginUrl } from '@/lib/routes/authRoutes';
+
 export class ApiClient {
   private handleUnauthorized(response: Response): void {
     if (response.status === 401) {
       // Session expired - redirect to login
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname + window.location.search;
-        const loginUrl = `/auth/login?redirectTo=${encodeURIComponent(currentPath)}`;
-        window.location.href = loginUrl;
+        window.location.href = getLoginUrl(currentPath);
       }
     }
   }

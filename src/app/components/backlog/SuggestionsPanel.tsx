@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Lightbulb, Sparkles } from 'lucide-react';
 import EmptyState from '@/components/ui/empty';
 import MediaSearchResultCard from './MediaSearchResultCard';
+import { trackRecommendationClick } from '@/lib/recommendations/instrumentation/client';
 import type { MediaCategory, MediaEntry, SearchResult } from './types';
 
 interface SuggestionsPanelProps {
@@ -68,7 +69,10 @@ export default function SuggestionsPanel({
             key={entry.id}
             entry={{ ...entry, source: 'local' }}
             category={category}
-            onOpenDialog={() => onOpenDialog({ ...entry, source: 'local' })}
+            onOpenDialog={() => {
+              trackRecommendationClick({ serveId: entry.serveId, mediaId: entry.mediaId });
+              onOpenDialog({ ...entry, source: 'local' });
+            }}
             isInLibrary={isInLibrary(entry)}
             variant="compact"
           />

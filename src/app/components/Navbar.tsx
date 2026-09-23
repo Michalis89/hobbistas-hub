@@ -1,6 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
@@ -23,7 +22,6 @@ import {
 import { useUserSettings } from '@/lib/settings/useUserSettings';
 import { useTicketNotificationCount } from '@/lib/hooks/useTicketNotificationCount';
 
-const AddArticleDialog = dynamic(() => import('./articles/AddArticleDialog'), { ssr: false });
 
 export default function Navbar() {
   const router = useRouter();
@@ -44,7 +42,6 @@ export default function Navbar() {
   const { theme, themePreference, setThemePreference } = useTheme();
 
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [isMobileClient, setIsMobileClient] = useState(false);
   const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
 
@@ -228,7 +225,7 @@ export default function Navbar() {
           userTicketUnreadCount={userTicketUnreadCount}
           adminTicketUnreadCount={adminTicketUnreadCount}
           hasAnyTicketUnread={totalTicketUnreadCount > 0}
-          onAdd={() => setAddDialogOpen(true)}
+          onAdd={() => router.push('/studio/new')}
           onLogout={handleLogout}
           theme={theme}
           onToggleTheme={handleThemeToggle}
@@ -251,20 +248,13 @@ export default function Navbar() {
           userTicketUnreadCount={userTicketUnreadCount}
           adminTicketUnreadCount={adminTicketUnreadCount}
           hasAnyTicketUnread={totalTicketUnreadCount > 0}
-          onAdd={() => setAddDialogOpen(true)}
+          onAdd={() => router.push('/studio/new')}
           onLogout={handleLogout}
           theme={theme}
           onToggleTheme={handleThemeToggle}
         />
       </nav>
 
-      {addDialogOpen ? (
-        <AddArticleDialog
-          isOpen={addDialogOpen}
-          onClose={() => setAddDialogOpen(false)}
-          onSuccess={() => {}}
-        />
-      ) : null}
     </header>
   );
 }

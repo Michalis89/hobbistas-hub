@@ -109,7 +109,6 @@ export function buildGamesTasteProfile(history: GameHistoryEntry[]): TasteComput
   const themes = Array.from(themeWeights.entries())
     .filter(([theme, weight]) => weight > 0 && !theme.includes('psychological'))
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
     .map(([name, weight]) => ({ name, weight }));
 
   for (const [name, weight] of droppedPatternWeights.entries()) {
@@ -150,9 +149,15 @@ export function buildGamesTasteProfile(history: GameHistoryEntry[]): TasteComput
     summary,
     coreGenres: coreGenres.slice(0, 3),
     secondaryGenres: secondaryGenres.slice(0, 3),
-    themes,
-    playerStyles,
+    themes: themes.slice(0, 3),
+    playerStyles: playerStyles.slice(0, 2),
     negativeSignals: negativeSignals.slice(0, 4),
+    signalTotals: {
+      coreGenres: sumWeights(coreGenres),
+      themes: sumWeights(themes),
+      playerStyles: sumWeights(playerStyles),
+      negativeSignals: sumWeights(negativeSignals),
+    },
   };
 
   return {
@@ -181,7 +186,7 @@ export function buildGamesTasteProfile(history: GameHistoryEntry[]): TasteComput
   };
 }
 
-function tasteWeight(entry: GameHistoryEntry): number {
+export function tasteWeight(entry: GameHistoryEntry): number {
   if (entry.status === 'planned') {
     return 0;
   }
@@ -206,12 +211,16 @@ function tasteWeight(entry: GameHistoryEntry): number {
     return weight;
   }
 
-  let droppedWeight = -1;
-  if (entry.status === 'dropped' && entry.score !== null && entry.score <= 5) {
-    droppedWeight -= 1;
+  if (entry.status === 'dropped') {
+    let droppedWeight = -1;
+    if (entry.score !== null && entry.score <= 5) {
+      droppedWeight -= 1;
+    }
+
+    return droppedWeight;
   }
 
-  return droppedWeight;
+  return 0;
 }
 
 function isHighSignal(entry: GameHistoryEntry): boolean {
@@ -280,7 +289,11 @@ function buildPlayerStyles(
   ].filter(item => item.weight > 0.5);
 
   styles.sort((a, b) => b.weight - a.weight);
-  return styles.slice(0, 2);
+  return styles;
+}
+
+function sumWeights(signals: Array<{ weight: number }>): number {
+  return signals.reduce((sum, item) => sum + item.weight, 0);
 }
 
 function netGenre(stats: Map<string, GenreStat>, key: string): number {

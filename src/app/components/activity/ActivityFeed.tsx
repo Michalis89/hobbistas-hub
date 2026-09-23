@@ -198,7 +198,7 @@ function renderText(item: ActivityItem) {
     };
 
     if (isGame && status === 'planned') {
-      return `${name} ${statusActions[status] || 'changed status'}: ${mediaTitle}`;
+      return `${name} ${plannedVerb}: ${mediaTitle}`;
     }
     return `${name} ${statusActions[status] || 'changed status'} ${cat.label}: ${mediaTitle}`;
   }

@@ -8,7 +8,7 @@ const mockSanitizeHtmlContent = jest.fn((value: string) => value);
 const mockValidatePlainText = jest.fn(() => ({ isValid: true }));
 const mockValidatePlainTextArray = jest.fn(() => ({ isValid: true }));
 const mockValidateTipTapContent = jest.fn(() => ({ isValid: true }));
-const mockNormalizeSlug = jest.fn((slug: string) => slug);
+const mockSlugProbe = jest.fn();
 const mockInsertActivity = jest.fn();
 const mockRevalidateArticle = jest.fn();
 const mockArticleInsert = jest.fn();
@@ -20,6 +20,8 @@ const mockSupabase = {
     }
     return {
       insert: (...args: unknown[]) => mockArticleInsert(...args),
+      // Server-side slug resolution probes for collisions before inserting.
+      select: () => ({ like: (...args: unknown[]) => mockSlugProbe(...args) }),
     };
   }),
 };
@@ -44,10 +46,6 @@ jest.mock('@/utils/validation/text', () => ({
 
 jest.mock('@/utils/validation/tiptap', () => ({
   validateTipTapContent: (...args: unknown[]) => mockValidateTipTapContent(...args),
-}));
-
-jest.mock('@/utils/slugify', () => ({
-  normalizeSlug: (...args: unknown[]) => mockNormalizeSlug(...args),
 }));
 
 jest.mock('@/lib/services/activityService', () => ({
@@ -101,6 +99,9 @@ describe('POST /api/articles RC-012', () => {
       user: { username: 'author', display_name: 'Author', avatar_url: null },
     });
     mockInsertActivity.mockResolvedValue(undefined);
+    // No pre-existing slugs: every concurrent request derives the same slug and
+    // the database unique constraint stays the real arbiter of the race.
+    mockSlugProbe.mockResolvedValue({ data: [], error: null });
   });
 
   it('returns 409 CONFLICT when slug unique constraint (23505) fires', async () => {

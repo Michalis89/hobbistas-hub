@@ -12,6 +12,7 @@ import {
   RememberForgotRow,
   ResetPanel,
   SignUpPrompt,
+  UnverifiedEmailNotice,
 } from './login-form/LoginFormSections';
 import { isCaptchaDisabled } from './login-form/constants';
 import { useLoginForm } from './login-form/useLoginForm';
@@ -33,6 +34,9 @@ export default function LoginForm() {
     captchaError,
     captchaResetKey,
     captchaVisible,
+    needsVerification,
+    resendLoading,
+    handleResendVerification,
     setShowPassword,
     setShowResetPanel,
     setResetEmail,
@@ -58,6 +62,12 @@ export default function LoginForm() {
       >
         <form onSubmit={handleSubmit} className="space-y-5" suppressHydrationWarning>
           <LoginStatusAlert alert={alert} isRedirecting={isRedirecting} />
+
+          <UnverifiedEmailNotice
+            visible={needsVerification}
+            loading={resendLoading}
+            onResend={handleResendVerification}
+          />
 
           <IdentifierField
             identifier={formData.identifier}

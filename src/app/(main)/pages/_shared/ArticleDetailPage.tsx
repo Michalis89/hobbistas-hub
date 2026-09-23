@@ -11,6 +11,10 @@ import getSupabaseServer from '@/lib/supabase-server';
 import { normalizeSlug } from '@/utils/slugify';
 import { buildArticleJsonLd, buildReviewJsonLd } from '@/lib/seo/jsonld';
 import TrackArticleView from '@/app/components/article/TrackArticleView.client';
+import { parseArticleDoc } from '@/components/article/ArticleBody';
+import { tocFromDoc, tocFromHtml } from '@/lib/articles/toc';
+import ArticleToc from '@/components/article/ArticleToc.client';
+import { verifyPreviewToken } from '@/lib/articles/previewToken';
 import {
   ArticleBodySection,
   ArticleHeroSection,
@@ -30,6 +34,8 @@ interface ArticleWithAuthor extends ArticleRow {
 
 type ArticleMetadataRow = Pick<
   ArticleRow,
+  | 'id'
+  | 'status'
   | 'slug'
   | 'title'
   | 'description'
@@ -56,10 +62,12 @@ export interface ArticleDetailPageOptions {
 
 export interface ArticleDetailPageProps extends ArticleDetailPageOptions {
   params: MaybePromise<{ slug: string }>;
+  searchParams?: MaybePromise<{ preview?: string }>;
 }
 
 interface ArticleMetadataArgs {
   params: MaybePromise<{ slug: string }>;
+  searchParams?: MaybePromise<{ preview?: string }>;
   options: ArticleDetailPageOptions;
 }
 
@@ -172,6 +180,7 @@ async function fetchRelatedArticles(
 async function fetchArticle(
   slug: string,
   topicFilter?: ArticleTopic,
+  previewToken?: string,
 ): Promise<ArticleWithAuthor | null> {
   const supabase = getSupabaseServer();
   const slugCandidates = buildSlugCandidates(slug);
@@ -179,8 +188,14 @@ async function fetchArticle(
   let query = supabase
     .from('articles')
     .select('*, users!author_id(username, display_name, avatar_url)')
-    .eq('status', 'published')
     .in('slug', slugCandidates);
+
+  // The status filter is dropped only when a preview token is supplied, and the
+  // token is then checked against the article that was actually found - so a
+  // token for one draft cannot reveal another.
+  if (!previewToken) {
+    query = query.eq('status', 'published');
+  }
 
   if (topicFilter) {
     query = query.eq('topic', topicFilter);
@@ -188,6 +203,16 @@ async function fetchArticle(
 
   const { data: article, error } = await query.limit(1).single<ArticleWithAuthor>();
   if (error || !article) {
+    return null;
+  }
+
+  // Only the preview path can surface an unpublished row; without a token the
+  // query above already restricted the result to published articles.
+  if (
+    previewToken &&
+    article.status !== 'published' &&
+    !verifyPreviewToken(previewToken, article.id)
+  ) {
     return null;
   }
 
@@ -208,6 +233,7 @@ async function fetchArticle(
 async function fetchArticleMetadata(
   slug: string,
   topicFilter?: ArticleTopic,
+  previewToken?: string,
 ): Promise<ArticleMetadataRow | null> {
   const supabase = getSupabaseServer();
   const slugCandidates = buildSlugCandidates(slug);
@@ -215,10 +241,13 @@ async function fetchArticleMetadata(
   let query = supabase
     .from('articles')
     .select(
-      'slug, title, description, meta_title, meta_description, cover_image, published_at, updated_at, topic, tags, category, users!author_id(username, display_name)',
+      'id, status, slug, title, description, meta_title, meta_description, cover_image, published_at, updated_at, topic, tags, category, users!author_id(username, display_name)',
     )
-    .eq('status', 'published')
     .in('slug', slugCandidates);
+
+  if (!previewToken) {
+    query = query.eq('status', 'published');
+  }
 
   if (topicFilter) {
     query = query.eq('topic', topicFilter);
@@ -229,15 +258,27 @@ async function fetchArticleMetadata(
     return null;
   }
 
+  // Only the preview path can surface an unpublished row; without a token the
+  // query above already restricted the result to published articles.
+  if (
+    previewToken &&
+    article.status !== 'published' &&
+    !verifyPreviewToken(previewToken, article.id)
+  ) {
+    return null;
+  }
+
   return article;
 }
 
 export async function buildArticleDetailMetadata({
   params,
+  searchParams,
   options: { basePath, topicFilter },
 }: ArticleMetadataArgs) {
   const { slug } = await params;
-  const article = await fetchArticleMetadata(slug, topicFilter);
+  const previewToken = (await searchParams)?.preview;
+  const article = await fetchArticleMetadata(slug, topicFilter, previewToken);
 
   if (!article) {
     notFound();
@@ -260,6 +301,8 @@ export async function buildArticleDetailMetadata({
     description: metaDescription,
     path: canonicalPath,
     openGraphType: 'article',
+    // A preview link must never end up in an index.
+    noindex: article.status !== 'published',
     publishedTime: article.published_at ?? undefined,
     modifiedTime,
     authors: [authorName],
@@ -271,11 +314,13 @@ export async function buildArticleDetailMetadata({
 
 export default async function ArticleDetailPage({
   params,
+  searchParams,
   basePath,
   breadcrumbLabel,
   topicFilter,
 }: ArticleDetailPageProps) {
   const { slug } = await params;
+  const previewToken = (await searchParams)?.preview;
   const isPublicReviewPage = basePath === '/review';
   let currentUserId: string | null = null;
   let showSocialLayerSections = false;
@@ -299,7 +344,7 @@ export default async function ArticleDetailPage({
     showSocialLayerSections = false;
   }
   const showEngagementUi = Boolean(currentUserId) && showSocialLayerSections;
-  const article = await fetchArticle(slug, topicFilter);
+  const article = await fetchArticle(slug, topicFilter, previewToken);
 
   if (!article) {
     notFound();
@@ -318,6 +363,10 @@ export default async function ArticleDetailPage({
   const articleUrl = `${SITE_URL}${articlePath}`;
   const sanitizedContentHtml = sanitizeHtmlContent(article.content_html).trim();
   const contentWithHeadingIds = enrichContentHeadings(sanitizedContentHtml);
+  // Rich documents carry heading structure directly; legacy HTML is read back
+  // from the ids that enrichContentHeadings just injected.
+  const richDoc = parseArticleDoc(article.content_rich);
+  const tocEntries = richDoc ? tocFromDoc(richDoc) : tocFromHtml(contentWithHeadingIds);
   const relatedArticles = await fetchRelatedArticles(article);
   const relatedContentLabel = article.topic === 'reviews' ? 'reviews' : 'articles';
   const categoryLabel = CATEGORY_LABELS[article.category] ?? article.category;
@@ -374,30 +423,49 @@ export default async function ArticleDetailPage({
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdMarkup }} />
       <StructuredData data={getBreadcrumbStructuredData(breadcrumbItems)} />
       <ReadingProgress />
+      {article.status !== 'published' && (
+        <div className="sticky top-0 z-40 border-b border-warning/40 bg-warning/15 px-4 py-2 text-center text-sm font-medium text-foreground">
+          Preview of an unpublished {article.status} article. This link is private and expires.
+        </div>
+      )}
       <ArticleHeroSection title={article.title} coverImage={article.cover_image} />
-      <div className="relative mx-auto -mt-14 max-w-5xl px-3 pb-16 sm:px-4 md:-mt-20">
-        <article className="rounded-3xl border border-border bg-card p-4 shadow-2xl sm:p-6 md:p-10">
-          <ArticleBodySection
-            uiBreadcrumbs={uiBreadcrumbs}
-            categoryLabel={categoryLabel}
-            topicLabel={TOPIC_LABELS[article.topic]}
-            isReview={article.topic === 'reviews'}
-            score={article.score}
-            title={article.title}
-            description={article.description}
-            article={article}
-            readTime={readTime}
-            dateOptions={ARTICLE_HEADER_DATE_OPTIONS}
-            showEngagementUi={showEngagementUi}
-            contentWithHeadingIds={contentWithHeadingIds}
-          />
-          <RelatedArticlesSection
-            relatedArticles={relatedArticles}
-            relatedContentLabel={relatedContentLabel}
-            basePath={basePath}
-            showEngagementUi={showEngagementUi}
-          />
-        </article>
+      {/*
+        Three columns so the article card stays optically centred on the page,
+        exactly as it renders in production, while the table of contents lives
+        in the right-hand gutter instead of pushing the card off-centre.
+      */}
+      <div className="relative mx-auto -mt-14 max-w-[92rem] px-3 pb-16 sm:px-4 md:-mt-20">
+        <div className="xl:grid xl:grid-cols-[1fr_minmax(0,64rem)_1fr] xl:gap-8">
+          <div aria-hidden className="hidden xl:block" />
+
+          <article className="rounded-3xl border border-border bg-card p-4 shadow-2xl sm:p-6 md:p-10">
+            <ArticleBodySection
+              uiBreadcrumbs={uiBreadcrumbs}
+              categoryLabel={categoryLabel}
+              topicLabel={TOPIC_LABELS[article.topic]}
+              isReview={article.topic === 'reviews'}
+              score={article.score}
+              title={article.title}
+              description={article.description}
+              article={article}
+              readTime={readTime}
+              dateOptions={ARTICLE_HEADER_DATE_OPTIONS}
+              showEngagementUi={showEngagementUi}
+              contentWithHeadingIds={contentWithHeadingIds}
+              contentRich={article.content_rich}
+            />
+            <RelatedArticlesSection
+              relatedArticles={relatedArticles}
+              relatedContentLabel={relatedContentLabel}
+              basePath={basePath}
+              showEngagementUi={showEngagementUi}
+            />
+          </article>
+
+          <div className="hidden xl:block">
+            <ArticleToc entries={tocEntries} />
+          </div>
+        </div>
       </div>
     </div>
   );

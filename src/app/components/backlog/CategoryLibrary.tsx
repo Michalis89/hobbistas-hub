@@ -107,6 +107,34 @@ type SelectedEntryDetails = {
   genres?: string[] | null;
 };
 
+export type EntrySaveMode = 'update' | 'add' | 'local-only';
+
+/**
+ * Decides how a dialog save should reach the server.
+ *
+ * The deciding factor is `entryId` — the id of the user's own library row. An
+ * earlier version branched on `mediaId` alone, which is also set for local-first
+ * search hits: titles already present in `media_items` that this user has never
+ * added. Those took the update path, where the server finds nothing to update
+ * and answers 409. That affected every category, since `supportsExternalApi` is
+ * true for all six.
+ */
+export const resolveEntrySaveMode = (
+  supportsExternal: boolean,
+  entry: { entryId?: number | null; mediaId?: number | null; payload?: unknown },
+): EntrySaveMode => {
+  if (!supportsExternal) {
+    return 'local-only';
+  }
+  if (entry.mediaId && entry.entryId) {
+    return 'update';
+  }
+  if (entry.mediaId || entry.payload) {
+    return 'add';
+  }
+  return 'local-only';
+};
+
 const shouldRevalidateContinueHero = (
   previousStatus: MediaStatus | null | undefined,
   nextStatus: MediaStatus | null | undefined,
@@ -723,7 +751,13 @@ export default function CategoryLibrary({
     // Yield to main thread to allow browser to paint the closed dialog
     await yieldToMain();
 
-    if (supportsExternal && selectedEntry.mediaId) {
+    const saveMode = resolveEntrySaveMode(supportsExternal, {
+      entryId: selectedEntry.entryId,
+      mediaId: selectedEntry.mediaId,
+      payload: selectedEntry.payload,
+    });
+
+    if (saveMode === 'update') {
       const previousEntries = libraryEntries;
       const optimisticEntries = libraryEntries.map(entry =>
         entry.id === selectedEntry.id
@@ -819,14 +853,17 @@ export default function CategoryLibrary({
           message: 'Could not save changes. Try again.',
         });
       }
-    } else if (supportsExternal && selectedEntry.source === 'external' && selectedEntry.payload) {
+    } else if (saveMode === 'add') {
       try {
         if (!apiBase) {
           throw new Error('Missing API base');
         }
         const addPayload: Record<string, unknown> = {
-          source: 'external',
-          payload: selectedEntry.payload,
+          // A known mediaId means the title is already in media_items, so add it
+          // by reference instead of re-sending and re-upserting the whole payload.
+          ...(selectedEntry.mediaId
+            ? { source: 'local', mediaId: selectedEntry.mediaId }
+            : { source: 'external', payload: selectedEntry.payload }),
           status: finalStatus,
           is_favorite: nextFavorite,
           selected_platform: shouldPersistPlatform ? normalizedSelectedPlatform || null : undefined,
@@ -852,7 +889,8 @@ export default function CategoryLibrary({
           body: JSON.stringify(addPayload),
         });
         if (!response.ok) {
-          throw new Error('Failed to add entry');
+          const failure = (await response.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(failure?.error || 'Failed to add entry');
         }
         const addData = (await response.json()) as { mediaId?: number };
         const createdMediaId = addData.mediaId;
@@ -898,7 +936,12 @@ export default function CategoryLibrary({
         showAlert({
           type: 'error',
           title: 'Error',
-          message: 'Could not add entry. Try again.',
+          // Surface what the server objected to — a blanket "try again" sends the
+          // user in circles when the cause is specific and fixable.
+          message:
+            error instanceof Error && error.message
+              ? error.message
+              : 'Could not add entry. Try again.',
         });
       }
     } else {

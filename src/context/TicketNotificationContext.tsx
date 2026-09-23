@@ -45,6 +45,8 @@ const ZERO_SUMMARY: TicketNotificationSummary = {
 const REALTIME_DEBOUNCE_MS = 500;
 // Fallback poll: Realtime handles real-time updates; this is just a safety net
 const FALLBACK_INTERVAL_MS = 5 * 60 * 1000;
+// Returning to the tab only refetches if the summary has gone stale
+const VISIBILITY_MIN_AGE_MS = 60 * 1000;
 
 export function TicketNotificationProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = useSelector(selectIsAuthenticated);
@@ -54,9 +56,19 @@ export function TicketNotificationProvider({ children }: { children: ReactNode }
   const [summary, setSummary] = useState<TicketNotificationSummary>(ZERO_SUMMARY);
   const inFlightRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLoadedAtRef = useRef(0);
+
+  // `load` reads `enabled` through a ref rather than closing over it. Auth
+  // loading flips on every background session check, and a `load` that changed
+  // identity with it tore down and re-created the Realtime channel each time,
+  // firing a fresh HTTP request on every flip.
+  const enabledRef = useRef(enabled);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
 
   const load = useCallback(async () => {
-    if (!enabled) {
+    if (!enabledRef.current) {
       inFlightRef.current?.abort();
       return;
     }
@@ -78,6 +90,7 @@ export function TicketNotificationProvider({ children }: { children: ReactNode }
         return;
       }
 
+      lastLoadedAtRef.current = Date.now();
       setSummary({
         unread_count: payload?.data?.unread_count ?? 0,
         user_unread_count: payload?.data?.user_unread_count ?? 0,
@@ -87,7 +100,7 @@ export function TicketNotificationProvider({ children }: { children: ReactNode }
       if (err instanceof DOMException && err.name === 'AbortError') {return;}
       setSummary(ZERO_SUMMARY);
     }
-  }, [enabled]);
+  }, []);
 
   const debouncedLoad = useCallback(() => {
     if (debounceRef.current) {clearTimeout(debounceRef.current);}
@@ -111,8 +124,16 @@ export function TicketNotificationProvider({ children }: { children: ReactNode }
 
     const fallbackTimer = window.setInterval(() => void load(), FALLBACK_INTERVAL_MS);
 
+    // Debounced, and skipped when the data is still fresh. An undebounced fetch
+    // on every focus change meant alt-tabbing produced a request each time.
     const handleVisibility = () => {
-      if (!document.hidden) {void load();}
+      if (document.hidden) {
+        return;
+      }
+      if (Date.now() - lastLoadedAtRef.current < VISIBILITY_MIN_AGE_MS) {
+        return;
+      }
+      debouncedLoad();
     };
     document.addEventListener('visibilitychange', handleVisibility);
 

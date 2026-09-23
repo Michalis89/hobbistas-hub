@@ -47,6 +47,9 @@ export type SearchResult = MediaEntry & {
   mediaId?: number;
   externalId?: number;
   payload?: Record<string, unknown>;
+  /** Present only on personal-suggestion results, which are a recorded recommendation serve. */
+  serveId?: string;
+  slotIndex?: number;
 };
 
 export type CategoryConfig = {

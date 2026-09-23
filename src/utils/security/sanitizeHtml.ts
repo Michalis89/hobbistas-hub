@@ -43,10 +43,32 @@ export const sanitizeHtmlContent = (html: string | null | undefined) => {
       'pre',
       'a',
       'img',
+      // Produced by the editor toolbar. Keep this list in sync with the
+      // extensions registered in RichTextEditor.client.tsx - anything the
+      // toolbar can insert but the sanitizer drops disappears silently on save.
+      'u',
+      's',
+      'hr',
+      'figure',
+      'figcaption',
     ],
     allowedAttributes: {
       a: ['href', 'title', 'rel', 'target'],
       img: ['src', 'alt', 'title', 'width', 'height'],
+      // TextAlign serialises to an inline style; the value is constrained by
+      // allowedStyles below so no arbitrary CSS can get through.
+      p: ['style'],
+      h1: ['style'],
+      h2: ['style'],
+      h3: ['style'],
+      // Width variants for figures; the value is constrained below.
+      figure: ['data-figure', 'data-align'],
+    },
+    allowedClasses: {},
+    allowedStyles: {
+      '*': {
+        'text-align': [/^(?:left|right|center|justify)$/],
+      },
     },
     allowedSchemes: ['https'],
     allowedSchemesByTag: {

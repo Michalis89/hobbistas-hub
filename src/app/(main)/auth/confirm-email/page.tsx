@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { buildMetadata } from '@/utils/seo/metadata/helpers';
+import ResendVerificationCard from '@/app/components/auth/ResendVerificationCard';
 import SuccessAutoRedirect from './SuccessAutoRedirect';
 
 export const metadata = buildMetadata({
@@ -44,13 +45,14 @@ export default async function ConfirmEmailPage({ searchParams }: ConfirmEmailPag
         }
       : variant === 'error'
         ? {
-            title: 'Verification failed',
+            title: 'Link expired',
             description:
-              'The verification link is invalid or expired. Repeat signup to get a fresh confirmation email.',
-            alertTitle: 'Link issue detected',
-            alertDescription: 'If this keeps happening, request a new account confirmation email.',
-            ctaHref: '/auth/register',
-            ctaLabel: 'Back to register',
+              'Verification links are single-use and time-limited. Send yourself a fresh one below — your account is untouched.',
+            alertTitle: 'Nothing was lost',
+            alertDescription:
+              'You can keep using your account while it is unverified. Signing in still works.',
+            ctaHref: '/auth/login',
+            ctaLabel: 'Go to sign in',
             Icon: CircleAlert,
           }
         : {
@@ -109,6 +111,13 @@ export default async function ConfirmEmailPage({ searchParams }: ConfirmEmailPag
             </Button>
 
             {variant === 'success' ? <SuccessAutoRedirect seconds={6} /> : null}
+
+            {variant === 'success' ? null : (
+              <>
+                <Separator className="bg-border/70" />
+                <ResendVerificationCard />
+              </>
+            )}
 
             <div className="text-center">
               <Link

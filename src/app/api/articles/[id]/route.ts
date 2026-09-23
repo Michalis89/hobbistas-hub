@@ -3,6 +3,7 @@ import { withApiRoute } from '@/lib/observability/withApiRoute';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { sanitizeHtmlContent } from '@/utils/security/sanitizeHtml';
 import { validatePlainText, validatePlainTextArray } from '@/utils/validation/text';
+import { validateTipTapContent } from '@/utils/validation/tiptap';
 import { normalizeSlug } from '@/utils/slugify';
 import { insertActivity } from '@/lib/services/activityService';
 import type { Database } from '@/lib/supabase/database.types';
@@ -10,6 +11,8 @@ import { API_ERRORS } from '@/lib/api/errors';
 import { requireAuth, UnauthorizedError } from '@/lib/api/auth';
 import { fail, ok } from '@/lib/api/response';
 import { revalidateCache } from '@/lib/cache/tags';
+import { collectArticleMediaLinks, syncArticleMediaLinks } from '@/lib/articles/mediaLinks';
+import { snapshotArticleRevision } from '@/lib/articles/revisions';
 import { hasAnyRole } from '@/lib/roles';
 import { getUserFullInfo } from '@/lib/services/userService';
 
@@ -112,6 +115,7 @@ async function PUTHandler(req: Request, { params }: { params: Promise<{ id: stri
       is_featured,
       score,
       media_id,
+      scheduled_for,
     } = body;
 
     if (score !== undefined && score !== null) {
@@ -148,6 +152,23 @@ async function PUTHandler(req: Request, { params }: { params: Promise<{ id: stri
       const tagsValidation = validatePlainTextArray(tags, 'Tags');
       if (!tagsValidation.isValid) {
         return fail({ error: tagsValidation.error || 'Invalid tags' }, 400);
+      }
+    }
+    if (status === 'scheduled') {
+      const when = scheduled_for ? new Date(scheduled_for) : null;
+      if (!when || Number.isNaN(when.getTime())) {
+        return fail({ error: 'A scheduled article needs a publish date.' }, 400);
+      }
+      if (when.getTime() <= Date.now()) {
+        return fail({ error: 'The publish date must be in the future.' }, 400);
+      }
+    }
+    if (content_rich !== undefined) {
+      // content_rich is rendered directly, so it must be validated on the way
+      // in and not only when it is created.
+      const contentRichValidation = validateTipTapContent(content_rich);
+      if (!contentRichValidation.isValid) {
+        return fail({ error: contentRichValidation.error || 'Invalid content format' }, 400);
       }
     }
 
@@ -202,7 +223,28 @@ async function PUTHandler(req: Request, { params }: { params: Promise<{ id: stri
       if (status === 'published' && !existingArticle.published_at) {
         updateData.published_at = new Date().toISOString();
       }
+      // scheduled_for only means something while the article is scheduled, so
+      // any other status clears it instead of leaving a stale date behind.
+      if (status === 'scheduled') {
+        updateData.scheduled_for = scheduled_for ?? null;
+      } else {
+        updateData.scheduled_for = null;
+      }
+    } else if (scheduled_for !== undefined && existingArticle.status === 'scheduled') {
+      updateData.scheduled_for = scheduled_for;
     }
+
+    // Snapshot the pre-edit state before overwriting it. Done here rather than
+    // after the update so the revision is the version being replaced.
+    await snapshotArticleRevision(
+      supabase,
+      existingArticle,
+      session.user.id,
+      title !== undefined ||
+        description !== undefined ||
+        content_rich !== undefined ||
+        content_html !== undefined,
+    );
 
     const { data: article, error: updateError } = await supabase
       .from('articles')
@@ -226,6 +268,15 @@ async function PUTHandler(req: Request, { params }: { params: Promise<{ id: stri
       display_name: userData?.display_name,
       avatar_url: userData?.avatar_url,
     });
+
+    await syncArticleMediaLinks(
+      supabase,
+      article.id,
+      collectArticleMediaLinks({
+        contentRich: article.content_rich,
+        subjectMediaId: article.media_id,
+      }),
+    );
 
     // Revalidate article caches
     revalidateCache.article(article.id);

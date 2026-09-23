@@ -14,6 +14,7 @@ import { fail, ok } from '@/lib/api/response';
 import { rateLimit, getClientIp, rateLimitHeaders } from '@/lib/rate-limit';
 import { verifyCaptchaToken } from '@/lib/captcha/turnstile';
 import { setAuthCookies } from '@/lib/auth';
+import { DASHBOARD_PATH, ONBOARDING_PATH } from '@/lib/routes/authRoutes';
 
 const fallbackUsername = (email: string, userId: string) => {
   const localPart = email.split('@')[0]?.toLowerCase() ?? 'user';
@@ -194,11 +195,13 @@ async function POSTHandler(req: Request) {
       .eq('user_id', authData.user.id)
       .maybeSingle();
 
-    // User has data if they have at least one category in their profile
+    // User has data if they have at least one category in their profile.
+    // Without it they go to onboarding — a short guided setup — rather than the
+    // full profile settings screen with its avatar uploads and danger zone.
     const hasCategoryData = categoryProfile?.profiles
       ? Object.keys(categoryProfile.profiles).length > 0
       : false;
-    const redirectUrl = hasCategoryData ? '/dashboard' : '/profile/edit';
+    const redirectUrl = hasCategoryData ? DASHBOARD_PATH : ONBOARDING_PATH;
 
     // RETURN SUCCESS
     return ok({

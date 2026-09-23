@@ -851,11 +851,13 @@ export function filterTvCandidates(
     return true;
   });
 
-  return filtered.length >= 16
-    ? filtered
-    : candidates.filter(
-        c => c.popularityScore >= 54 && normalizeGenres(c.genres).length > 0 && c.title.trim().length > 0,
-      );
+  if (filtered.length > 0) {
+    return filtered;
+  }
+
+  return candidates.filter(
+    c => c.popularityScore >= 54 && normalizeGenres(c.genres).length > 0 && c.title.trim().length > 0,
+  );
 }
 
 export function scoreTvBacklogItem(

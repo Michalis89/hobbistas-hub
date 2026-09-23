@@ -1,4 +1,7 @@
-import { buildGamesRecommendations } from '../games/games-recommendation-engine';
+import {
+  buildGamesRecommendations,
+  calculateDiscoveryHistoryStrength,
+} from '../games/games-recommendation-engine';
 import type { GameCandidate, GameHistoryEntry, TasteComputation } from '../games/games-types';
 
 function historyEntry(
@@ -25,6 +28,7 @@ function historyEntry(
       title,
       genres,
       themes: [],
+      studios: [],
       platforms: ['PlayStation 5'],
       coverImageLarge: '',
       coverImageMedium: '',
@@ -81,7 +85,7 @@ describe('buildGamesRecommendations', () => {
     ];
 
     const backlog: GameHistoryEntry[] = [
-      historyEntry(10, 'God of War Ragnarök', 'planned', ['Adventure', "Hack and slash/Beat 'em up", 'Role-playing (RPG)'], null),
+      historyEntry(10, 'God of War RagnarÃ¶k', 'planned', ['Adventure', "Hack and slash/Beat 'em up", 'Role-playing (RPG)'], null),
       historyEntry(11, 'Cyberpunk 2077', 'planned', ['Adventure', 'Role-playing (RPG)', 'Shooter'], null),
       historyEntry(12, 'The Room 4: Old Sins', 'planned', ['Adventure', 'Indie', 'Puzzle'], null),
       historyEntry(13, 'Lies of P', 'planned', ['Adventure', 'Role-playing (RPG)'], null),
@@ -102,9 +106,57 @@ describe('buildGamesRecommendations', () => {
 
     expect(result.backlogPicks).toHaveLength(4);
     expect(result.backlogPicks[0].subtype).toBe('continuation');
-    expect(result.backlogPicks[0].title).toBe('God of War Ragnarök');
+    expect(result.backlogPicks[0].title).toBe('God of War RagnarÃ¶k');
 
     expect(result.possibleNext.some(item => item.title === 'Tiny Puzzle Adventure')).toBe(false);
     expect(result.possibleNext.some(item => item.title === 'The Witcher 4')).toBe(true);
   });
 });
+
+describe('calculateDiscoveryHistoryStrength', () => {
+  it('does not let planned similar games increase discovery affinity', () => {
+    const history = [
+      historyEntry(1, 'Backlog RPG', 'planned', ['Adventure', 'Role-playing (RPG)'], null),
+    ];
+
+    expect(calculateDiscoveryHistoryStrength(history, ['Adventure'])).toBe(0);
+  });
+
+  it('does not let dropped similar games increase discovery affinity', () => {
+    const history = [
+      historyEntry(1, 'Dropped RPG', 'dropped', ['Adventure', 'Role-playing (RPG)'], 4),
+    ];
+
+    expect(calculateDiscoveryHistoryStrength(history, ['Adventure'])).toBe(0);
+  });
+
+  it('uses completed high-rated similar games as positive evidence', () => {
+    const history = [
+      historyEntry(1, 'Completed RPG', 'completed', ['Adventure', 'Role-playing (RPG)'], 9),
+    ];
+
+    expect(calculateDiscoveryHistoryStrength(history, ['Adventure'])).toBeGreaterThan(0);
+  });
+
+  it('weights favorite completed games above ordinary completions', () => {
+    const ordinary = [
+      historyEntry(1, 'Completed RPG', 'completed', ['Adventure', 'Role-playing (RPG)'], 9),
+    ];
+    const favorite = [
+      historyEntry(1, 'Favorite RPG', 'completed', ['Adventure', 'Role-playing (RPG)'], 9, true),
+    ];
+
+    expect(calculateDiscoveryHistoryStrength(favorite, ['Adventure'])).toBeGreaterThan(
+      calculateDiscoveryHistoryStrength(ordinary, ['Adventure']),
+    );
+  });
+
+  it('allows current similar games to contribute mildly', () => {
+    const history = [
+      historyEntry(1, 'Current RPG', 'current', ['Adventure', 'Role-playing (RPG)'], null),
+    ];
+
+    expect(calculateDiscoveryHistoryStrength(history, ['Adventure'])).toBe(0.5);
+  });
+});
+

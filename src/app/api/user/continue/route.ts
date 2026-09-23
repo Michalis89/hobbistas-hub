@@ -196,6 +196,9 @@ async function GETHandler() {
         )
         .eq('user_id', userId)
         .eq('status', 'current')
+        // Deliberate: "pick up where you left off" means something actually
+        // started. An entry marked current with no recorded progress has no
+        // point to resume from, so it stays out of the hero.
         .gt('progress', 0)
         .in('media_items.category', slideCategories)
         .order('updated_at', { ascending: false, nullsFirst: false })

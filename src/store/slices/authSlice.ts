@@ -61,14 +61,18 @@ export const login = createAsyncThunk(
 
 export const logout = createAsyncThunk('auth/logout', async () => {
   const { error } = await supabase.auth.signOut();
-  if (error) {
-    throw error;
-  }
 
+  // Clearing the server cookies must happen even when signOut fails. They are
+  // httpOnly, so the browser cannot remove them itself — skipping this call
+  // would leave a cookie behind that still looks like a session to the server.
   try {
     await fetch('/api/auth/logout', { method: 'POST' });
   } catch (hookError) {
     console.warn('Failed to clear server auth cookies:', hookError);
+  }
+
+  if (error) {
+    throw error;
   }
 });
 

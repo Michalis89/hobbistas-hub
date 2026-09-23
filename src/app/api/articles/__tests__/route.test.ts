@@ -15,7 +15,6 @@ const sanitizeHtmlContentMock = jest.fn();
 const validatePlainTextMock = jest.fn();
 const validatePlainTextArrayMock = jest.fn();
 const validateTipTapContentMock = jest.fn();
-const normalizeSlugMock = jest.fn();
 const insertActivityMock = jest.fn();
 const getArticlesWithFiltersMock = jest.fn();
 const requireAuthorRoleMock = jest.fn();
@@ -45,10 +44,6 @@ jest.mock('@/utils/validation/text', () => ({
 
 jest.mock('@/utils/validation/tiptap', () => ({
   validateTipTapContent: (...args: unknown[]) => validateTipTapContentMock(...args),
-}));
-
-jest.mock('@/utils/slugify', () => ({
-  normalizeSlug: (...args: unknown[]) => normalizeSlugMock(...args),
 }));
 
 jest.mock('@/lib/services/activityService', () => ({
@@ -95,7 +90,11 @@ function makeGetSupabase(sessionUserId: string | null = 'u1') {
   };
 }
 
-function makePostSupabase(config?: { insertData?: unknown; insertError?: unknown }) {
+function makePostSupabase(config?: {
+  insertData?: unknown;
+  insertError?: unknown;
+  existingSlugs?: string[];
+}) {
   const insertSingle = jest.fn().mockResolvedValue({
     data: config?.insertData ?? null,
     error: config?.insertError ?? null,
@@ -103,16 +102,24 @@ function makePostSupabase(config?: { insertData?: unknown; insertError?: unknown
   const insertSelect = jest.fn().mockReturnValue({ single: insertSingle });
   const insert = jest.fn().mockReturnValue({ select: insertSelect });
 
+  // POST re-derives the slug server-side and probes for collisions via
+  // .select('slug').like('slug', 'base%').
+  const like = jest.fn().mockResolvedValue({
+    data: (config?.existingSlugs ?? []).map(slug => ({ slug })),
+    error: null,
+  });
+  const slugSelect = jest.fn().mockReturnValue({ like });
+
   const from = jest.fn().mockImplementation((table: string) => {
     if (table === 'articles') {
-      return { insert };
+      return { insert, select: slugSelect };
     }
     return {};
   });
 
   return {
     client: { from },
-    spies: { insert },
+    spies: { insert, like },
   };
 }
 
@@ -283,7 +290,6 @@ describe('app/api/articles/route POST', () => {
     validatePlainTextArrayMock.mockReturnValue({ isValid: true });
     validateTipTapContentMock.mockReturnValue({ isValid: true });
     sanitizeHtmlContentMock.mockImplementation((v: string) => v);
-    normalizeSlugMock.mockImplementation((v: string) => `normalized-${v}`);
     insertActivityMock.mockResolvedValue(undefined);
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -404,7 +410,7 @@ describe('app/api/articles/route POST', () => {
       insertData: {
         id: 77,
         title: 'New',
-        slug: 'normalized-new',
+        slug: 'new',
         category: 'news',
         topic: 'articles',
         status: 'published',
@@ -442,7 +448,7 @@ describe('app/api/articles/route POST', () => {
     expect(body.data.message).toBe('Article created successfully');
     expect(s.spies.insert).toHaveBeenCalledWith(
       expect.objectContaining({
-        slug: 'normalized-new',
+        slug: 'new',
         author_id: 'author-1',
         content_html: '<p>safe</p>',
         score: 7.5,
@@ -451,6 +457,60 @@ describe('app/api/articles/route POST', () => {
     );
     expect(insertActivityMock).toHaveBeenCalled();
     expect(revalidateArticleMock).toHaveBeenCalledWith(77);
+  });
+
+  it('derives the slug from a Greek title instead of rejecting it', async () => {
+    const s = makePostSupabase({
+      insertData: { id: 90, title: 'Ο νέος Kratos', slug: 'o-neos-kratos' },
+      insertError: null,
+    });
+    createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+    const response = await POST(
+      new Request('https://example.com/api/articles', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Ο νέος Kratos', category: 'games', content_html: '<p>x</p>' }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(s.spies.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'o-neos-kratos' }),
+    );
+  });
+
+  it('appends a numeric suffix when the derived slug is already taken', async () => {
+    const s = makePostSupabase({
+      insertData: { id: 91, title: 'Kratos', slug: 'kratos-3' },
+      insertError: null,
+      existingSlugs: ['kratos', 'kratos-2'],
+    });
+    createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+    const response = await POST(
+      new Request('https://example.com/api/articles', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Kratos', category: 'games', content_html: '<p>x</p>' }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(s.spies.insert).toHaveBeenCalledWith(expect.objectContaining({ slug: 'kratos-3' }));
+  });
+
+  it('returns 400 when no slug can be derived from the title', async () => {
+    const s = makePostSupabase();
+    createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+    const response = await POST(
+      new Request('https://example.com/api/articles', {
+        method: 'POST',
+        body: JSON.stringify({ title: '!!!', category: 'games', content_html: '<p>x</p>' }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(s.spies.insert).not.toHaveBeenCalled();
   });
 
   it('maps unauthorized/forbidden and unexpected errors', async () => {

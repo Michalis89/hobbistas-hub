@@ -1,0 +1,647 @@
+{
+  "evidence": {
+    "schemaVersion": 1,
+    "preprocessingVersion": "games-evidence-v2",
+    "category": "games",
+    "entries": [
+      {
+        "identityKey": "elden-ring",
+        "franchiseKey": "elden-ring",
+        "representativeTitle": "Elden Ring",
+        "titles": [
+          "Elden Ring"
+        ],
+        "status": "completed",
+        "score": 10,
+        "favorite": true,
+        "progressBucket": "76-100",
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Fantasy"
+        ],
+        "studios": [
+          "FromSoftware"
+        ],
+        "weight": 10
+      },
+      {
+        "identityKey": "hades",
+        "franchiseKey": "hades",
+        "representativeTitle": "Hades",
+        "titles": [
+          "Hades"
+        ],
+        "status": "completed",
+        "score": 9,
+        "favorite": true,
+        "progressBucket": "76-100",
+        "genres": [
+          "Indie"
+        ],
+        "themes": [
+          "Mythology"
+        ],
+        "studios": [
+          "Supergiant Games"
+        ],
+        "weight": 10
+      },
+      {
+        "identityKey": "the-witcher-3",
+        "franchiseKey": "witcher",
+        "representativeTitle": "The Witcher 3",
+        "titles": [
+          "The Witcher 3"
+        ],
+        "status": "completed",
+        "score": 10,
+        "favorite": true,
+        "progressBucket": "76-100",
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Fantasy"
+        ],
+        "studios": [
+          "CD Projekt RED"
+        ],
+        "weight": 10
+      },
+      {
+        "identityKey": "assassins-creed-valhalla",
+        "franchiseKey": "assassins-creed-valhalla",
+        "representativeTitle": "Assassin’s Creed Valhalla",
+        "titles": [
+          "Assassin’s Creed Valhalla"
+        ],
+        "status": "dropped",
+        "score": 4,
+        "favorite": false,
+        "progressBucket": "26-40",
+        "genres": [
+          "Adventure"
+        ],
+        "themes": [
+          "Historical"
+        ],
+        "studios": [
+          "Ubisoft"
+        ],
+        "weight": -7
+      },
+      {
+        "identityKey": "dark-souls-3",
+        "franchiseKey": "dark-souls",
+        "representativeTitle": "Dark Souls III",
+        "titles": [
+          "Dark Souls III",
+          "Dark Souls Remastered"
+        ],
+        "status": "completed",
+        "score": 9,
+        "favorite": false,
+        "progressBucket": "76-100",
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Fantasy"
+        ],
+        "studios": [
+          "FromSoftware"
+        ],
+        "weight": 7
+      },
+      {
+        "identityKey": "sekiro",
+        "franchiseKey": "sekiro",
+        "representativeTitle": "Sekiro",
+        "titles": [
+          "Sekiro"
+        ],
+        "status": "completed",
+        "score": 9,
+        "favorite": false,
+        "progressBucket": "76-100",
+        "genres": [
+          "Adventure"
+        ],
+        "themes": [
+          "Historical"
+        ],
+        "studios": [
+          "FromSoftware"
+        ],
+        "weight": 7
+      },
+      {
+        "identityKey": "far-cry-6",
+        "franchiseKey": "far-cry",
+        "representativeTitle": "Far Cry 6",
+        "titles": [
+          "Far Cry 6"
+        ],
+        "status": "dropped",
+        "score": null,
+        "favorite": false,
+        "progressBucket": "41-75",
+        "genres": [
+          "Shooter"
+        ],
+        "themes": [
+          "Action"
+        ],
+        "studios": [
+          "Ubisoft"
+        ],
+        "weight": -5
+      },
+      {
+        "identityKey": "cyberpunk-2077",
+        "franchiseKey": "cyberpunk",
+        "representativeTitle": "Cyberpunk 2077",
+        "titles": [
+          "Cyberpunk 2077"
+        ],
+        "status": "completed",
+        "score": 7,
+        "favorite": false,
+        "progressBucket": "76-100",
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Sci-fi"
+        ],
+        "studios": [
+          "CD Projekt RED"
+        ],
+        "weight": 2.5
+      },
+      {
+        "identityKey": "disco-elysium",
+        "franchiseKey": "disco-elysium",
+        "representativeTitle": "Disco Elysium",
+        "titles": [
+          "Disco Elysium"
+        ],
+        "status": "current",
+        "score": null,
+        "favorite": false,
+        "progressBucket": "41-75",
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Mystery"
+        ],
+        "studios": [
+          "ZA/UM"
+        ],
+        "weight": 2.5
+      },
+      {
+        "identityKey": "celeste",
+        "franchiseKey": "celeste",
+        "representativeTitle": "Celeste",
+        "titles": [
+          "Celeste"
+        ],
+        "status": "completed",
+        "score": null,
+        "favorite": false,
+        "progressBucket": "76-100",
+        "genres": [
+          "Platform"
+        ],
+        "themes": [
+          "Drama"
+        ],
+        "studios": [
+          "Maddy Makes Games"
+        ],
+        "weight": 1.5
+      }
+    ],
+    "franchises": [
+      {
+        "franchiseKey": "dark-souls",
+        "representativeTitle": "Dark Souls III",
+        "titles": [
+          "Dark Souls III",
+          "Dark Souls Remastered"
+        ],
+        "completionCount": 2,
+        "favoriteCount": 0,
+        "positiveMass": 12,
+        "negativeMass": 0,
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Fantasy"
+        ],
+        "studios": [
+          "FromSoftware"
+        ]
+      },
+      {
+        "franchiseKey": "elden-ring",
+        "representativeTitle": "Elden Ring",
+        "titles": [
+          "Elden Ring"
+        ],
+        "completionCount": 1,
+        "favoriteCount": 1,
+        "positiveMass": 10,
+        "negativeMass": 0,
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Fantasy"
+        ],
+        "studios": [
+          "FromSoftware"
+        ]
+      },
+      {
+        "franchiseKey": "hades",
+        "representativeTitle": "Hades",
+        "titles": [
+          "Hades"
+        ],
+        "completionCount": 1,
+        "favoriteCount": 1,
+        "positiveMass": 10,
+        "negativeMass": 0,
+        "genres": [
+          "Indie"
+        ],
+        "themes": [
+          "Mythology"
+        ],
+        "studios": [
+          "Supergiant Games"
+        ]
+      },
+      {
+        "franchiseKey": "witcher",
+        "representativeTitle": "The Witcher 3",
+        "titles": [
+          "The Witcher 3"
+        ],
+        "completionCount": 1,
+        "favoriteCount": 1,
+        "positiveMass": 10,
+        "negativeMass": 0,
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Fantasy"
+        ],
+        "studios": [
+          "CD Projekt RED"
+        ]
+      },
+      {
+        "franchiseKey": "assassins-creed-valhalla",
+        "representativeTitle": "Assassin’s Creed Valhalla",
+        "titles": [
+          "Assassin’s Creed Valhalla"
+        ],
+        "completionCount": 0,
+        "favoriteCount": 0,
+        "positiveMass": 0,
+        "negativeMass": 7,
+        "genres": [
+          "Adventure"
+        ],
+        "themes": [
+          "Historical"
+        ],
+        "studios": [
+          "Ubisoft"
+        ]
+      },
+      {
+        "franchiseKey": "sekiro",
+        "representativeTitle": "Sekiro",
+        "titles": [
+          "Sekiro"
+        ],
+        "completionCount": 1,
+        "favoriteCount": 0,
+        "positiveMass": 7,
+        "negativeMass": 0,
+        "genres": [
+          "Adventure"
+        ],
+        "themes": [
+          "Historical"
+        ],
+        "studios": [
+          "FromSoftware"
+        ]
+      },
+      {
+        "franchiseKey": "far-cry",
+        "representativeTitle": "Far Cry 6",
+        "titles": [
+          "Far Cry 6"
+        ],
+        "completionCount": 0,
+        "favoriteCount": 0,
+        "positiveMass": 0,
+        "negativeMass": 5,
+        "genres": [
+          "Shooter"
+        ],
+        "themes": [
+          "Action"
+        ],
+        "studios": [
+          "Ubisoft"
+        ]
+      },
+      {
+        "franchiseKey": "cyberpunk",
+        "representativeTitle": "Cyberpunk 2077",
+        "titles": [
+          "Cyberpunk 2077"
+        ],
+        "completionCount": 1,
+        "favoriteCount": 0,
+        "positiveMass": 2.5,
+        "negativeMass": 0,
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Sci-fi"
+        ],
+        "studios": [
+          "CD Projekt RED"
+        ]
+      },
+      {
+        "franchiseKey": "disco-elysium",
+        "representativeTitle": "Disco Elysium",
+        "titles": [
+          "Disco Elysium"
+        ],
+        "completionCount": 0,
+        "favoriteCount": 0,
+        "positiveMass": 2.5,
+        "negativeMass": 0,
+        "genres": [
+          "Role-playing (RPG)"
+        ],
+        "themes": [
+          "Mystery"
+        ],
+        "studios": [
+          "ZA/UM"
+        ]
+      },
+      {
+        "franchiseKey": "celeste",
+        "representativeTitle": "Celeste",
+        "titles": [
+          "Celeste"
+        ],
+        "completionCount": 1,
+        "favoriteCount": 0,
+        "positiveMass": 1.5,
+        "negativeMass": 0,
+        "genres": [
+          "Platform"
+        ],
+        "themes": [
+          "Drama"
+        ],
+        "studios": [
+          "Maddy Makes Games"
+        ]
+      }
+    ],
+    "dataQuality": {
+      "titleCount": 10,
+      "ratedRatio": 0.7,
+      "favoriteCount": 3,
+      "sufficiency": "adequate"
+    }
+  },
+  "evidenceHash": "673935cac48005c4f48074d5bc60b753143925f78382f2da31bd2943d098adc5",
+  "tastePayload": {
+    "identity": {
+      "label": "Deliberate Challenge Seeker",
+      "description": "Wants earned mastery."
+    },
+    "pillars": [
+      {
+        "name": "Earned mastery",
+        "kind": "behavior",
+        "description": "Repeats hard combat loops.",
+        "strengthBand": "Defining"
+      },
+      {
+        "name": "Authored worlds",
+        "kind": "content",
+        "description": "Follows written narrative.",
+        "strengthBand": "Strong"
+      }
+    ],
+    "negativeSignals": [
+      {
+        "name": "Checklist open world",
+        "description": "Abandons map-marker busywork."
+      }
+    ],
+    "summary": "Prefers dense authored worlds with demanding combat.",
+    "sufficiency": "rich"
+  },
+  "candidates": [
+    {
+      "token": "c01",
+      "title": "Candidate 101",
+      "genres": [
+        "Role-playing (RPG)"
+      ],
+      "themes": [
+        "Fantasy"
+      ],
+      "gameModes": [
+        "Single player"
+      ],
+      "playerPerspectives": [
+        "Third person"
+      ],
+      "developer": "Dev 101",
+      "releaseYear": 2021,
+      "summary": "Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101. Summary for Candidate 101…"
+    },
+    {
+      "token": "c02",
+      "title": "Candidate 102",
+      "genres": [
+        "Role-playing (RPG)"
+      ],
+      "themes": [
+        "Fantasy"
+      ],
+      "gameModes": [
+        "Single player"
+      ],
+      "playerPerspectives": [
+        "Third person"
+      ],
+      "developer": "Dev 102",
+      "releaseYear": 2021,
+      "summary": "Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102. Summary for Candidate 102…"
+    },
+    {
+      "token": "c03",
+      "title": "Candidate 103",
+      "genres": [
+        "Role-playing (RPG)"
+      ],
+      "themes": [
+        "Fantasy"
+      ],
+      "gameModes": [
+        "Single player"
+      ],
+      "playerPerspectives": [
+        "Third person"
+      ],
+      "developer": "Dev 103",
+      "releaseYear": 2021,
+      "summary": "Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103. Summary for Candidate 103…"
+    },
+    {
+      "token": "c04",
+      "title": "Candidate 104",
+      "genres": [
+        "Role-playing (RPG)"
+      ],
+      "themes": [
+        "Fantasy"
+      ],
+      "gameModes": [
+        "Single player"
+      ],
+      "playerPerspectives": [
+        "Third person"
+      ],
+      "developer": "Dev 104",
+      "releaseYear": 2021,
+      "summary": "Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104. Summary for Candidate 104…"
+    },
+    {
+      "token": "c05",
+      "title": "Candidate 105",
+      "genres": [
+        "Role-playing (RPG)"
+      ],
+      "themes": [
+        "Fantasy"
+      ],
+      "gameModes": [
+        "Single player"
+      ],
+      "playerPerspectives": [
+        "Third person"
+      ],
+      "developer": "Dev 105",
+      "releaseYear": 2021,
+      "summary": "Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105. Summary for Candidate 105…"
+    },
+    {
+      "token": "c06",
+      "title": "Candidate 106",
+      "genres": [
+        "Role-playing (RPG)"
+      ],
+      "themes": [
+        "Fantasy"
+      ],
+      "gameModes": [
+        "Single player"
+      ],
+      "playerPerspectives": [
+        "Third person"
+      ],
+      "developer": "Dev 106",
+      "releaseYear": 2021,
+      "summary": "Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106. Summary for Candidate 106…"
+    }
+  ],
+  "tokens": [
+    "c01",
+    "c02",
+    "c03",
+    "c04",
+    "c05",
+    "c06"
+  ],
+  "rerankInputHash": "b0eca5484062c5362e1ee7a796ad481251644a78c2ccd438d04b1c02a774b9a5",
+  "shuffleSeed": "games-rerank-shuffle-v1:b0eca5484062c5362e1ee7a796ad481251644a78c2ccd438d04b1c02a774b9a5",
+  "shuffledTokens": [
+    "c03",
+    "c05",
+    "c04",
+    "c02",
+    "c01",
+    "c06"
+  ],
+  "fixedSeedShuffleTokens": [
+    "c06",
+    "c01",
+    "c02",
+    "c03",
+    "c04",
+    "c05"
+  ],
+  "candidateFingerprint": "fc6c6edb5d770e10da71814aaa91dfb629f5c3ba851b3e00a46dee9de6ee3fa2",
+  "tasteFingerprint": "e0c975e91fce76b075f45decfec537a4bc39c8745981dd8ade28cb0a4da6f081",
+  "blendOrder": [
+    101,
+    102,
+    104,
+    103,
+    106,
+    105
+  ],
+  "blendScores": [
+    [
+      101,
+      0.9299999999999999
+    ],
+    [
+      102,
+      0.66
+    ],
+    [
+      103,
+      0.39
+    ],
+    [
+      104,
+      0.61
+    ],
+    [
+      105,
+      0.19999999999999996
+    ],
+    [
+      106,
+      0.21
+    ]
+  ],
+  "blendRankOneGuardTriggered": false
+}

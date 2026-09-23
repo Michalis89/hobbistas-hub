@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/og-image.png" alt="Hobbistas Logo" width="320">
+  <img src="public/og-image.jpg" alt="Hobbistas Logo" width="320">
 
   <h1>Hobbistas</h1>
 

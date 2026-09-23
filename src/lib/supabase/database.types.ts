@@ -40,6 +40,180 @@ export type Database = {
           },
         ];
       };
+      ai_rerank_cache: {
+        Row: {
+          category: string;
+          created_at: string;
+          model: string;
+          payload_version: string;
+          prompt_version: string;
+          ranking: Json;
+          rerank_input_hash: string;
+          schema_version: number;
+          user_id: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          model: string;
+          payload_version: string;
+          prompt_version: string;
+          ranking: Json;
+          rerank_input_hash: string;
+          schema_version: number;
+          user_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          model?: string;
+          payload_version?: string;
+          prompt_version?: string;
+          ranking?: Json;
+          rerank_input_hash?: string;
+          schema_version?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_rerank_cache_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ai_rerank_shadow_runs: {
+        Row: {
+          ai_order: number[];
+          ai_weight: number | null;
+          blend_version: string | null;
+          blended_order: number[];
+          blended_slot_media_ids: number[];
+          cache_hit: boolean;
+          category: string;
+          created_at: string;
+          deterministic_order: number[];
+          deterministic_raw_scores: number[];
+          failure_category: string | null;
+          id: number;
+          latency_ms: number | null;
+          model: string | null;
+          prompt_version: string | null;
+          rank_one_guard_triggered: boolean;
+          rationales: Json | null;
+          rerank_input_hash: string;
+          served_slot_media_ids: number[];
+          shortlist_media_ids: number[];
+          status: string;
+          taste_input_hash: string | null;
+          user_id: string;
+        };
+        Insert: {
+          ai_order?: number[];
+          ai_weight?: number | null;
+          blend_version?: string | null;
+          blended_order?: number[];
+          blended_slot_media_ids?: number[];
+          cache_hit?: boolean;
+          category: string;
+          created_at?: string;
+          deterministic_order?: number[];
+          deterministic_raw_scores?: number[];
+          failure_category?: string | null;
+          id?: never;
+          latency_ms?: number | null;
+          model?: string | null;
+          prompt_version?: string | null;
+          rank_one_guard_triggered?: boolean;
+          rationales?: Json | null;
+          rerank_input_hash: string;
+          served_slot_media_ids?: number[];
+          shortlist_media_ids?: number[];
+          status: string;
+          taste_input_hash?: string | null;
+          user_id: string;
+        };
+        Update: {
+          ai_order?: number[];
+          ai_weight?: number | null;
+          blend_version?: string | null;
+          blended_order?: number[];
+          blended_slot_media_ids?: number[];
+          cache_hit?: boolean;
+          category?: string;
+          created_at?: string;
+          deterministic_order?: number[];
+          deterministic_raw_scores?: number[];
+          failure_category?: string | null;
+          id?: never;
+          latency_ms?: number | null;
+          model?: string | null;
+          prompt_version?: string | null;
+          rank_one_guard_triggered?: boolean;
+          rationales?: Json | null;
+          rerank_input_hash?: string;
+          served_slot_media_ids?: number[];
+          shortlist_media_ids?: number[];
+          status?: string;
+          taste_input_hash?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_rerank_shadow_runs_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ai_taste_profiles: {
+        Row: {
+          category: string;
+          created_at: string;
+          input_hash: string;
+          model: string;
+          profile: Json;
+          prompt_version: string;
+          schema_version: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          input_hash: string;
+          model: string;
+          profile: Json;
+          prompt_version: string;
+          schema_version: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          input_hash?: string;
+          model?: string;
+          profile?: Json;
+          prompt_version?: string;
+          schema_version?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_taste_profiles_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       api_cache: {
         Row: {
           created_at: string;
@@ -153,6 +327,7 @@ export type Database = {
           content: string;
           created_at: string | null;
           id: number;
+          idempotency_key: string | null;
           is_approved: boolean | null;
           is_edited: boolean | null;
           likes: number | null;
@@ -165,6 +340,7 @@ export type Database = {
           content: string;
           created_at?: string | null;
           id?: number;
+          idempotency_key?: string | null;
           is_approved?: boolean | null;
           is_edited?: boolean | null;
           likes?: number | null;
@@ -177,6 +353,7 @@ export type Database = {
           content?: string;
           created_at?: string | null;
           id?: number;
+          idempotency_key?: string | null;
           is_approved?: boolean | null;
           is_edited?: boolean | null;
           likes?: number | null;
@@ -238,6 +415,96 @@ export type Database = {
           {
             foreignKeyName: 'article_likes_user_id_fkey';
             columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      article_media_links: {
+        Row: {
+          article_id: number;
+          created_at: string;
+          id: number;
+          media_id: number;
+          position: number;
+          role: string;
+        };
+        Insert: {
+          article_id: number;
+          created_at?: string;
+          id?: never;
+          media_id: number;
+          position?: number;
+          role?: string;
+        };
+        Update: {
+          article_id?: number;
+          created_at?: string;
+          id?: never;
+          media_id?: number;
+          position?: number;
+          role?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'article_media_links_article_id_fkey';
+            columns: ['article_id'];
+            isOneToOne: false;
+            referencedRelation: 'articles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'article_media_links_media_id_fkey';
+            columns: ['media_id'];
+            isOneToOne: false;
+            referencedRelation: 'media_items';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      article_revisions: {
+        Row: {
+          article_id: number;
+          author_id: string | null;
+          content_html: string | null;
+          content_rich: Json | null;
+          created_at: string;
+          description: string | null;
+          id: number;
+          title: string | null;
+        };
+        Insert: {
+          article_id: number;
+          author_id?: string | null;
+          content_html?: string | null;
+          content_rich?: Json | null;
+          created_at?: string;
+          description?: string | null;
+          id?: never;
+          title?: string | null;
+        };
+        Update: {
+          article_id?: number;
+          author_id?: string | null;
+          content_html?: string | null;
+          content_rich?: Json | null;
+          created_at?: string;
+          description?: string | null;
+          id?: never;
+          title?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'article_revisions_article_id_fkey';
+            columns: ['article_id'];
+            isOneToOne: false;
+            referencedRelation: 'articles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'article_revisions_author_id_fkey';
+            columns: ['author_id'];
             isOneToOne: false;
             referencedRelation: 'users';
             referencedColumns: ['id'];
@@ -306,6 +573,7 @@ export type Database = {
           meta_title: string | null;
           published_at: string | null;
           reading_time_minutes: number | null;
+          scheduled_for: string | null;
           score: number | null;
           slug: string;
           status: string | null;
@@ -331,6 +599,7 @@ export type Database = {
           meta_title?: string | null;
           published_at?: string | null;
           reading_time_minutes?: number | null;
+          scheduled_for?: string | null;
           score?: number | null;
           slug: string;
           status?: string | null;
@@ -356,6 +625,7 @@ export type Database = {
           meta_title?: string | null;
           published_at?: string | null;
           reading_time_minutes?: number | null;
+          scheduled_for?: string | null;
           score?: number | null;
           slug?: string;
           status?: string | null;
@@ -378,6 +648,669 @@ export type Database = {
             columns: ['media_id'];
             isOneToOne: false;
             referencedRelation: 'media_items';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_assets: {
+        Row: {
+          campaign_id: string;
+          created_at: string;
+          created_by: string;
+          deleted_at: string | null;
+          id: string;
+          path: string;
+          published: boolean;
+          tags: string[];
+          title: string | null;
+          type: string;
+        };
+        Insert: {
+          campaign_id: string;
+          created_at?: string;
+          created_by: string;
+          deleted_at?: string | null;
+          id?: string;
+          path: string;
+          published?: boolean;
+          tags?: string[];
+          title?: string | null;
+          type: string;
+        };
+        Update: {
+          campaign_id?: string;
+          created_at?: string;
+          created_by?: string;
+          deleted_at?: string | null;
+          id?: string;
+          path?: string;
+          published?: boolean;
+          tags?: string[];
+          title?: string | null;
+          type?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_assets_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_entity_links: {
+        Row: {
+          campaign_id: string;
+          created_at: string;
+          entity_id: string;
+          entity_type: Database['public']['Enums']['dnd_entity_type'];
+          id: string;
+          session_id: string;
+        };
+        Insert: {
+          campaign_id: string;
+          created_at?: string;
+          entity_id: string;
+          entity_type: Database['public']['Enums']['dnd_entity_type'];
+          id?: string;
+          session_id: string;
+        };
+        Update: {
+          campaign_id?: string;
+          created_at?: string;
+          entity_id?: string;
+          entity_type?: Database['public']['Enums']['dnd_entity_type'];
+          id?: string;
+          session_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_entity_links_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'campaign_entity_links_session_id_fkey';
+            columns: ['session_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaign_sessions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_handouts: {
+        Row: {
+          campaign_id: string;
+          content: string | null;
+          created_at: string;
+          created_by: string;
+          deleted_at: string | null;
+          id: string;
+          published: boolean;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          campaign_id: string;
+          content?: string | null;
+          created_at?: string;
+          created_by: string;
+          deleted_at?: string | null;
+          id?: string;
+          published?: boolean;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          campaign_id?: string;
+          content?: string | null;
+          created_at?: string;
+          created_by?: string;
+          deleted_at?: string | null;
+          id?: string;
+          published?: boolean;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_handouts_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_locations: {
+        Row: {
+          campaign_id: string;
+          created_at: string;
+          created_by: string;
+          deleted_at: string | null;
+          description: string | null;
+          id: string;
+          name: string;
+          public_notes: string | null;
+          published: boolean;
+          secret_notes: string | null;
+          tags: string[];
+          type: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          campaign_id: string;
+          created_at?: string;
+          created_by: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          id?: string;
+          name: string;
+          public_notes?: string | null;
+          published?: boolean;
+          secret_notes?: string | null;
+          tags?: string[];
+          type?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          campaign_id?: string;
+          created_at?: string;
+          created_by?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          public_notes?: string | null;
+          published?: boolean;
+          secret_notes?: string | null;
+          tags?: string[];
+          type?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_locations_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_members: {
+        Row: {
+          campaign_id: string;
+          id: string;
+          joined_at: string;
+          role: string;
+          user_id: string;
+        };
+        Insert: {
+          campaign_id: string;
+          id?: string;
+          joined_at?: string;
+          role: string;
+          user_id: string;
+        };
+        Update: {
+          campaign_id?: string;
+          id?: string;
+          joined_at?: string;
+          role?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_members_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_npcs: {
+        Row: {
+          campaign_id: string;
+          created_at: string;
+          created_by: string;
+          deleted_at: string | null;
+          description: string | null;
+          id: string;
+          name: string;
+          public_notes: string | null;
+          published: boolean;
+          role: string | null;
+          secret_notes: string | null;
+          status: string;
+          tags: string[];
+          updated_at: string;
+        };
+        Insert: {
+          campaign_id: string;
+          created_at?: string;
+          created_by: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          id?: string;
+          name: string;
+          public_notes?: string | null;
+          published?: boolean;
+          role?: string | null;
+          secret_notes?: string | null;
+          status?: string;
+          tags?: string[];
+          updated_at?: string;
+        };
+        Update: {
+          campaign_id?: string;
+          created_at?: string;
+          created_by?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          public_notes?: string | null;
+          published?: boolean;
+          role?: string | null;
+          secret_notes?: string | null;
+          status?: string;
+          tags?: string[];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_npcs_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_quests: {
+        Row: {
+          campaign_id: string;
+          created_at: string;
+          created_by: string;
+          deleted_at: string | null;
+          id: string;
+          public_notes: string | null;
+          published: boolean;
+          secret_notes: string | null;
+          status: string;
+          summary: string | null;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          campaign_id: string;
+          created_at?: string;
+          created_by: string;
+          deleted_at?: string | null;
+          id?: string;
+          public_notes?: string | null;
+          published?: boolean;
+          secret_notes?: string | null;
+          status?: string;
+          summary?: string | null;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          campaign_id?: string;
+          created_at?: string;
+          created_by?: string;
+          deleted_at?: string | null;
+          id?: string;
+          public_notes?: string | null;
+          published?: boolean;
+          secret_notes?: string | null;
+          status?: string;
+          summary?: string | null;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_quests_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_session_attendance: {
+        Row: {
+          session_id: string;
+          user_id: string;
+        };
+        Insert: {
+          session_id: string;
+          user_id: string;
+        };
+        Update: {
+          session_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_session_attendance_session_id_fkey';
+            columns: ['session_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaign_sessions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaign_sessions: {
+        Row: {
+          agenda: string | null;
+          campaign_id: string;
+          created_at: string;
+          created_by: string;
+          deleted_at: string | null;
+          dm_notes: string | null;
+          id: string;
+          recap: string | null;
+          recap_published: boolean;
+          session_date: string | null;
+          status: string;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          agenda?: string | null;
+          campaign_id: string;
+          created_at?: string;
+          created_by: string;
+          deleted_at?: string | null;
+          dm_notes?: string | null;
+          id?: string;
+          recap?: string | null;
+          recap_published?: boolean;
+          session_date?: string | null;
+          status?: string;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          agenda?: string | null;
+          campaign_id?: string;
+          created_at?: string;
+          created_by?: string;
+          deleted_at?: string | null;
+          dm_notes?: string | null;
+          id?: string;
+          recap?: string | null;
+          recap_published?: boolean;
+          session_date?: string | null;
+          status?: string;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'campaign_sessions_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      campaigns: {
+        Row: {
+          created_at: string;
+          deleted_at: string | null;
+          description: string | null;
+          dm_id: string;
+          id: string;
+          invite_token: string | null;
+          name: string;
+          system: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          dm_id: string;
+          id?: string;
+          invite_token?: string | null;
+          name: string;
+          system: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          dm_id?: string;
+          id?: string;
+          invite_token?: string | null;
+          name?: string;
+          system?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      character_sheets: {
+        Row: {
+          ac: number | null;
+          alignment: string | null;
+          appearance: string | null;
+          background: string | null;
+          backstory: string | null;
+          bonds: string | null;
+          campaign_id: string;
+          cha: number | null;
+          character_name: string;
+          class: string | null;
+          con: number | null;
+          created_at: string;
+          death_save_failures: number;
+          death_save_successes: number;
+          dex: number | null;
+          dm_notes: string | null;
+          equipment: string | null;
+          extra_resource_max: number | null;
+          extra_resource_name: string | null;
+          extra_resource_used: number;
+          features: string | null;
+          flaws: string | null;
+          hit_dice_spent: number;
+          hit_dice_type: string;
+          hp_current: number | null;
+          hp_max: number | null;
+          hp_temp: number | null;
+          id: string;
+          ideals: string | null;
+          initiative_bonus: number | null;
+          inspiration: boolean;
+          int_stat: number | null;
+          languages: string | null;
+          level: number;
+          notes: string | null;
+          passive_perception: number | null;
+          personality_traits: string | null;
+          proficiency_bonus: number | null;
+          race: string | null;
+          saving_throw_profs: string;
+          skills_expertise: string;
+          skills_profs: string;
+          speed: number | null;
+          spell_attack_bonus: number | null;
+          spell_save_dc: number | null;
+          spell_slots_max: Json;
+          spell_slots_used: Json;
+          spellcasting_ability: string | null;
+          spells: string | null;
+          spells_1: string | null;
+          spells_2: string | null;
+          spells_3: string | null;
+          spells_4: string | null;
+          spells_5: string | null;
+          spells_6: string | null;
+          spells_7: string | null;
+          spells_8: string | null;
+          spells_9: string | null;
+          spells_cantrips: string | null;
+          str: number | null;
+          subclass: string | null;
+          updated_at: string;
+          user_id: string;
+          visible_to_dm: boolean;
+          weapons_data: Json;
+          wis: number | null;
+        };
+        Insert: {
+          ac?: number | null;
+          alignment?: string | null;
+          appearance?: string | null;
+          background?: string | null;
+          backstory?: string | null;
+          bonds?: string | null;
+          campaign_id: string;
+          cha?: number | null;
+          character_name: string;
+          class?: string | null;
+          con?: number | null;
+          created_at?: string;
+          death_save_failures?: number;
+          death_save_successes?: number;
+          dex?: number | null;
+          dm_notes?: string | null;
+          equipment?: string | null;
+          extra_resource_max?: number | null;
+          extra_resource_name?: string | null;
+          extra_resource_used?: number;
+          features?: string | null;
+          flaws?: string | null;
+          hit_dice_spent?: number;
+          hit_dice_type?: string;
+          hp_current?: number | null;
+          hp_max?: number | null;
+          hp_temp?: number | null;
+          id?: string;
+          ideals?: string | null;
+          initiative_bonus?: number | null;
+          inspiration?: boolean;
+          int_stat?: number | null;
+          languages?: string | null;
+          level?: number;
+          notes?: string | null;
+          passive_perception?: number | null;
+          personality_traits?: string | null;
+          proficiency_bonus?: number | null;
+          race?: string | null;
+          saving_throw_profs?: string;
+          skills_expertise?: string;
+          skills_profs?: string;
+          speed?: number | null;
+          spell_attack_bonus?: number | null;
+          spell_save_dc?: number | null;
+          spell_slots_max?: Json;
+          spell_slots_used?: Json;
+          spellcasting_ability?: string | null;
+          spells?: string | null;
+          spells_1?: string | null;
+          spells_2?: string | null;
+          spells_3?: string | null;
+          spells_4?: string | null;
+          spells_5?: string | null;
+          spells_6?: string | null;
+          spells_7?: string | null;
+          spells_8?: string | null;
+          spells_9?: string | null;
+          spells_cantrips?: string | null;
+          str?: number | null;
+          subclass?: string | null;
+          updated_at?: string;
+          user_id: string;
+          visible_to_dm?: boolean;
+          weapons_data?: Json;
+          wis?: number | null;
+        };
+        Update: {
+          ac?: number | null;
+          alignment?: string | null;
+          appearance?: string | null;
+          background?: string | null;
+          backstory?: string | null;
+          bonds?: string | null;
+          campaign_id?: string;
+          cha?: number | null;
+          character_name?: string;
+          class?: string | null;
+          con?: number | null;
+          created_at?: string;
+          death_save_failures?: number;
+          death_save_successes?: number;
+          dex?: number | null;
+          dm_notes?: string | null;
+          equipment?: string | null;
+          extra_resource_max?: number | null;
+          extra_resource_name?: string | null;
+          extra_resource_used?: number;
+          features?: string | null;
+          flaws?: string | null;
+          hit_dice_spent?: number;
+          hit_dice_type?: string;
+          hp_current?: number | null;
+          hp_max?: number | null;
+          hp_temp?: number | null;
+          id?: string;
+          ideals?: string | null;
+          initiative_bonus?: number | null;
+          inspiration?: boolean;
+          int_stat?: number | null;
+          languages?: string | null;
+          level?: number;
+          notes?: string | null;
+          passive_perception?: number | null;
+          personality_traits?: string | null;
+          proficiency_bonus?: number | null;
+          race?: string | null;
+          saving_throw_profs?: string;
+          skills_expertise?: string;
+          skills_profs?: string;
+          speed?: number | null;
+          spell_attack_bonus?: number | null;
+          spell_save_dc?: number | null;
+          spell_slots_max?: Json;
+          spell_slots_used?: Json;
+          spellcasting_ability?: string | null;
+          spells?: string | null;
+          spells_1?: string | null;
+          spells_2?: string | null;
+          spells_3?: string | null;
+          spells_4?: string | null;
+          spells_5?: string | null;
+          spells_6?: string | null;
+          spells_7?: string | null;
+          spells_8?: string | null;
+          spells_9?: string | null;
+          spells_cantrips?: string | null;
+          str?: number | null;
+          subclass?: string | null;
+          updated_at?: string;
+          user_id?: string;
+          visible_to_dm?: boolean;
+          weapons_data?: Json;
+          wis?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'character_sheets_campaign_id_fkey';
+            columns: ['campaign_id'];
+            isOneToOne: false;
+            referencedRelation: 'campaigns';
             referencedColumns: ['id'];
           },
         ];
@@ -1013,6 +1946,80 @@ export type Database = {
           },
         ];
       };
+      recommendation_events: {
+        Row: {
+          category: string;
+          created_at: string;
+          deterministic_rank: number | null;
+          event_type: string;
+          id: number;
+          media_id: number;
+          serve_id: string;
+          slot_index: number;
+          source: string;
+          subtype: string;
+          surface: string;
+          user_id: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          deterministic_rank?: number | null;
+          event_type: string;
+          id?: never;
+          media_id: number;
+          serve_id: string;
+          slot_index: number;
+          source: string;
+          subtype: string;
+          surface: string;
+          user_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          deterministic_rank?: number | null;
+          event_type?: string;
+          id?: never;
+          media_id?: number;
+          serve_id?: string;
+          slot_index?: number;
+          source?: string;
+          subtype?: string;
+          surface?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'recommendation_events_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      share_tokens: {
+        Row: {
+          created_at: string;
+          expires_at: string | null;
+          token: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          expires_at?: string | null;
+          token?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          expires_at?: string | null;
+          token?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       steam_sync_jobs: {
         Row: {
           batch_size: number;
@@ -1443,7 +2450,7 @@ export type Database = {
           score: number | null;
           selected_platform: string | null;
           status: string;
-          updated_at: string | null;
+          updated_at: string;
           user_id: string;
         };
         Insert: {
@@ -1459,7 +2466,7 @@ export type Database = {
           score?: number | null;
           selected_platform?: string | null;
           status: string;
-          updated_at?: string | null;
+          updated_at?: string;
           user_id: string;
         };
         Update: {
@@ -1475,7 +2482,7 @@ export type Database = {
           score?: number | null;
           selected_platform?: string | null;
           status?: string;
-          updated_at?: string | null;
+          updated_at?: string;
           user_id?: string;
         };
         Relationships: [
@@ -1651,10 +2658,14 @@ export type Database = {
       has_any_role: { Args: { required_roles: string[] }; Returns: boolean };
       is_admin: { Args: never; Returns: boolean };
       is_admin_or_moderator: { Args: never; Returns: boolean };
+      is_campaign_dm: { Args: { cid: string }; Returns: boolean };
+      is_campaign_member: { Args: { cid: string }; Returns: boolean };
       mark_support_ticket_as_read: {
         Args: { p_ticket_id: string };
         Returns: boolean;
       };
+      publish_due_articles: { Args: never; Returns: number };
+      purge_old_dnd_deletes: { Args: never; Returns: undefined };
       reorder_pins: {
         Args: { p_category: string; p_order: Json; p_user_id: string };
         Returns: undefined;
@@ -1692,7 +2703,7 @@ export type Database = {
       };
     };
     Enums: {
-      [_ in never]: never;
+      dnd_entity_type: 'npc' | 'location' | 'quest';
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -1817,6 +2828,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      dnd_entity_type: ['npc', 'location', 'quest'],
+    },
   },
 } as const;

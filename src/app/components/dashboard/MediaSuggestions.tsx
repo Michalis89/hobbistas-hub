@@ -6,6 +6,7 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import type { MediaSuggestion } from '@/lib/dashboard/category-data';
 import { DEFAULT_COVER } from '@/lib/constants/messages';
+import { trackRecommendationClick } from '@/lib/recommendations/instrumentation/client';
 import DashboardSectionHeader from './DashboardSectionHeader';
 import {
   DASH_BORDER,
@@ -80,9 +81,18 @@ function SuggestionCard({ suggestion }: { suggestion: MediaSuggestion }) {
   if (href) {
     return (
       <Card
-        className={`group relative min-h-[184px] min-w-0 overflow-hidden bg-card/[0.98] shadow-[0_14px_34px_-26px_rgba(255,255,255,0.96)] transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/70 focus-within:ring-offset-2 focus-within:ring-offset-background hover:-translate-y-0.5 hover:shadow-[0_20px_44px_-28px_rgba(255,255,255,1)] dark:bg-card/90 dark:shadow-[0_18px_34px_-26px_rgba(0,0,0,0.82)] dark:hover:shadow-[0_18px_34px_-26px_rgba(0,0,0,0.82)] ${DASH_RADIUS_CARD} ${DASH_BORDER}`}
+        className={`group relative min-h-[184px] min-w-0 overflow-hidden bg-card/[0.98] shadow-[0_14px_34px_-26px_rgba(255,255,255,0.96)] transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/70 focus-within:ring-offset-2 focus-within:ring-offset-background hover:shadow-[0_20px_44px_-28px_rgba(255,255,255,1)] dark:bg-card/90 dark:shadow-[0_18px_34px_-26px_rgba(0,0,0,0.82)] dark:hover:shadow-[0_18px_34px_-26px_rgba(0,0,0,0.82)] ${DASH_RADIUS_CARD} ${DASH_BORDER}`}
       >
-        <Link href={href} className="block h-full focus-visible:outline-none">
+        <Link
+          href={href}
+          className="block h-full focus-visible:outline-none"
+          onClick={() =>
+            trackRecommendationClick({
+              serveId: suggestion.serveId,
+              mediaId: suggestion.mediaId,
+            })
+          }
+        >
           {cardContent}
         </Link>
       </Card>

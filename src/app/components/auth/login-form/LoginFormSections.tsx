@@ -55,6 +55,50 @@ export function LoginStatusAlert({ alert, isRedirecting }: StatusAlertProps) {
   );
 }
 
+type UnverifiedEmailNoticeProps = {
+  visible: boolean;
+  loading: boolean;
+  onResend: () => void;
+};
+
+/**
+ * Shown when sign-in is refused because the address was never confirmed.
+ * Accounts created since instant sign-up are usable right away, so this only
+ * affects older ones — but without a resend action they had no way back in.
+ */
+export function UnverifiedEmailNotice({ visible, loading, onResend }: UnverifiedEmailNoticeProps) {
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-background/40 px-4 py-3">
+      <p className="text-sm text-muted-foreground">
+        Your email address was never confirmed. Send yourself a new link to finish setting up.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onResend}
+        disabled={loading}
+        className="mt-3 w-full gap-2"
+      >
+        {loading ? (
+          <>
+            Sending
+            <Spinner className="h-4 w-4" />
+          </>
+        ) : (
+          <>
+            <Mail className="h-4 w-4" />
+            Resend verification email
+          </>
+        )}
+      </Button>
+    </div>
+  );
+}
+
 type IdentifierFieldProps = BaseProps & {
   identifier: string;
   error?: string;

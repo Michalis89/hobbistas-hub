@@ -1,55 +1,19 @@
 /**
- * Supabase Client for Next.js Middleware
- * Handles authentication cookies and session management at the edge
+ * @deprecated Do not use. Kept only as a warning marker.
+ *
+ * This built a `@supabase/ssr` client for the proxy, but that library reads its
+ * own `sb-<ref>-auth-token` cookies. This app issues `sb-access-token` /
+ * `sb-refresh-token` from `src/lib/auth/cookies.ts` and keeps the browser
+ * session in localStorage (see `supabase-client.ts`), so the client here never
+ * found a session and reported every visitor as signed out — which bounced
+ * authenticated users off every protected route.
+ *
+ * `proxy.ts` now reads the access-token cookie directly and checks its expiry
+ * locally, with no network call. If you need a Supabase client on the server,
+ * use one of the supported variants instead:
+ *   - `supabase-server.ts`        — React Server Components
+ *   - `supabase-route-handler.ts` — API route handlers
+ *   - `supabase/admin.ts`         — server-only service role
  */
 
-import { createServerClient } from '@supabase/ssr';
-import { type NextRequest, NextResponse } from 'next/server';
-import type { Database } from '@/lib/supabase/database.types';
-
-/**
- * Creates a Supabase client for middleware with cookie handling
- * This allows server-side session checks without client-side JavaScript
- */
-export async function createMiddlewareClient(request: NextRequest) {
-  // Create a mutable response that we can modify
-  const response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
-
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    },
-  );
-
-  // Get user session - this automatically refreshes expired tokens
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { supabase, user, response };
-}
-
-/**
- * Gets user session from middleware without creating a client
- * Useful for quick auth checks
- */
-export async function getSession(request: NextRequest) {
-  const { supabase, user } = await createMiddlewareClient(request);
-  return { supabase, user };
-}
+export {};

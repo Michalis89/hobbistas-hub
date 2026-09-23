@@ -1,9 +1,8 @@
 export { AboutHero } from './AboutHero';
-export { AboutFeatures } from './AboutFeatures';
-export { AboutHowItWorks } from './AboutHowItWorks';
+export { AboutTwoModes } from './AboutTwoModes';
+export { AboutWhatYouGet } from './AboutWhatYouGet';
 export { AboutPhilosophy } from './AboutPhilosophy';
-export { AboutStats, type AboutStatsProps } from './AboutStats';
+export { AboutFAQ } from './AboutFAQ';
 export { AboutRoadmap } from './AboutRoadmap';
 export { AboutPeople, type TeamMember } from './AboutPeople';
-export { AboutFAQ } from './AboutFAQ';
 export { AboutFinalCTA } from './AboutFinalCTA';

@@ -92,7 +92,7 @@ function SortableFavoriteCard({
         'shadow-[0_18px_60px_-40px_rgba(0,0,0,0.85)]',
         'ease-snappy transition-all delay-0 duration-300 group-hover:delay-75',
         // Lift / glow on hover
-        'hover:-translate-y-0.5 hover:border-border/50 hover:bg-card/50',
+        'hover:border-border/50 hover:bg-card/50',
         // Drag state
         isDragging ? 'z-10 opacity-60 shadow-2xl' : '',
         // Top-5 highlight (subtle but premium)
@@ -244,7 +244,7 @@ function MobileFavoriteCard({
         'cursor-default border border-border/35 bg-card/40',
         'shadow-[0_18px_60px_-40px_rgba(0,0,0,0.85)]',
         'ease-snappy transition-all delay-0 duration-300 group-hover:delay-75',
-        'hover:-translate-y-0.5 hover:border-border/50 hover:bg-card/50',
+        'hover:border-border/50 hover:bg-card/50',
         isTopFive ? 'ring-1 ring-primary/15' : 'ring-1 ring-white/5',
       ].join(' ')}
       aria-label={`Reorder favorite ${item.title}`}

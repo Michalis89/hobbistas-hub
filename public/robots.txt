@@ -1,9 +1,0 @@
-# *
-User-agent: *
-Allow: /
-
-# Host
-Host: https://hobbistas-hub.com
-
-# Sitemaps
-Sitemap: https://hobbistas-hub.com/sitemap.xml

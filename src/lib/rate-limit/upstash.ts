@@ -118,6 +118,18 @@ export const LIMITER_CONFIGS: Record<string, LimiterConfig> = {
     prefix: 'rl:register:ip',
   },
 
+  // Resending the verification email: strict, it is an outbound-email trigger
+  resendVerificationIp: {
+    limit: 5,
+    windowSec: 60 * 60, // 1 hour
+    prefix: 'rl:resend:ip',
+  },
+  resendVerificationEmail: {
+    limit: 3,
+    windowSec: 60 * 60, // 1 hour
+    prefix: 'rl:resend:email',
+  },
+
   // Account deletion: very strict, sensitive operation
   deleteAccount: {
     limit: 1,
@@ -137,6 +149,15 @@ export const LIMITER_CONFIGS: Record<string, LimiterConfig> = {
     limit: 10,
     windowSec: 60, // 1 minute
     prefix: 'rl:api:strict',
+  },
+
+  // Shadow rerank provider calls. Deliberately its own budget: a burst of dashboard traffic must
+  // not be able to spend the rerank allowance, and a rerank must not be able to lock the user out
+  // of their own taste profile. Checked only inside shadow execution, never on a user response.
+  aiRerank: {
+    limit: 5,
+    windowSec: 60 * 60, // 1 hour
+    prefix: 'rl:ai:rerank',
   },
 } as const;
 

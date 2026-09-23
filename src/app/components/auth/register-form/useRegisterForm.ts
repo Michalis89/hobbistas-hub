@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useDispatch } from 'react-redux';
 import {
   validateEmail,
   validateUsername,
@@ -12,6 +13,10 @@ import {
   PRIVACY_POLICY_VERSION,
   TERMS_OF_USE_VERSION,
 } from '@/lib/legal/policyVersions';
+import { fetchSession } from '@/store/slices/authSlice';
+import type { AppDispatch } from '@/store/store';
+import { setAuthPersistence, supabase } from '@/lib/supabase-client';
+import { ONBOARDING_PATH } from '@/lib/routes/authRoutes';
 import { isCaptchaDisabled } from './constants';
 
 type AlertState = { type: 'success' | 'error'; message: string } | null;
@@ -39,7 +44,8 @@ type UseRegisterFormOptions = {
 export function useRegisterForm({ onSuccess }: UseRegisterFormOptions) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectParam = searchParams.get('redirect');
+  const dispatch = useDispatch<AppDispatch>();
+  const redirectParam = searchParams.get('redirect') ?? searchParams.get('redirectTo');
 
   const [loading, setLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -121,35 +127,42 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions) {
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    // preventDefault must run before the in-flight guard, otherwise a blocked
+    // submit falls through to a native GET submit that puts the password in the URL.
+    event.preventDefault();
+
     if (submitInFlight.current) {
       return;
     }
     submitInFlight.current = true;
-    event.preventDefault();
-    setAlert(null);
-    setIsRedirecting(false);
 
-    if (!validateForm()) {
-      return;
-    }
-
-    if (!isCaptchaDisabled && !captchaVisible) {
-      setCaptchaVisible(true);
-      setCaptchaError('Load the CAPTCHA first, then try again.');
-      return;
-    }
-
-    if (!isCaptchaDisabled && !captchaToken) {
-      setCaptchaError('Complete CAPTCHA to continue.');
-      return;
-    }
-
-    setCaptchaError(null);
-    setLoading(true);
-
+    // Every exit path below runs through this finally, so the guard can never
+    // stay latched and permanently freeze the form.
     try {
+      setAlert(null);
+      setIsRedirecting(false);
+
+      if (!validateForm()) {
+        return;
+      }
+
+      if (!isCaptchaDisabled && !captchaVisible) {
+        setCaptchaVisible(true);
+        setCaptchaError('Load the CAPTCHA first, then try again.');
+        return;
+      }
+
+      if (!isCaptchaDisabled && !captchaToken) {
+        setCaptchaError('Complete CAPTCHA to continue.');
+        return;
+      }
+
+      setCaptchaError(null);
+      setLoading(true);
+
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: formData.email,
@@ -163,21 +176,6 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions) {
             privacyPath: LEGAL_PATHS.privacy,
             acceptedAt: new Date().toISOString(),
           },
-          full_name: null,
-          date_of_birth: null,
-          country: null,
-          bio: null,
-          psn_id: null,
-          favorite_platform: null,
-          favorite_genres: null,
-          categories: [],
-          favorite_anime_genres: null,
-          favorite_movie_genres: null,
-          favorite_book_genres: null,
-          favorite_languages: null,
-          pet_types: null,
-          vape_device: null,
-          vape_flavor: null,
           captchaToken: isCaptchaDisabled ? 'dev-bypass' : captchaToken,
         }),
       });
@@ -188,28 +186,41 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions) {
         throw new Error(data.error || 'Registration error');
       }
 
+      const payload = data.data ?? data;
+
+      // Sign-up returns a live session: hydrate the browser client so the user
+      // lands inside the app already authenticated, with no second login step.
+      if (payload.session?.access_token && payload.session?.refresh_token) {
+        setAuthPersistence(true);
+        await supabase.auth.setSession({
+          access_token: payload.session.access_token,
+          refresh_token: payload.session.refresh_token,
+        });
+        await dispatch(fetchSession());
+      }
+
       setAlert({
         type: 'success',
-        message: 'We sent you a confirmation email. Check your inbox.',
+        message: "Account created. Taking you in — we've emailed a link to verify your address.",
       });
       setIsRedirecting(true);
 
-      setTimeout(() => {
-        if (onSuccess) {
-          setIsRedirecting(false);
-          onSuccess();
-          return;
-        }
-        const targetUrl = '/auth/confirm-email?state=pending';
-        router.push(targetUrl);
-      }, 1200);
+      if (onSuccess) {
+        setIsRedirecting(false);
+        onSuccess();
+        return;
+      }
+
+      const targetUrl = redirectParam
+        ? decodeURIComponent(redirectParam)
+        : payload.redirectUrl || ONBOARDING_PATH;
+      router.push(targetUrl);
     } catch (error) {
       console.error('Registration error:', error);
+      setIsRedirecting(false);
 
       if (error instanceof Error && error.message.toLowerCase().includes('captcha')) {
         setCaptchaError('CAPTCHA failed. Retry it, and refresh the page if it persists.');
-        setCaptchaResetKey(prev => prev + 1);
-        setCaptchaToken(null);
         setAlert({
           type: 'error',
           message:
@@ -221,6 +232,13 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions) {
           message:
             error instanceof Error ? error.message : 'Registration failed. Please try again.',
         });
+      }
+
+      // A consumed CAPTCHA token cannot be replayed, so any failed attempt needs
+      // a fresh challenge before the user can submit again.
+      if (!isCaptchaDisabled) {
+        setCaptchaResetKey(prev => prev + 1);
+        setCaptchaToken(null);
       }
     } finally {
       submitInFlight.current = false;

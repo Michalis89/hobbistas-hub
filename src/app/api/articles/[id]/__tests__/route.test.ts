@@ -310,6 +310,48 @@ describe('app/api/articles/[id]/route', () => {
     expect(r4.status).toBe(400);
   });
 
+  it('PUT rejects content_rich containing node types outside the article schema', async () => {
+    const baseArticle = { id: 1, author_id: 'author-1', published_at: null };
+    const s = makeSupabaseMock({ existingArticleResult: { data: baseArticle, error: null } });
+    createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+    const response = await PUT(
+      new Request('https://example.com', {
+        method: 'PUT',
+        body: JSON.stringify({
+          content_rich: {
+            type: 'doc',
+            content: [{ type: 'iframeEmbed', attrs: { src: 'https://evil.com' } }],
+          },
+        }),
+      }),
+      { params: Promise.resolve({ id: '1' }) },
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('PUT accepts content_rich that matches the article schema', async () => {
+    const baseArticle = { id: 1, author_id: 'author-1', published_at: null };
+    const s = makeSupabaseMock({ existingArticleResult: { data: baseArticle, error: null } });
+    createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+    const response = await PUT(
+      new Request('https://example.com', {
+        method: 'PUT',
+        body: JSON.stringify({
+          content_rich: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ok' }] }],
+          },
+        }),
+      }),
+      { params: Promise.resolve({ id: '1' }) },
+    );
+
+    expect(response.status).not.toBe(400);
+  });
+
   it('PUT returns fallback errors for description/meta title/meta description validations', async () => {
     const baseArticle = { id: 1, author_id: 'author-1', published_at: null };
 

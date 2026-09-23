@@ -2,16 +2,15 @@ import getSupabaseServer from '@/lib/supabase-server';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import {
   AboutHero,
-  AboutFeatures,
-  AboutHowItWorks,
+  AboutTwoModes,
+  AboutWhatYouGet,
   AboutPhilosophy,
+  AboutFAQ,
   AboutRoadmap,
   AboutPeople,
-  AboutFAQ,
   AboutFinalCTA,
   type TeamMember,
 } from '@/app/components/about';
-import AboutStatsLoader from '@/app/(main)/about/AboutStatsLoader.client';
 import { buildMetadata } from '@/utils/seo/metadata/helpers';
 import StructuredData from '@/utils/seo/StructuredData';
 import { getBreadcrumbStructuredData } from '@/utils/seo/metadata/structuredData';
@@ -20,24 +19,17 @@ import type { ReactNode } from 'react';
 
 export const revalidate = 3600;
 
-type AboutSectionShellProps = {
+type AboutSectionProps = {
   children: ReactNode;
   maxWidthClass?: string;
 };
 
-function AboutSectionShell({
-  children,
-  maxWidthClass = 'max-w-screen-2xl',
-}: AboutSectionShellProps) {
-  return (
-    <div className={`mx-auto w-full px-3 md:px-6 ${maxWidthClass}`}>
-      <div className="">{children}</div>
-    </div>
-  );
+function AboutSection({ children, maxWidthClass = 'max-w-5xl' }: AboutSectionProps) {
+  return <div className={`mx-auto w-full px-3 md:px-6 ${maxWidthClass}`}>{children}</div>;
 }
 
 export const metadata = buildMetadata({
-  title: 'About Hobbista',
+  title: 'About Hobbistas',
   description: 'Learn who we are, how we work, and why Hobbistas was created for every hobby.',
   path: '/about',
 });
@@ -139,45 +131,33 @@ export default async function AboutPage() {
       <main className="pb-14 md:pb-20">
         <AboutHero isAuthenticated={isAuthenticated} />
 
-        <AboutSectionShell>
-          <AboutFeatures />
-        </AboutSectionShell>
+        <AboutSection>
+          <AboutTwoModes />
+        </AboutSection>
 
-        <div className="my-4 md:my-6">
-          <AboutSectionShell maxWidthClass="max-w-6xl">
-            <AboutHowItWorks />
-          </AboutSectionShell>
-        </div>
+        <AboutSection>
+          <AboutWhatYouGet />
+        </AboutSection>
 
-        <AboutSectionShell maxWidthClass="max-w-6xl">
+        <AboutSection>
           <AboutPhilosophy />
-        </AboutSectionShell>
+        </AboutSection>
 
-        <div className="my-4 md:my-6">
-          <AboutSectionShell>
-            <AboutStatsLoader />
-          </AboutSectionShell>
-        </div>
-
-        <AboutSectionShell maxWidthClass="max-w-6xl">
-          <AboutRoadmap />
-        </AboutSectionShell>
-
-        <div className="my-4 md:my-6">
-          <AboutSectionShell maxWidthClass="max-w-6xl">
-            <AboutPeople team={team} />
-          </AboutSectionShell>
-        </div>
-
-        <AboutSectionShell maxWidthClass="max-w-4xl">
+        <AboutSection maxWidthClass="max-w-4xl">
           <AboutFAQ />
-        </AboutSectionShell>
+        </AboutSection>
 
-        <div className="mt-4 md:mt-6">
-          <AboutSectionShell maxWidthClass="max-w-5xl">
-            <AboutFinalCTA isAuthenticated={isAuthenticated} />
-          </AboutSectionShell>
-        </div>
+        <AboutSection>
+          <AboutRoadmap />
+        </AboutSection>
+
+        <AboutSection>
+          <AboutPeople team={team} />
+        </AboutSection>
+
+        <AboutSection>
+          <AboutFinalCTA isAuthenticated={isAuthenticated} />
+        </AboutSection>
       </main>
     </>
   );

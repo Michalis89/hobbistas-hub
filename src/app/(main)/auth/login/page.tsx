@@ -61,7 +61,7 @@ export default function LoginPage() {
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Hobbista Hub</p>
+                    <p className="text-sm font-semibold text-foreground">Hobbistas</p>
                     <p className="text-xs text-muted-foreground">
                       Stable, clean, and consistent workspace.
                     </p>

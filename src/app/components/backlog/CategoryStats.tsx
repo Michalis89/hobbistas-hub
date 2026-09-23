@@ -88,7 +88,7 @@ export default function CategoryStats({
               onStatusChange(card.filter);
             }
           }}
-          className={`group cursor-pointer border transition duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
+          className={`group cursor-pointer border transition duration-200 hover:shadow-lg ${
             activeStatus === card.filter
               ? 'border-primary/40 bg-primary/10 shadow-md shadow-primary/10'
               : 'border-border/70 bg-card/70'

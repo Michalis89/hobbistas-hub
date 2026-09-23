@@ -9,7 +9,7 @@ import ArticleComments from '@/app/components/article/ArticleComments.client';
 import ArticleAuthHint from '@/app/components/article/ArticleAuthHint.client';
 import { FormattedDate } from '@/utils/components/FormattedDate';
 import MetaActionsBar from '@/app/components/article/MetaActionsBar';
-import { ArticleContent } from '@/components/article/ArticleContent';
+import { ArticleBody } from '@/components/article/ArticleBody';
 import { ARTICLE_SUBTITLE, ARTICLE_TITLE } from '@/components/article/typography';
 
 interface BreadcrumbItem {
@@ -49,6 +49,7 @@ interface ArticleBodySectionProps {
   dateOptions: Intl.DateTimeFormatOptions;
   showEngagementUi: boolean;
   contentWithHeadingIds: string;
+  contentRich: unknown;
 }
 
 interface RelatedArticlesSectionProps {
@@ -90,10 +91,11 @@ export function ArticleBodySection({
   dateOptions,
   showEngagementUi,
   contentWithHeadingIds,
+  contentRich,
 }: ArticleBodySectionProps) {
   return (
-    <>
-      <header className="mx-auto">
+    <div className="mx-auto w-full max-w-[76ch]">
+      <header>
         <Breadcrumbs items={uiBreadcrumbs} className="mb-4" />
 
         <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -105,7 +107,7 @@ export function ArticleBodySection({
           </span>
           {isReview && score != null && (
             <span className="rounded-full border border-border bg-card/80 px-3 py-1">
-              ⭐ {score} / 10
+              &#11088; {score} / 10
             </span>
           )}
         </div>
@@ -116,26 +118,24 @@ export function ArticleBodySection({
       </header>
 
       <div className="mt-8">
-        <div>
-          <MetaActionsBar
-            article={article}
-            readTime={readTime}
-            dateOptions={dateOptions}
-            showEngagementMetrics={showEngagementUi}
-            showActions={showEngagementUi}
-          />
+        <MetaActionsBar
+          article={article}
+          readTime={readTime}
+          dateOptions={dateOptions}
+          showEngagementMetrics={showEngagementUi}
+          showActions={showEngagementUi}
+        />
 
-          {showEngagementUi && (
-            <section className="mt-3 space-y-3">
-              <ArticleAuthHint />
-            </section>
-          )}
+        {showEngagementUi && (
+          <section className="mt-3 space-y-3">
+            <ArticleAuthHint />
+          </section>
+        )}
 
-          {contentWithHeadingIds && <ArticleContent html={contentWithHeadingIds} />}
-          {showEngagementUi && <ArticleComments articleId={article.id} />}
-        </div>
+        <ArticleBody contentRich={contentRich} contentHtml={contentWithHeadingIds} />
+        {showEngagementUi && <ArticleComments articleId={article.id} />}
       </div>
-    </>
+    </div>
   );
 }
 

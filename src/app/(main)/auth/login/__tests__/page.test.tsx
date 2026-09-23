@@ -53,6 +53,6 @@ describe('LoginPage', () => {
     expect(screen.getByText('Instant continuity')).toBeInTheDocument();
     expect(screen.getByText('Secure access')).toBeInTheDocument();
     expect(screen.getByTestId('login-form')).toBeInTheDocument();
-    expect(screen.getByText('Hobbista Hub')).toBeInTheDocument();
+    expect(screen.getByText('Hobbistas')).toBeInTheDocument();
   });
 });

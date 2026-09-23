@@ -1,6 +1,5 @@
 import { AvatarImage } from '@/components/ui/avatar-image';
 import { User2, MapPin, Gamepad2 } from 'lucide-react';
-import EmptyState from '@/components/ui/empty';
 
 export type TeamMember = {
   id: string;
@@ -56,33 +55,29 @@ export function AboutPeople({ team }: AboutPeopleProps) {
   });
 
   return (
-    <section className="px-4 py-20 md:px-6 md:py-28">
+    <section className="px-4 py-14 md:px-6 md:py-20">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-12 text-center md:mb-16">
-          <p className="mb-3 text-xs uppercase tracking-[0.28em] text-primary">The team</p>
-          <h2 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">
-            People behind Hobbista
+        <div className="mb-10 text-center md:mb-14">
+          <p className="mb-3 text-xs uppercase tracking-[0.28em] text-primary">
+            Who&apos;s behind this
+          </p>
+          <h2 className="mb-4 text-3xl font-semibold text-foreground md:text-4xl">
+            Built by people who use it
           </h2>
           <p className="mx-auto max-w-xl text-muted-foreground">
-            A small team of hobbyists who love games, anime, and movies and want to build the best
-            tool for everyone else.
+            Hobbistas is made by a very small group of hobbyists, scratching our own itch first.
+            There is no company behind it and no investors to answer to.
           </p>
         </div>
 
-        {team.length === 0 ? (
-          <EmptyState
-            title="No team members found."
-            description="Admins and authors will appear here."
-            size="sm"
-          />
-        ) : (
+        {team.length === 0 ? null : (
           <div className="grid gap-5 sm:grid-cols-2">
             {sortedTeam.map(member => (
               <div
                 key={member.id}
                 className="group flex gap-4 rounded-2xl border border-border bg-card p-5 transition hover:border-primary/40"
               >
-                <div className="relative h-16 w-16 shrink-0 rounded-xl bg-white/5">
+                <div className="relative h-16 w-16 shrink-0 rounded-xl bg-muted">
                   {member.avatar_url ? (
                     <AvatarImage
                       src={member.avatar_url}

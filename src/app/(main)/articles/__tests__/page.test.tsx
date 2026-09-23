@@ -4,9 +4,26 @@ import { SITE_URL } from '@/config/site';
 import { getBreadcrumbStructuredData } from '@/utils/seo/metadata/structuredData';
 import { CATEGORY_SUBTITLES } from '@/app/(main)/articles/constants';
 
+const createRouteHandlerClientMock = jest.fn();
+const getArticlesWithFiltersMock = jest.fn();
+const newsPageClientMock = jest.fn();
+
 jest.mock('@/app/(main)/articles/NewsPageClient', () => ({
   __esModule: true,
-  default: () => <div data-testid="news-page-client" />,
+  default: (props: unknown) => {
+    newsPageClientMock(props);
+    return <div data-testid="news-page-client" />;
+  },
+}));
+
+jest.mock('@/lib/supabase-route-handler', () => ({
+  __esModule: true,
+  createRouteHandlerClient: (...args: unknown[]) => createRouteHandlerClientMock(...args),
+}));
+
+jest.mock('@/lib/supabase/queries', () => ({
+  __esModule: true,
+  getArticlesWithFilters: (...args: unknown[]) => getArticlesWithFiltersMock(...args),
 }));
 
 jest.mock('@/utils/seo/StructuredData', () => ({
@@ -27,6 +44,8 @@ jest.mock('@/utils/seo/metadata/structuredData', () => ({
 describe('articles page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    createRouteHandlerClientMock.mockResolvedValue({ from: jest.fn() });
+    getArticlesWithFiltersMock.mockResolvedValue({ data: [], count: 0, error: null });
   });
 
   it('exports expected revalidation interval', () => {
@@ -77,19 +96,68 @@ describe('articles page', () => {
   });
 
   it('renders breadcrumb structured data and client page', async () => {
+    getArticlesWithFiltersMock.mockResolvedValueOnce({
+      data: [
+        { id: 1, slug: 'article-one', topic: 'articles' },
+        { id: 2, slug: 'review-one', topic: 'reviews' },
+      ],
+      count: 2,
+      error: null,
+    });
+
     render(
       await NewsPage({
-        searchParams: Promise.resolve({ category: 'games', topic: 'tutorials' }),
+        searchParams: Promise.resolve({ category: 'games', topic: 'tutorials', tag: 'guide' }),
       }),
     );
 
     expect(screen.getByTestId('news-page-client')).toBeInTheDocument();
+    expect(createRouteHandlerClientMock).toHaveBeenCalledWith(undefined, { ignoreCookies: true });
+    expect(getArticlesWithFiltersMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        category: 'games',
+        topic: 'tutorials',
+        status: 'published',
+        tag: 'guide',
+        limit: 20,
+        offset: 0,
+      }),
+    );
+    expect(newsPageClientMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialArticles: [{ id: 1, slug: 'article-one', topic: 'articles' }],
+        initialTotal: 2,
+        initialCategory: 'games',
+        initialTag: 'guide',
+      }),
+    );
     expect(screen.getByTestId('structured-data')).toBeInTheDocument();
     expect(getBreadcrumbStructuredData).toHaveBeenCalledWith([
       { name: 'Home', url: `${SITE_URL}/` },
       { name: 'Articles', url: `${SITE_URL}/articles` },
       { name: 'Tutorials - Games', url: `${SITE_URL}/articles?category=games` },
     ]);
+  });
+
+  it('counts filtered normal articles for default topic so reviews are not included', async () => {
+    getArticlesWithFiltersMock.mockResolvedValueOnce({
+      data: [
+        { id: 1, slug: 'article-one', topic: 'articles' },
+        { id: 2, slug: 'review-one', topic: 'reviews' },
+      ],
+      count: 2,
+      error: null,
+    });
+
+    render(await NewsPage({ searchParams: Promise.resolve({}) }));
+
+    expect(newsPageClientMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialArticles: [{ id: 1, slug: 'article-one', topic: 'articles' }],
+        initialTotal: 1,
+      }),
+    );
   });
 
   it('uses category-only breadcrumb label when topic is default "articles"', async () => {

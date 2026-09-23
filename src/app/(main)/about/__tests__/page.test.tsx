@@ -19,18 +19,13 @@ const aboutPeopleMock = jest.fn(({ team }: { team: unknown[] }) => (
 jest.mock('@/app/components/about', () => ({
   __esModule: true,
   AboutHero: (props: { isAuthenticated: boolean }) => aboutHeroMock(props),
-  AboutFeatures: () => <div data-testid="about-features" />,
-  AboutHowItWorks: () => <div data-testid="about-how-it-works" />,
+  AboutTwoModes: () => <div data-testid="about-two-modes" />,
+  AboutWhatYouGet: () => <div data-testid="about-what-you-get" />,
   AboutPhilosophy: () => <div data-testid="about-philosophy" />,
   AboutRoadmap: () => <div data-testid="about-roadmap" />,
   AboutPeople: (props: { team: unknown[] }) => aboutPeopleMock(props),
   AboutFAQ: () => <div data-testid="about-faq" />,
   AboutFinalCTA: (props: { isAuthenticated: boolean }) => aboutFinalCtaMock(props),
-}));
-
-jest.mock('@/app/(main)/about/AboutStatsLoader.client', () => ({
-  __esModule: true,
-  default: () => <div data-testid="about-stats-loader" />,
 }));
 
 jest.mock('@/utils/seo/StructuredData', () => ({
@@ -122,7 +117,7 @@ describe('AboutPage', () => {
   it('exports static page config', () => {
     expect(revalidate).toBe(3600);
     expect(metadata).toMatchObject({
-      title: 'About Hobbista',
+      title: 'About Hobbistas',
       description: 'Learn who we are, how we work, and why Hobbistas was created for every hobby.',
     });
   });
@@ -181,10 +176,10 @@ describe('AboutPage', () => {
     expect(screen.getByTestId('structured-data')).toBeInTheDocument();
     expect(screen.getByTestId('about-hero')).toHaveAttribute('data-auth', 'true');
     expect(screen.getByTestId('about-final-cta')).toHaveAttribute('data-auth', 'true');
-    expect(screen.getByTestId('about-features')).toBeInTheDocument();
-    expect(screen.getByTestId('about-how-it-works')).toBeInTheDocument();
+    expect(screen.getByTestId('about-what-you-get')).toBeInTheDocument();
+    expect(screen.getByTestId('about-two-modes')).toBeInTheDocument();
     expect(screen.getByTestId('about-philosophy')).toBeInTheDocument();
-    expect(screen.getByTestId('about-stats-loader')).toBeInTheDocument();
+    expect(screen.getByTestId('about-two-modes')).toBeInTheDocument();
     expect(screen.getByTestId('about-roadmap')).toBeInTheDocument();
     expect(screen.getByTestId('about-faq')).toBeInTheDocument();
 

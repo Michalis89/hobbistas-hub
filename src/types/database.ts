@@ -10,7 +10,7 @@ import type { Game, Guide } from './interfaces';
 /**
  * Article status type
  */
-export type ArticleStatus = 'draft' | 'published' | 'archived';
+export type ArticleStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
 /**
  * Article category type

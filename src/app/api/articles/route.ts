@@ -5,7 +5,7 @@ import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { sanitizeHtmlContent } from '@/utils/security/sanitizeHtml';
 import { validatePlainText, validatePlainTextArray } from '@/utils/validation/text';
 import { validateTipTapContent } from '@/utils/validation/tiptap';
-import { normalizeSlug } from '@/utils/slugify';
+import { slugify } from '@/utils/slugify';
 import { insertActivity } from '@/lib/services/activityService';
 import { getArticlesWithFilters } from '@/lib/supabase/queries';
 import { API_ERRORS } from '@/lib/api/errors';
@@ -13,6 +13,40 @@ import { UnauthorizedError } from '@/lib/api/auth';
 import { requireAuthorRole, ForbiddenError } from '@/lib/api/permissions';
 import { fail, ok, okWithMeta } from '@/lib/api/response';
 import { CACHE_CONFIG, CACHE_TAGS, revalidateCache } from '@/lib/cache/tags';
+import { collectArticleMediaLinks, syncArticleMediaLinks } from '@/lib/articles/mediaLinks';
+
+/**
+ * Resolves the slug an article should be stored under.
+ *
+ * The client sends a slug for preview purposes only; the server re-derives it
+ * so that Greek titles, punctuation and casing always produce the same result,
+ * and appends a numeric suffix when the slug is already taken.
+ */
+async function resolveArticleSlug(
+  supabase: Awaited<ReturnType<typeof createRouteHandlerClient>>,
+  { title, slug }: { title: string; slug?: string | null },
+): Promise<string | null> {
+  const base = slugify(slug || '') || slugify(title || '');
+  if (!base) {
+    return null;
+  }
+
+  const { data } = await supabase.from('articles').select('slug').like('slug', `${base}%`);
+  const taken = new Set((data ?? []).map(row => row.slug));
+
+  if (!taken.has(base)) {
+    return base;
+  }
+
+  for (let suffix = 2; suffix <= 100; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return `${base}-${Date.now()}`;
+}
 
 type ArticlePayloadValidationInput = {
   title?: string | null;
@@ -185,6 +219,7 @@ async function POSTHandler(req: Request) {
       published_at,
       score = null,
       media_id = null,
+      scheduled_for = null,
     } = body;
     const articlePayloadValidation = validateArticlePayload({
       title,
@@ -205,12 +240,22 @@ async function POSTHandler(req: Request) {
 
     const sanitizedContentHtml = sanitizeHtmlContent(content_html).trim() || null;
 
-    // Validate required fields
-    if (!title || !slug || !category) {
-      return fail({ error: 'Title, slug, and category are required' }, 400);
+    if (status === 'scheduled') {
+      const when = scheduled_for ? new Date(scheduled_for) : null;
+      if (!when || Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        return fail({ error: 'A scheduled article needs a future publish date.' }, 400);
+      }
     }
 
-    const normalizedSlug = normalizeSlug(slug);
+    // Validate required fields
+    if (!title || !category) {
+      return fail({ error: 'Title and category are required' }, 400);
+    }
+
+    const normalizedSlug = await resolveArticleSlug(supabase, { title, slug });
+    if (!normalizedSlug) {
+      return fail({ error: 'Could not derive a URL slug from this title.' }, 400);
+    }
 
     // Insert article
     const { data: article, error: insertError } = await supabase
@@ -231,6 +276,9 @@ async function POSTHandler(req: Request) {
         status,
         is_featured,
         published_at: status === 'published' ? published_at || new Date().toISOString() : null,
+        // Meaningful only while scheduled, so it is cleared for every other
+        // status rather than left to go stale.
+        scheduled_for: status === 'scheduled' ? scheduled_for : null,
         ...(score != null ? { score: Number(score) } : {}),
         ...(media_id != null ? { media_id: Number(media_id) } : {}),
       })
@@ -257,6 +305,16 @@ async function POSTHandler(req: Request) {
       display_name: userData.display_name,
       avatar_url: userData.avatar_url,
     });
+
+    // Derived from the saved row so the links always match what was stored.
+    await syncArticleMediaLinks(
+      supabase,
+      article.id,
+      collectArticleMediaLinks({
+        contentRich: article.content_rich,
+        subjectMediaId: article.media_id,
+      }),
+    );
 
     // Revalidate article caches
     revalidateCache.article(article.id);

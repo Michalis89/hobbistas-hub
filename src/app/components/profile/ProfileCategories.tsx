@@ -113,7 +113,7 @@ export function ProfileCategories({
                 aria-pressed={isActive}
                 className={[
                   'group inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all',
-                  'hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   isActive
                     ? 'border-primary/40 bg-card text-foreground shadow-sm'
                     : 'border-border/60 bg-card/70 text-muted-foreground hover:border-border hover:text-foreground',

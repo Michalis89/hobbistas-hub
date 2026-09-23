@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DASHBOARD_TAB_CATEGORIES } from '@/lib/dashboard/category-data';
 import type { CategoryDashboardSection, DashboardCategoryKey } from '@/lib/dashboard/category-data';
 import type { PersonalStats } from '@/app/components/home/types';
+import { isAiTasteEligible } from '@/lib/ai/taste-eligibility';
 import CategorySuggestions from './CategorySuggestions';
 import MediaSuggestions from './MediaSuggestions';
 import DashboardCategoryStats from './DashboardCategoryStats';
@@ -20,6 +21,51 @@ const CategoryInsightsGrid = dynamic(() => import('./CategoryInsightsGrid'), {
   ssr: false,
   loading: () => <Skeleton className="h-96 w-full rounded-2xl" />,
 });
+
+const AiGamingIdentitySection = dynamic(() => import('./AiGamingIdentitySection'), {
+  ssr: false,
+});
+
+const AiAnimeIdentitySection = dynamic(() => import('./AiAnimeIdentitySection'), {
+  ssr: false,
+});
+
+const AiMangaIdentitySection = dynamic(() => import('./AiMangaIdentitySection'), {
+  ssr: false,
+});
+
+const AiMoviesIdentitySection = dynamic(() => import('./AiMoviesIdentitySection'), {
+  ssr: false,
+});
+
+const AiTvIdentitySection = dynamic(() => import('./AiTvIdentitySection'), {
+  ssr: false,
+});
+
+const AiBooksIdentitySection = dynamic(() => import('./AiBooksIdentitySection'), {
+  ssr: false,
+});
+
+/**
+ * Which AI identity card belongs to which tab.
+ *
+ * A lookup rather than a conditional chain, and still deliberately partial even now that every
+ * media category has an entry: the map is what keeps an unsupported or not-yet-built category from
+ * showing an empty placeholder, and it means adding one is an entry here plus a registry edit —
+ * never a change to the eligibility logic below.
+ *
+ * Every component is dynamically imported, so a tab whose card never mounts never downloads it.
+ */
+const AI_IDENTITY_SECTIONS: Partial<
+  Record<DashboardCategoryKey, React.ComponentType<{ enabled?: boolean }>>
+> = {
+  games: AiGamingIdentitySection,
+  anime: AiAnimeIdentitySection,
+  manga: AiMangaIdentitySection,
+  movies: AiMoviesIdentitySection,
+  tv: AiTvIdentitySection,
+  books: AiBooksIdentitySection,
+};
 
 const CATEGORY_TITLES: Record<DashboardCategoryKey, string> = {
   games: 'Games',
@@ -93,6 +139,53 @@ export default function CategoryDashboardTabs({
     return { total, completed, current, planned, dropped, favorites, hours };
   };
 
+  /**
+   * Whether to mount the AI taste section for a tab.
+   *
+   * Three separate reasons to say no, all of which used to be missing:
+   *   - the tab is not the one being looked at. Radix unmounts inactive `TabsContent`, but relying
+   *     on that would mean an implementation detail of the tab library decides whether we spend an
+   *     AI request, so the check is explicit.
+   *   - the category has no AI taste implementation. The capability registry decides this, not
+   *     a literal here.
+   *   - the library is too sparse for the server to produce anything, so asking only burns a
+   *     request to be told no.
+   */
+  const isAiTasteSectionVisible = (category: DashboardCategoryKey): boolean => {
+    if (category !== activeCategory) {
+      return false;
+    }
+
+    const categoryStats = resolveStatsForCategory(category);
+
+    return isAiTasteEligible({
+      category,
+      engagedEntryCount: categoryStats.completed + categoryStats.current + categoryStats.dropped,
+      isReadOnly,
+    });
+  };
+
+  /**
+   * Mounts the category's AI identity card, or nothing.
+   *
+   * Returns null for a category with no registered card even if it were somehow eligible, so a
+   * registry entry added ahead of its UI cannot produce an empty section.
+   */
+  const renderAiIdentitySection = (category: DashboardCategoryKey) => {
+    if (!isAiTasteSectionVisible(category)) {
+      return null;
+    }
+    const Section = AI_IDENTITY_SECTIONS[category];
+    if (!Section) {
+      return null;
+    }
+    return (
+      <div className="mt-9 md:mt-11">
+        <Section enabled />
+      </div>
+    );
+  };
+
   return (
     <Tabs
       value={activeCategory}
@@ -141,6 +234,7 @@ export default function CategoryDashboardTabs({
                   }
                 />
               </div>
+              {renderAiIdentitySection(category)}
               <div className="mt-11 md:mt-14">
                 <MediaSuggestions
                   suggestions={sections[category]?.mediaSuggestions ?? []}

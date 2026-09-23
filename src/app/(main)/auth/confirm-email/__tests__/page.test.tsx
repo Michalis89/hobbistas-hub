@@ -80,12 +80,15 @@ describe('ConfirmEmailPage', () => {
       }),
     );
 
-    expect(screen.getByRole('heading', { name: 'Verification failed' })).toBeInTheDocument();
-    expect(screen.getByText('Link issue detected')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to register' })).toHaveAttribute(
+    expect(screen.getByRole('heading', { name: 'Link expired' })).toBeInTheDocument();
+    expect(screen.getByText('Nothing was lost')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to sign in' })).toHaveAttribute(
       'href',
-      '/auth/register',
+      '/auth/login',
     );
+    // An expired link must offer a way out; sending people back to register was
+    // a dead end because the address already exists.
+    expect(screen.getByText(/resend verification email/i)).toBeInTheDocument();
     expect(screen.queryByTestId('success-auto-redirect')).not.toBeInTheDocument();
   });
 
