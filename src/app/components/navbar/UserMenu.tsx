@@ -4,7 +4,7 @@ import {
   ChevronDown,
   LogOut,
   PenLine,
-  Plus,
+  PenSquare,
   Settings,
   ShieldCheck,
   Ticket,
@@ -27,12 +27,12 @@ import { getUserInitials } from './navbar.helpers';
 
 type UserMenuProps = {
   user: UserEntity;
-  canQuickAdd: boolean;
+  canAccessStudio: boolean;
   canAccessAdminPanel: boolean;
   userTicketUnreadCount: number;
   adminTicketUnreadCount: number;
   hasAnyTicketUnread: boolean;
-  onAdd: () => void;
+  onOpenStudio: () => void;
   onLogout: () => Promise<void>;
 };
 
@@ -41,12 +41,12 @@ const itemClassName =
 
 export const UserMenu = React.memo(function UserMenu({
   user,
-  canQuickAdd,
+  canAccessStudio,
   canAccessAdminPanel,
   userTicketUnreadCount,
   adminTicketUnreadCount,
   hasAnyTicketUnread,
-  onAdd,
+  onOpenStudio,
   onLogout,
 }: UserMenuProps) {
   const fallbackInitial = getUserInitials(user.username);
@@ -101,10 +101,10 @@ export const UserMenu = React.memo(function UserMenu({
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="h-[0.5px] bg-[var(--border)]" />
         <DropdownMenuGroup>
-          {canQuickAdd ? (
-            <DropdownMenuItem onSelect={onAdd} className={itemClassName}>
-              <Plus className="size-4" />
-              <span>Quick add</span>
+          {canAccessStudio ? (
+            <DropdownMenuItem onSelect={onOpenStudio} className={itemClassName}>
+              <PenSquare className="size-4" />
+              <span>Studio</span>
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem asChild className={itemClassName}>

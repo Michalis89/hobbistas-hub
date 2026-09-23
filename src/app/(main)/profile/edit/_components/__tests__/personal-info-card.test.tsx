@@ -92,12 +92,14 @@ jest.mock('@/components/ui/textarea', () => ({
     onChange,
     placeholder,
     rows,
+    maxLength,
   }: {
     name?: string;
     value: string;
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     placeholder?: string;
     rows?: number;
+    maxLength?: number;
   }) => (
     <textarea
       data-testid="textarea-bio"
@@ -106,6 +108,7 @@ jest.mock('@/components/ui/textarea', () => ({
       onChange={onChange}
       placeholder={placeholder}
       rows={rows}
+      maxLength={maxLength}
     />
   ),
 }));
@@ -192,13 +195,23 @@ const defaultProps = {
   formData: defaultFormData,
   socialLinks: { discord: 'myhandle', instagram: '' },
   locationCity: 'Athens',
-  privacySettings: { show_age: false, show_social_links: true, show_location: true },
+  privacySettings: {
+    profile_visibility: 'public' as const,
+    show_full_name: false,
+    show_age: false,
+    show_location: true,
+    show_email: false,
+    show_social_links: true,
+    show_stats: true,
+    show_psn_id: true,
+  },
   currentAvatar: 'https://example.com/avatar.jpg',
   onFormChange: jest.fn(),
   onSelectChange: jest.fn(() => jest.fn()),
   onSocialLinkChange: jest.fn(),
   onLocationCityChange: jest.fn(),
   onPrivacyToggle: jest.fn(),
+  onVisibilityChange: jest.fn(),
   onAvatarUpload: jest.fn(),
   onAvatarRemove: jest.fn(),
 };
@@ -237,6 +250,11 @@ describe('PersonalInfoCard', () => {
   it('renders the bio textarea with current value', () => {
     render(<PersonalInfoCard {...defaultProps} />);
     expect(screen.getByTestId('textarea-bio')).toHaveValue('Hello world');
+  });
+
+  it('caps the bio at the length the counter advertises', () => {
+    render(<PersonalInfoCard {...defaultProps} />);
+    expect(screen.getByTestId('textarea-bio')).toHaveAttribute('maxLength', '500');
   });
 
   it('shows the bio character count', () => {
@@ -299,11 +317,33 @@ describe('PersonalInfoCard', () => {
     expect(defaultProps.onAvatarUpload).toHaveBeenCalledTimes(1);
   });
 
-  it('renders privacy setting buttons', () => {
+  it('renders a button for every privacy flag the app reads', () => {
     render(<PersonalInfoCard {...defaultProps} />);
+    expect(screen.getByText('Show full name')).toBeInTheDocument();
     expect(screen.getByText('Show age')).toBeInTheDocument();
-    expect(screen.getByText('Show social links')).toBeInTheDocument();
     expect(screen.getByText('Show country/city')).toBeInTheDocument();
+    expect(screen.getByText('Show email')).toBeInTheDocument();
+    expect(screen.getByText('Show social links')).toBeInTheDocument();
+    expect(screen.getByText('Show stats')).toBeInTheDocument();
+    expect(screen.getByText('Show gaming IDs')).toBeInTheDocument();
+  });
+
+  it('renders the reading language selector', () => {
+    render(<PersonalInfoCard {...defaultProps} />);
+    expect(screen.getByTestId('select-reading-language')).toBeInTheDocument();
+  });
+
+  it('renders the profile visibility selector', () => {
+    render(<PersonalInfoCard {...defaultProps} />);
+    expect(screen.getByTestId('select-profile-visibility')).toHaveValue('public');
+  });
+
+  it('calls onVisibilityChange when visibility changes', () => {
+    render(<PersonalInfoCard {...defaultProps} />);
+    fireEvent.change(screen.getByTestId('select-profile-visibility'), {
+      target: { value: 'private' },
+    });
+    expect(defaultProps.onVisibilityChange).toHaveBeenCalledWith('private');
   });
 
   it('calls onPrivacyToggle when a privacy button is clicked', () => {
@@ -312,10 +352,16 @@ describe('PersonalInfoCard', () => {
     expect(defaultProps.onPrivacyToggle).toHaveBeenCalledWith('show_age');
   });
 
+  it('calls onPrivacyToggle for a flag that had no control before', () => {
+    render(<PersonalInfoCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Show email'));
+    expect(defaultProps.onPrivacyToggle).toHaveBeenCalledWith('show_email');
+  });
+
   it('renders section headers', () => {
     render(<PersonalInfoCard {...defaultProps} />);
     expect(screen.getByText('Account Information')).toBeInTheDocument();
-    expect(screen.getByText('Location Details')).toBeInTheDocument();
+    expect(screen.getByText('Location & Language')).toBeInTheDocument();
     expect(screen.getByText('Social Presence')).toBeInTheDocument();
     expect(screen.getByText('Profile Photo')).toBeInTheDocument();
     expect(screen.getByText('Privacy Settings')).toBeInTheDocument();

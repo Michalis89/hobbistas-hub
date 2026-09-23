@@ -13,7 +13,7 @@ export async function generateMetadata({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{ preview?: string; lang?: string }>;
 }) {
   return buildArticleDetailMetadata({
     params,
@@ -27,7 +27,7 @@ export default function ArticlePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{ preview?: string; lang?: string }>;
 }) {
   return (
     <ArticleDetailPage

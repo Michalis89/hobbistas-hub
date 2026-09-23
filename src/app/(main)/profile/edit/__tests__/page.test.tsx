@@ -748,18 +748,15 @@ describe('EditProfilePage', () => {
     });
   });
 
-  // ── location fetch error catch (non-critical) ─────────────────────────────
+  // ── location save failures must not be reported as success ────────────────
 
-  it('handles location fetch error gracefully and still shows success', async () => {
+  it('reports an error when the location request rejects', async () => {
     (useSelector as jest.Mock).mockReturnValue(mockUser);
     mockDispatch.mockReturnValue({ unwrap: jest.fn().mockResolvedValue({}) });
 
     (global.fetch as jest.Mock).mockImplementation((url: string) => {
       if (url === '/api/me/location') {
         return Promise.reject(new Error('Network error'));
-      }
-      if (url === '/api/me/category-profile') {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
@@ -772,8 +769,36 @@ describe('EditProfilePage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('alert-success')).toBeInTheDocument();
+      expect(screen.getByTestId('alert-destructive')).toBeInTheDocument();
     });
+    expect(screen.queryByTestId('alert-success')).not.toBeInTheDocument();
+  });
+
+  it('reports an error when the location request returns a failure status', async () => {
+    (useSelector as jest.Mock).mockReturnValue(mockUser);
+    mockDispatch.mockReturnValue({ unwrap: jest.fn().mockResolvedValue({}) });
+
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/me/location') {
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ error: 'City is too long' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(<EditProfilePage />);
+    const form = document.getElementById('edit-profile-form')!;
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-destructive')).toBeInTheDocument();
+    });
+    expect(screen.getByText('City is too long')).toBeInTheDocument();
   });
 
   // ── pet type truthy branch (lines 138, 193) ──────────────────────────────
@@ -1031,9 +1056,10 @@ describe('EditProfilePage', () => {
     });
 
     await waitFor(() => {
-      // The thrown Error is caught by the outer catch → generic error message is shown
+      // A non-string error payload falls back to the page's own wording, which
+      // reaches the alert intact rather than being replaced by the generic one.
       expect(screen.getByTestId('alert-destructive')).toBeInTheDocument();
-      expect(screen.getByText('Profile update failed. Please try again.')).toBeInTheDocument();
+      expect(screen.getByText('Failed to update category profile')).toBeInTheDocument();
     });
   });
 

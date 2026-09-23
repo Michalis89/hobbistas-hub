@@ -253,6 +253,25 @@ function categoryLibraryReducer(
 }
 
 // Helper to check if IGDB rate limit is active
+/**
+ * A failed request whose message is already written for the person reading it.
+ *
+ * The API answers with `{ error }`, and that text is deliberately
+ * user-facing - a rate limit, a validation failure, or the demo account's
+ * read-only notice. Discarding it left every failure looking like a bug.
+ */
+class LibraryRequestError extends Error {}
+
+async function libraryRequestError(response: Response, fallback: string) {
+  const failure = (await response.json().catch(() => null)) as { error?: string } | null;
+  return new LibraryRequestError(failure?.error || fallback);
+}
+
+/** The server's wording when there is one, the generic line otherwise. */
+function messageFor(error: unknown, fallback: string) {
+  return error instanceof LibraryRequestError ? error.message : fallback;
+}
+
 const RATE_LIMIT_KEY = 'igdb_rate_limit_until';
 const isRateLimited = () => {
   if (typeof window === 'undefined') {
@@ -808,7 +827,7 @@ export default function CategoryLibrary({
           return;
         }
         if (!response.ok) {
-          throw new Error('Failed to update entry');
+          throw await libraryRequestError(response, 'Failed to update entry');
         }
         const payload = (await response.json().catch(() => null)) as {
           entry?: { updated_at?: string | null };
@@ -850,7 +869,7 @@ export default function CategoryLibrary({
         showAlert({
           type: 'error',
           title: 'Error',
-          message: 'Could not save changes. Try again.',
+          message: messageFor(error, 'Could not save changes. Try again.'),
         });
       }
     } else if (saveMode === 'add') {
@@ -889,8 +908,7 @@ export default function CategoryLibrary({
           body: JSON.stringify(addPayload),
         });
         if (!response.ok) {
-          const failure = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(failure?.error || 'Failed to add entry');
+          throw await libraryRequestError(response, 'Failed to add entry');
         }
         const addData = (await response.json()) as { mediaId?: number };
         const createdMediaId = addData.mediaId;
@@ -1016,7 +1034,7 @@ export default function CategoryLibrary({
           return;
         }
         if (!response.ok) {
-          throw new Error('Failed to update favorite');
+          throw await libraryRequestError(response, 'Failed to update favorite');
         }
         const payload = (await response.json().catch(() => null)) as {
           entry?: { updated_at?: string | null };
@@ -1040,7 +1058,7 @@ export default function CategoryLibrary({
         showAlert({
           type: 'error',
           title: 'Error',
-          message: 'Could not update favorite. Try again.',
+          message: messageFor(error, 'Could not update favorite. Try again.'),
         });
       }
     },
@@ -1089,7 +1107,7 @@ export default function CategoryLibrary({
             body: JSON.stringify({ mediaId: entry.mediaId }),
           });
           if (!response.ok) {
-            throw new Error('Failed to delete entry');
+            throw await libraryRequestError(response, 'Failed to delete entry');
           }
           await loadLibraryEntries();
           if (entry.status === 'current') {
@@ -1107,7 +1125,7 @@ export default function CategoryLibrary({
           showAlert({
             type: 'error',
             title: 'Error',
-            message: 'Could not remove entry. Try again.',
+            message: messageFor(error, 'Could not remove entry. Try again.'),
           });
         }
       }

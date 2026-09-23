@@ -28,7 +28,7 @@ const handler = withApiRoute(async (request: Request) => {
       const { data: user, error: userError } = await supabase
         .from('users')
         .select(
-          'id, email, username, full_name, display_name, bio, avatar_url, date_of_birth, country, timezone, language_preference, roles, social_links, privacy_settings, notification_settings, location_city, account_status, email_verified, last_login, created_at, updated_at',
+          'id, email, username, full_name, display_name, bio, avatar_url, date_of_birth, country, timezone, language_preference, roles, social_links, privacy_settings, location_city, account_status, email_verified, last_login, created_at, updated_at',
         )
         .eq('id', userId)
         .single<UserRow>();
@@ -57,7 +57,12 @@ const handler = withApiRoute(async (request: Request) => {
       };
 
       return ok(
-        response as User & { category_profile: unknown; genre_affinity: Record<string, string[]> },
+        // The selected row carries `Json` columns and the columns the app no
+        // longer models, so it only narrows to `User` through `unknown`.
+        response as unknown as User & {
+          category_profile: unknown;
+          genre_affinity: Record<string, string[]>;
+        },
       );
     }
 

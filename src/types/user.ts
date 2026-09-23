@@ -1,4 +1,5 @@
 import type { Database } from '@/lib/supabase/database.types';
+import type { ArticleLocale } from '@/lib/articles/locales';
 import type { CategoryProfiles } from '@/lib/validation/profile';
 
 export type UserRole = 'user' | 'author' | 'reviewer' | 'moderator' | 'admin' | 'owner';
@@ -11,19 +12,9 @@ export interface PrivacySettings {
   show_stats: boolean;
   show_psn_id: boolean;
   show_age?: boolean;
+  show_full_name?: boolean;
   show_social_links?: boolean;
   show_location?: boolean;
-}
-
-export interface NotificationSettings {
-  newsletter: boolean;
-  guide_updates: boolean;
-  comments: boolean;
-  replies: boolean;
-  weekly_digest: boolean;
-  tickets?: boolean;
-  follows?: boolean;
-  dms?: boolean;
 }
 
 export interface SocialLinks {
@@ -34,7 +25,6 @@ export interface SocialLinks {
   instagram?: string;
   reddit?: string;
   website?: string;
-  portfolio?: string;
   // location_city moved to users.location_city (dedicated column)
 }
 
@@ -42,11 +32,21 @@ type UserRow = Database['public']['Tables']['users']['Row'];
 
 export type User = Omit<
   UserRow,
-  'privacy_settings' | 'notification_settings' | 'social_links' | 'favorite_genres' | 'categories'
+  | 'privacy_settings'
+  // The users.notification_settings JSON column still exists but nothing reads
+  // it; notification preferences live in `user_settings`.
+  | 'notification_settings'
+  // Re-typed below: the column is free text in the database but only ever
+  // holds a reading language the app knows about.
+  | 'language_preference'
+  | 'social_links'
+  | 'favorite_genres'
+  | 'categories'
 > & {
   privacy_settings: PrivacySettings | null;
-  notification_settings: NotificationSettings | null;
   social_links: SocialLinks | null;
+  /** Reading language for articles and reviews. */
+  language_preference: ArticleLocale | null;
   favorite_genres: string[] | null;
   categories: string[] | null;
   roles: UserRole[] | null;
@@ -81,7 +81,7 @@ export interface UserProfileUpdate {
   date_of_birth?: string | null;
   country?: string | null;
   timezone?: string | null;
-  language_preference?: string;
+  language_preference?: ArticleLocale | null;
   psn_id?: string | null;
   xbox_gamertag?: string | null;
   steam_id?: string | null;
@@ -91,7 +91,6 @@ export interface UserProfileUpdate {
   gaming_since?: number | null;
   categories?: string[] | null;
   privacy_settings?: Partial<PrivacySettings>;
-  notification_settings?: Partial<NotificationSettings>;
   social_links?: Partial<SocialLinks>;
 }
 

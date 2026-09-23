@@ -265,7 +265,8 @@ describe('SettingsForm', () => {
     expect(screen.getByText('Boom')).toBeInTheDocument();
     expect(setThemePreferenceMock).toHaveBeenCalledWith('light');
     expect(setThemePreferenceMock).toHaveBeenCalledWith('system');
-    expect(toastErrorMock).toHaveBeenCalledWith('Unable to save settings. Please try again.');
+    // The toast carries the server's reason, matching the banner beside it.
+    expect(toastErrorMock).toHaveBeenCalledWith('Boom');
   });
 
   it('normalizes social disable payload', async () => {

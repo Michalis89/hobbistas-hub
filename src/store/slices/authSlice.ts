@@ -89,7 +89,9 @@ export const updateUserProfile = createAsyncThunk(
     if (error) {
       throw error;
     }
-    return data as User;
+    // A raw users row is not a `User`: its JSON columns are typed `Json`, and
+    // it still carries the columns the app deliberately stopped modelling.
+    return data as unknown as User;
   },
 );
 
@@ -202,7 +204,7 @@ export const selectUserRoles = (state: { auth: AuthSession }) => {
   return user ? getUserRoles(user) : [];
 };
 
-export const selectCanQuickAdd = (state: { auth: AuthSession }) => {
+export const selectCanAccessStudio = (state: { auth: AuthSession }) => {
   const user = state.auth.user;
   return !!user && hasAnyRole(user, ['admin', 'author', 'reviewer', 'owner']);
 };
@@ -238,14 +240,14 @@ export const selectNavbarAuth = createSelector(
     selectIsAuthenticated,
     selectIsLoading,
     selectUser,
-    selectCanQuickAdd,
+    selectCanAccessStudio,
     selectCanAccessAdminPanel,
   ],
-  (isAuthenticated, isLoading, user, canQuickAdd, canAccessAdminPanel) => ({
+  (isAuthenticated, isLoading, user, canAccessStudio, canAccessAdminPanel) => ({
     isAuthenticated,
     isLoading,
     user,
-    canQuickAdd,
+    canAccessStudio,
     canAccessAdminPanel,
   }),
 );

@@ -1,4 +1,32 @@
-import type { User } from '@/types/user';
+import type { ProfileVisibility, User } from '@/types/user';
+
+/**
+ * Every privacy flag the app actually reads. `profile_visibility` gates the
+ * shared `/u/[username]` pages and `/api/public/library`; the `show_*` flags
+ * gate individual blocks on the profile. They all used to be consumed with no
+ * way to set them.
+ */
+export type ProfilePrivacyState = {
+  profile_visibility: ProfileVisibility;
+  show_full_name: boolean;
+  show_age: boolean;
+  show_location: boolean;
+  show_email: boolean;
+  show_social_links: boolean;
+  show_stats: boolean;
+  show_psn_id: boolean;
+};
+
+export const DEFAULT_PROFILE_PRIVACY: ProfilePrivacyState = {
+  profile_visibility: 'public',
+  show_full_name: false,
+  show_age: false,
+  show_location: true,
+  show_email: false,
+  show_social_links: true,
+  show_stats: true,
+  show_psn_id: true,
+};
 
 export type CategoryNotes = Record<string, unknown>;
 

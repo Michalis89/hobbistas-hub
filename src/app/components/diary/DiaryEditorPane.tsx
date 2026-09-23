@@ -128,9 +128,9 @@ export const DiaryEditorPane = memo(function DiaryEditorPane({
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-[var(--radius-xl)] border border-[hsl(var(--border-default)/0.78)] bg-[hsl(var(--surface-warm)/0.92)] p-5 shadow-[var(--shadow-diary)] sm:p-6">
-      <div className="mb-5 flex items-end justify-between gap-3 pb-3">
-        <div className="flex min-w-0 flex-1 items-end gap-2">
+    <section className="flex h-full min-h-0 flex-col rounded-[var(--radius-xl)] border border-[hsl(var(--border-default)/0.78)] bg-[hsl(var(--surface-warm)/0.92)] p-6 shadow-[var(--shadow-diary)] sm:p-8">
+      <div className="mb-7 flex items-end justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-end gap-3">
           {showBackButton ? (
             <Button
               type="button"
@@ -143,7 +143,7 @@ export const DiaryEditorPane = memo(function DiaryEditorPane({
               <ArrowLeft className="h-4 w-4" />
             </Button>
           ) : null}
-          <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
             <Label
               htmlFor="entry-title"
               className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--text-secondary))]"
@@ -157,7 +157,7 @@ export const DiaryEditorPane = memo(function DiaryEditorPane({
               placeholder="Untitled reflection"
               spellCheck
               lang={writingLanguage}
-              className="h-12 border-0 bg-transparent px-5 text-xl font-semibold leading-tight tracking-[-0.02em] text-[hsl(var(--text-primary))] shadow-none placeholder:text-[hsl(var(--text-tertiary))] focus-visible:ring-0 md:h-12 md:text-2xl"
+              className="h-14 border-0 bg-transparent px-0 font-serif text-2xl font-semibold leading-tight tracking-[-0.02em] text-[hsl(var(--text-primary))] shadow-none placeholder:text-[hsl(var(--text-tertiary))] focus-visible:ring-0 md:h-14 md:text-[30px]"
               maxLength={180}
             />
           </div>
@@ -205,8 +205,8 @@ export const DiaryEditorPane = memo(function DiaryEditorPane({
         </div>
       </div>
 
-      <div className="mb-5 flex flex-col gap-4 border-b border-[hsl(var(--border-default)/0.72)] pb-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 flex-col gap-2.5">
+      <div className="mb-7 flex flex-col gap-6 rounded-[var(--radius-lg)] border border-[hsl(var(--border-subtle)/0.7)] bg-[hsl(var(--surface-overlay)/0.42)] px-5 py-5 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+        <div className="flex min-w-0 flex-col gap-3">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--text-secondary))]">
             Mood
           </span>
@@ -217,7 +217,7 @@ export const DiaryEditorPane = memo(function DiaryEditorPane({
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+        <div className="flex shrink-0 flex-col gap-3 self-start lg:self-auto">
           <Label
             htmlFor="entry-date"
             className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--text-secondary))]"

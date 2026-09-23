@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import type { ArticleCategory, ArticleRow, ArticleTopic } from '@/types/database';
 import ReadingProgress from '@/app/components/article/ReadingProgress.client';
 import { buildMetadata } from '@/utils/seo/metadata/helpers';
@@ -15,6 +16,16 @@ import { parseArticleDoc } from '@/components/article/ArticleBody';
 import { tocFromDoc, tocFromHtml } from '@/lib/articles/toc';
 import ArticleToc from '@/components/article/ArticleToc.client';
 import { verifyPreviewToken } from '@/lib/articles/previewToken';
+import {
+  applyArticleTranslation,
+  availableLocales,
+  findTranslation,
+  isArticleLocale,
+  resolveArticleLocale,
+  type ArticleLocale,
+  type ArticleTranslationRow,
+} from '@/lib/articles/locales';
+import ArticleLanguageSwitcher from '@/app/components/article/ArticleLanguageSwitcher';
 import {
   ArticleBodySection,
   ArticleHeroSection,
@@ -62,12 +73,12 @@ export interface ArticleDetailPageOptions {
 
 export interface ArticleDetailPageProps extends ArticleDetailPageOptions {
   params: MaybePromise<{ slug: string }>;
-  searchParams?: MaybePromise<{ preview?: string }>;
+  searchParams?: MaybePromise<{ preview?: string; lang?: string }>;
 }
 
 interface ArticleMetadataArgs {
   params: MaybePromise<{ slug: string }>;
-  searchParams?: MaybePromise<{ preview?: string }>;
+  searchParams?: MaybePromise<{ preview?: string; lang?: string }>;
   options: ArticleDetailPageOptions;
 }
 
@@ -230,6 +241,47 @@ async function fetchArticle(
   return article;
 }
 
+/**
+ * Every translation this article has.
+ *
+ * Fetched in full rather than filtered to one locale: the switcher needs to
+ * know which languages exist, and at two rows per article that is cheaper than
+ * a second round trip.
+ */
+async function fetchArticleTranslations(articleId: number): Promise<ArticleTranslationRow[]> {
+  const supabase = getSupabaseServer();
+  const { data, error } = await supabase
+    .from('article_translations')
+    .select(
+      'article_id, locale, title, description, content_rich, content_html, meta_title, meta_description',
+    )
+    .eq('article_id', articleId);
+
+  if (error) {
+    // A missing translation table or a failed read must not take the article
+    // down with it - English is always on the article row itself.
+    console.warn('Could not load article translations:', error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+/** The reader's saved reading language, if they have one. */
+async function fetchReaderLocale(userId: string | null): Promise<ArticleLocale | null> {
+  if (!userId) {
+    return null;
+  }
+  const supabase = getSupabaseServer();
+  const { data } = await supabase
+    .from('users')
+    .select('language_preference')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const preference = (data as { language_preference?: unknown } | null)?.language_preference;
+  return isArticleLocale(preference) ? preference : null;
+}
+
 async function fetchArticleMetadata(
   slug: string,
   topicFilter?: ArticleTopic,
@@ -277,12 +329,26 @@ export async function buildArticleDetailMetadata({
   options: { basePath, topicFilter },
 }: ArticleMetadataArgs) {
   const { slug } = await params;
-  const previewToken = (await searchParams)?.preview;
-  const article = await fetchArticleMetadata(slug, topicFilter, previewToken);
+  const resolvedSearchParams = await searchParams;
+  const previewToken = resolvedSearchParams?.preview;
+  const sourceArticle = await fetchArticleMetadata(slug, topicFilter, previewToken);
 
-  if (!article) {
+  if (!sourceArticle) {
     notFound();
   }
+
+  // The tab title, the OG card and the page body have to agree. Resolved the
+  // same way as the page itself, minus the reader's saved preference: metadata
+  // is cached per URL, so it can only depend on the URL.
+  const translations = await fetchArticleTranslations(sourceArticle.id);
+  const metadataLocale = resolveArticleLocale({
+    requested: resolvedSearchParams?.lang,
+    available: availableLocales(translations),
+  });
+  const article = applyArticleTranslation(
+    { ...sourceArticle, content_rich: null, content_html: null },
+    findTranslation(translations, metadataLocale),
+  );
 
   const authorName = article.users?.display_name || article.users?.username || 'Hobbistas';
   const coverImage = article.cover_image ?? undefined;
@@ -320,7 +386,9 @@ export default async function ArticleDetailPage({
   topicFilter,
 }: ArticleDetailPageProps) {
   const { slug } = await params;
-  const previewToken = (await searchParams)?.preview;
+  const resolvedSearchParams = await searchParams;
+  const previewToken = resolvedSearchParams?.preview;
+  const requestedLocale = resolvedSearchParams?.lang;
   const isPublicReviewPage = basePath === '/review';
   let currentUserId: string | null = null;
   let showSocialLayerSections = false;
@@ -344,11 +412,31 @@ export default async function ArticleDetailPage({
     showSocialLayerSections = false;
   }
   const showEngagementUi = Boolean(currentUserId) && showSocialLayerSections;
-  const article = await fetchArticle(slug, topicFilter, previewToken);
+  const sourceArticle = await fetchArticle(slug, topicFilter, previewToken);
 
-  if (!article) {
+  if (!sourceArticle) {
     notFound();
   }
+
+  // Language is resolved before anything is derived from the article, so the
+  // title, the metadata, the table of contents and the structured data all
+  // describe the same version the reader is looking at.
+  const translations = await fetchArticleTranslations(sourceArticle.id);
+  const localeOptions = availableLocales(translations);
+  const [readerLocale, requestHeaders] = await Promise.all([
+    fetchReaderLocale(currentUserId),
+    headers(),
+  ]);
+  const activeLocale: ArticleLocale = resolveArticleLocale({
+    requested: requestedLocale,
+    userPreference: readerLocale,
+    acceptLanguage: requestHeaders.get('accept-language'),
+    available: localeOptions,
+  });
+  const article = applyArticleTranslation(
+    sourceArticle,
+    findTranslation(translations, activeLocale),
+  );
 
   const hasCategory = Boolean(article.category);
   const ARTICLE_HEADER_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
@@ -438,7 +526,25 @@ export default async function ArticleDetailPage({
         <div className="xl:grid xl:grid-cols-[1fr_minmax(0,64rem)_1fr] xl:gap-8">
           <div aria-hidden className="hidden xl:block" />
 
-          <article className="rounded-3xl border border-border bg-card p-4 shadow-2xl sm:p-6 md:p-10">
+          {/*
+            `lang` on the element, not just the page: it is what tells a screen
+            reader which voice to use and the browser how to hyphenate, and it
+            is the one thing that actually differs between the two versions.
+          */}
+          <article
+            lang={activeLocale}
+            className="rounded-3xl border border-border bg-card p-4 shadow-2xl sm:p-6 md:p-10"
+          >
+            {localeOptions.length > 1 ? (
+              <div className="mb-4 flex justify-end">
+                <ArticleLanguageSwitcher
+                  available={localeOptions}
+                  active={activeLocale}
+                  articlePath={articlePath}
+                  previewToken={previewToken}
+                />
+              </div>
+            ) : null}
             <ArticleBodySection
               uiBreadcrumbs={uiBreadcrumbs}
               categoryLabel={categoryLabel}

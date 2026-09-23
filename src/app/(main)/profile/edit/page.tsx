@@ -8,16 +8,24 @@ import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { selectUser, updateUserProfile, logout, fetchSession } from '@/store/slices/authSlice';
 import type { AppDispatch } from '@/store/store';
-import type { User } from '@/types/user';
+import type { ProfileVisibility, User } from '@/types/user';
 import { supabase } from '@/lib/supabase-client';
 import { useUserSettings } from '@/lib/settings/useUserSettings';
+import { isDemoUserId } from '@/lib/demo';
+import { isArticleLocale } from '@/lib/articles/locales';
 import dynamic from 'next/dynamic';
 
 import { SOCIAL_LAYER_HOBBY_CATEGORIES } from './_constants';
-import { type CategoryNotes, type ProfileFormData, EMPTY_CATEGORY_NOTES } from './_types';
+import {
+  type CategoryNotes,
+  type ProfileFormData,
+  type ProfilePrivacyState,
+  DEFAULT_PROFILE_PRIVACY,
+  EMPTY_CATEGORY_NOTES,
+} from './_types';
 import { ProfileEditSkeleton } from './_components/profile-edit-skeleton';
 import { ProfilePageHeader } from './_components/profile-page-header';
-import { PersonalInfoCard } from './_components/personal-info-card';
+import { BIO_MAX_LENGTH, PersonalInfoCard } from './_components/personal-info-card';
 import { CategorySelectionSection } from './_components/category-selection-section';
 import { SaveButtons } from './_components/save-buttons';
 import { DangerZoneCard } from './_components/danger-zone-card';
@@ -29,6 +37,37 @@ const ProfileCategoryTabs = dynamic(
     loading: () => <div className="h-64 animate-pulse rounded-xl bg-muted" />,
   },
 );
+
+/**
+ * A failure this page raised itself, with a message already written for the
+ * person reading it. Everything else reaching the catch is a driver or network
+ * error whose text would leak database internals, so it stays generic.
+ */
+class ProfileSaveError extends Error {}
+
+/**
+ * Reads every privacy flag off the stored JSON. Defaults matter: a flag that
+ * has never been set must fall back to the same value the profile renderer
+ * assumes, or the toggle would show the opposite of what visitors see.
+ */
+function readPrivacySettings(raw: Record<string, unknown> | null | undefined): ProfilePrivacyState {
+  const source = raw ?? {};
+  const flag = (key: keyof ProfilePrivacyState, fallback: boolean) =>
+    (source[key] as boolean | undefined) ?? fallback;
+
+  return {
+    profile_visibility:
+      (source.profile_visibility as ProfileVisibility | undefined) ??
+      DEFAULT_PROFILE_PRIVACY.profile_visibility,
+    show_full_name: flag('show_full_name', DEFAULT_PROFILE_PRIVACY.show_full_name),
+    show_age: flag('show_age', DEFAULT_PROFILE_PRIVACY.show_age),
+    show_location: flag('show_location', DEFAULT_PROFILE_PRIVACY.show_location),
+    show_email: flag('show_email', DEFAULT_PROFILE_PRIVACY.show_email),
+    show_social_links: flag('show_social_links', DEFAULT_PROFILE_PRIVACY.show_social_links),
+    show_stats: flag('show_stats', DEFAULT_PROFILE_PRIVACY.show_stats),
+    show_psn_id: flag('show_psn_id', DEFAULT_PROFILE_PRIVACY.show_psn_id),
+  };
+}
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -47,11 +86,8 @@ export default function EditProfilePage() {
   });
   const [socialLinks, setSocialLinks] = useState<Record<string, string>>({});
   const [locationCity, setLocationCity] = useState('');
-  const [privacySettings, setPrivacySettings] = useState({
-    show_age: false,
-    show_social_links: true,
-    show_location: true,
-  });
+  const [privacySettings, setPrivacySettings] =
+    useState<ProfilePrivacyState>(DEFAULT_PROFILE_PRIVACY);
   const [initialSnapshot, setInitialSnapshot] = useState<string>('');
   const [snapshotUserId, setSnapshotUserId] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -114,6 +150,7 @@ export default function EditProfilePage() {
         date_of_birth: user.date_of_birth || '',
         country: user.country || 'GR',
         timezone: user.timezone || '',
+        language_preference: user.language_preference || 'en',
         display_name: user.display_name || '',
         avatar_url: user.avatar_url || '',
         bio: user.bio || '',
@@ -157,11 +194,8 @@ export default function EditProfilePage() {
       setLocationCity(user.location_city || '');
 
       const rawPrivacy = (user.privacy_settings as unknown as Record<string, unknown>) || {};
-      setPrivacySettings({
-        show_age: (rawPrivacy.show_age as boolean | undefined) ?? false,
-        show_social_links: (rawPrivacy.show_social_links as boolean | undefined) ?? true,
-        show_location: (rawPrivacy.show_location as boolean | undefined) ?? true,
-      });
+      const hydratedPrivacy = readPrivacySettings(rawPrivacy);
+      setPrivacySettings(hydratedPrivacy);
       setAvatarPreview(null);
       const snap = makeSnapshot(
         {
@@ -169,6 +203,7 @@ export default function EditProfilePage() {
           date_of_birth: user.date_of_birth || '',
           country: user.country || 'GR',
           timezone: user.timezone || '',
+          language_preference: user.language_preference || 'en',
           display_name: user.display_name || '',
           avatar_url: user.avatar_url || '',
           bio: user.bio || '',
@@ -209,11 +244,7 @@ export default function EditProfilePage() {
         },
         // Read from new location_city column (clean, no fallback)
         user.location_city || '',
-        {
-          show_age: (rawPrivacy.show_age as boolean | undefined) ?? false,
-          show_social_links: (rawPrivacy.show_social_links as boolean | undefined) ?? true,
-          show_location: (rawPrivacy.show_location as boolean | undefined) ?? true,
-        },
+        hydratedPrivacy,
         (user.avatar_url as string) || '',
       );
       setInitialSnapshot(snap);
@@ -227,6 +258,7 @@ export default function EditProfilePage() {
     return <ProfileEditSkeleton />;
   }
 
+  const isDemoAccount = isDemoUserId(user.id);
   const currentAvatar =
     avatarPreview || (formData.avatar_url as string) || (user.avatar_url as string | null) || '';
   const currentSnapshot = makeSnapshot(
@@ -257,8 +289,12 @@ export default function EditProfilePage() {
     setSocialLinks(prev => ({ ...prev, [key]: value }));
   };
 
-  const togglePrivacySetting = (key: keyof typeof privacySettings) => {
+  const togglePrivacySetting = (key: keyof Omit<ProfilePrivacyState, 'profile_visibility'>) => {
     setPrivacySettings(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleVisibilityChange = (profile_visibility: ProfileVisibility) => {
+    setPrivacySettings(prev => ({ ...prev, profile_visibility }));
   };
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,7 +324,7 @@ export default function EditProfilePage() {
     data: ProfileFormData,
     socials: Record<string, string>,
     locCity: string,
-    privacy: typeof privacySettings,
+    privacy: ProfilePrivacyState,
     avatarMarker: string,
   ) {
     const { favorite_genres, categories, category_notes, ...rest } = data;
@@ -367,6 +403,18 @@ export default function EditProfilePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlert(null);
+
+    // The profile write goes straight to Supabase, so this is the only place
+    // the counter's limit is actually enforced.
+    const bioValue = (formData.bio as string | undefined) ?? '';
+    if (bioValue.length > BIO_MAX_LENGTH) {
+      setAlert({
+        type: 'error',
+        message: `Your bio is ${bioValue.length} characters. The limit is ${BIO_MAX_LENGTH}.`,
+      });
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -406,6 +454,10 @@ export default function EditProfilePage() {
         date_of_birth: emptyToNull(rest.date_of_birth),
         country: emptyToNull(rest.country),
         timezone: emptyToNull(rest.timezone),
+        // Narrowed at the boundary: the column is free text, the app is not.
+        language_preference: isArticleLocale(rest.language_preference)
+          ? rest.language_preference
+          : 'en',
         display_name: emptyToNull(rest.display_name),
         bio: emptyToNull(rest.bio),
         avatar_url: uploadedAvatarUrl || emptyToNull(rest.avatar_url) || user.avatar_url || null,
@@ -421,15 +473,19 @@ export default function EditProfilePage() {
         }),
       ).unwrap();
 
-      // Update location_city using new endpoint
-      try {
-        await fetch('/api/me/location', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ location_city: locationCity || null }),
-        });
-      } catch (error) {
-        console.warn('Failed to update location (non-critical):', error);
+      // The city lives on its own endpoint. A failure here used to be logged
+      // and swallowed, so the form still reported success while the city was
+      // silently dropped.
+      const locationResponse = await fetch('/api/me/location', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_city: locationCity || null }),
+      });
+      if (!locationResponse.ok) {
+        const failure = await locationResponse.json().catch(() => null);
+        throw new ProfileSaveError(
+          typeof failure?.error === 'string' ? failure.error : 'Failed to save your city.',
+        );
       }
 
       // Build category profile from selected categories (keys define enabled categories)
@@ -458,7 +514,7 @@ export default function EditProfilePage() {
         const failure = await categoryProfileResponse.json().catch(() => null);
         const failureMessage =
           typeof failure?.error === 'string' ? failure.error : 'Failed to update category profile';
-        throw new Error(failureMessage);
+        throw new ProfileSaveError(failureMessage);
       }
 
       // Refetch user to update Redux store with latest data (including category_profile)
@@ -489,6 +545,11 @@ export default function EditProfilePage() {
       // Handle specific database constraint errors
       let errorMessage = 'Profile update failed. Please try again.';
       const errorStr = String(error);
+
+      if (error instanceof ProfileSaveError) {
+        setAlert({ type: 'error', message: error.message });
+        return;
+      }
 
       if (errorStr.includes('23505') || errorStr.includes('unique constraint')) {
         if (errorStr.includes('psn_id')) {
@@ -624,6 +685,7 @@ export default function EditProfilePage() {
               onSocialLinkChange={handleSocialLinkChange}
               onLocationCityChange={setLocationCity}
               onPrivacyToggle={togglePrivacySetting}
+              onVisibilityChange={handleVisibilityChange}
               onAvatarUpload={handleAvatarUpload}
               onAvatarRemove={handleAvatarRemove}
             />
@@ -768,7 +830,12 @@ export default function EditProfilePage() {
               </CardContent>
             </Card>
 
-            <SaveButtons saving={saving} isDirty={isDirty} onCancel={handleCancel} />
+            <SaveButtons
+              saving={saving}
+              isDirty={isDirty}
+              isDemo={isDemoAccount}
+              onCancel={handleCancel}
+            />
           </form>
 
           {/* Danger Zone */}
@@ -776,6 +843,7 @@ export default function EditProfilePage() {
             showDeleteConfirm={showDeleteConfirm}
             deleteConfirmText={deleteConfirmText}
             deleting={deleting}
+            isDemo={isDemoAccount}
             onShowDeleteConfirm={() => setShowDeleteConfirm(true)}
             onCancelDelete={() => {
               setShowDeleteConfirm(false);

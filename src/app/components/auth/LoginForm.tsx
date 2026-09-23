@@ -2,6 +2,7 @@
 
 import { LogIn } from 'lucide-react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import DemoLoginButton from '@/app/components/auth/DemoLoginButton.client';
 import { AuthFormContainer } from '@/app/components/auth/shared/AuthFormContainer';
 import {
   CaptchaSection,
@@ -112,6 +113,8 @@ export default function LoginForm() {
             isRedirecting={isRedirecting}
             canSubmit={canSubmit}
           />
+
+          <DemoLoginButton />
 
           <SignUpPrompt redirectParam={redirectParam} />
         </form>

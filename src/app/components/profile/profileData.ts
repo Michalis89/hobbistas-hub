@@ -169,6 +169,7 @@ export function getPrivacyValue<T>(
   user: User,
   key:
     | 'show_age'
+    | 'show_full_name'
     | 'show_location'
     | 'show_social_links'
     | 'show_stats'
