@@ -1,0 +1,33 @@
+{
+  // Typecheck scope for `next build` and for CI: production source only.
+  //
+  // The root tsconfig also matches `__tests__`, and jest specs legitimately
+  // pass partial mocks where the real type wants a full interface. Running
+  // `tsc` over them reports errors that say nothing about whether the app is
+  // sound, so the build checks what actually ships and jest keeps proving the
+  // tests.
+  //
+  // Next.js used to apply this distinction itself: `runTypeCheck` dropped every
+  // diagnostic coming from `__tests__`, `__mocks__` or a `*.test.*` file. Next
+  // 16.3 turned `experimental.useTypeScriptCli` on by default, and the CLI
+  // checker runs the whole TypeScript project with no such filter, so the scope
+  // has to be expressed here instead. `next.config.ts` points
+  // `typescript.tsconfigPath` at this file.
+  //
+  // Editors still load the root tsconfig, so specs keep their type errors where
+  // they are useful.
+  "extends": "./tsconfig.json",
+  // `exclude` replaces the base list rather than extending it, so the base
+  // entries are repeated here on purpose.
+  "exclude": [
+    "node_modules",
+    "cypress",
+    "cypress.config.ts",
+    "supabase/functions/**/*.ts",
+    "__mocks__/**",
+    "jest.setup.ts",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
+}
