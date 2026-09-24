@@ -20,6 +20,7 @@ import {
   type NavbarFeatureFilters,
 } from './navbar/navbar.data';
 import { useUserSettings } from '@/lib/settings/useUserSettings';
+import { useIsDemoUser } from '@/lib/demo/useIsDemoUser';
 import { useTicketNotificationCount } from '@/lib/hooks/useTicketNotificationCount';
 
 
@@ -67,6 +68,10 @@ export default function Navbar() {
   );
 
   const shouldLoadSettings = isAuthenticated && authResolved;
+  // The demo account is shared. Its theme is kept per-browser rather than
+  // per-account: persisting it would change the appearance for every other
+  // visitor, and the write is refused anyway, which rolled the toggle back.
+  const isDemoUser = useIsDemoUser();
   const { settings, mutate: mutateSettings } = useUserSettings(shouldLoadSettings);
   const {
     userCount: userTicketUnreadCount,
@@ -125,10 +130,15 @@ export default function Navbar() {
 
   // Sync theme preference from user settings when loaded
   useEffect(() => {
+    if (isDemoUser) {
+      // Otherwise this would pull the shared account's stored theme straight
+      // back over whatever this visitor just chose.
+      return;
+    }
     if (shouldLoadSettings && settings?.theme && settings.theme !== themePreference) {
       setThemePreference(settings.theme);
     }
-  }, [shouldLoadSettings, settings?.theme, themePreference, setThemePreference]);
+  }, [isDemoUser, shouldLoadSettings, settings?.theme, themePreference, setThemePreference]);
 
   const handleThemeToggle = useCallback(async () => {
     if (isThemeSaving) {
@@ -144,8 +154,9 @@ export default function Navbar() {
     // Update theme preference in context (this will also update localStorage and cookies)
     setThemePreference(nextPreference);
 
-    // If user is not authenticated, just update local state
-    if (!shouldLoadSettings) {
+    // Unauthenticated visitors, and the shared demo account, keep the theme
+    // locally: the cookie and localStorage write above is the whole story.
+    if (!shouldLoadSettings || isDemoUser) {
       return;
     }
 
@@ -182,6 +193,7 @@ export default function Navbar() {
       setIsThemeSaving(false);
     }
   }, [
+    isDemoUser,
     isThemeSaving,
     mutateSettings,
     setThemePreference,
