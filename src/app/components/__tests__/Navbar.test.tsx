@@ -22,7 +22,7 @@ type NavbarAuthState = {
     username?: string;
     category_profile?: Record<string, unknown>;
   };
-  canQuickAdd: boolean;
+  canAccessStudio: boolean;
   canAccessAdminPanel: boolean;
 };
 
@@ -71,7 +71,7 @@ jest.mock('@/app/components/navbar/DesktopNav', () => ({
       <span data-testid="desktop-hobby-count">{(props.hobbyItems as unknown[]).length}</span>
       <span data-testid="desktop-dnd-count">{(props.dndTools as unknown[]).length}</span>
       <span data-testid="desktop-ticket-count">{String(props.hasAnyTicketUnread)}</span>
-      <button type="button" onClick={props.onAdd as () => void}>
+      <button type="button" onClick={props.onOpenStudio as () => void}>
         Desktop add
       </button>
       <button type="button" onClick={props.onLogout as () => void}>
@@ -92,7 +92,7 @@ jest.mock('@/app/components/navbar/MobileNavSheet', () => ({
       <button type="button" onClick={() => (props.onOpenChange as (open: boolean) => void)(true)}>
         Open mobile
       </button>
-      <button type="button" onClick={props.onAdd as () => void}>
+      <button type="button" onClick={props.onOpenStudio as () => void}>
         Mobile add
       </button>
       <button type="button" onClick={props.onLogout as () => void}>
@@ -140,7 +140,7 @@ describe('Navbar', () => {
       isAuthenticated: true,
       isLoading: false,
       user: { id: 'user-1', username: 'michalis', category_profile: { games: {}, books: {} } },
-      canQuickAdd: true,
+      canAccessStudio: true,
       canAccessAdminPanel: true,
     };
     themeState = { theme: 'dark', themePreference: 'dark' };
@@ -183,7 +183,7 @@ describe('Navbar', () => {
       isAuthenticated: true,
       isLoading: true,
       user: null,
-      canQuickAdd: false,
+      canAccessStudio: false,
       canAccessAdminPanel: false,
     };
 
@@ -193,7 +193,7 @@ describe('Navbar', () => {
     expect(document.querySelector('.max-w-none')).toBeInTheDocument();
   });
 
-  it('renders authenticated navigation data, opens and closes quick add, and tracks mobile open state', async () => {
+  it('renders authenticated navigation data, opens the studio, and tracks mobile open state', async () => {
     const user = userEvent.setup();
 
     render(<Navbar />);
@@ -210,11 +210,11 @@ describe('Navbar', () => {
     expect(screen.getByTestId('mobile-admin-count')).toHaveTextContent('3');
 
     await user.click(screen.getByRole('button', { name: 'Desktop add' }));
-    expect(pushMock).toHaveBeenCalledWith('/studio/new');
+    expect(pushMock).toHaveBeenCalledWith('/studio');
 
     pushMock.mockClear();
     await user.click(screen.getByRole('button', { name: 'Mobile add' }));
-    expect(pushMock).toHaveBeenCalledWith('/studio/new');
+    expect(pushMock).toHaveBeenCalledWith('/studio');
 
     await user.click(screen.getByRole('button', { name: 'Open mobile' }));
     expect(screen.getByTestId('mobile-nav')).toHaveAttribute('data-open', 'true');
@@ -308,7 +308,7 @@ describe('Navbar', () => {
       isAuthenticated: false,
       isLoading: false,
       user: null,
-      canQuickAdd: false,
+      canAccessStudio: false,
       canAccessAdminPanel: false,
     };
 

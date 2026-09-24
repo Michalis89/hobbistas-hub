@@ -2,6 +2,7 @@ import React from 'react';
 import NavbarWrapper from './NavbarWrapper';
 import { Footer } from './layout/Footer';
 import AppRuntimeEnhancements from './shared/AppRuntimeEnhancements';
+import DemoBanner from './shared/DemoBanner.client';
 import { TicketNotificationProvider } from '@/context/TicketNotificationContext';
 
 type Props = {
@@ -26,6 +27,7 @@ export default function AppShell({ children }: Props) {
       <TicketNotificationProvider>
         <div className="relative flex min-h-screen flex-col">
           <NavbarWrapper />
+          <DemoBanner />
           <main
             id="main-content"
             className="app-main-shell flex-1"

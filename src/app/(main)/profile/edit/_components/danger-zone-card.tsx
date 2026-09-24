@@ -9,6 +9,8 @@ interface DangerZoneCardProps {
   showDeleteConfirm: boolean;
   deleteConfirmText: string;
   deleting: boolean;
+  /** Hidden for the shared demo account, which nobody should be able to delete. */
+  isDemo?: boolean;
   onShowDeleteConfirm: () => void;
   onCancelDelete: () => void;
   onDeleteConfirmTextChange: (text: string) => void;
@@ -19,11 +21,18 @@ export function DangerZoneCard({
   showDeleteConfirm,
   deleteConfirmText,
   deleting,
+  isDemo = false,
   onShowDeleteConfirm,
   onCancelDelete,
   onDeleteConfirmTextChange,
   onDeleteAccount,
 }: DangerZoneCardProps) {
+  // `withApiRoute` refuses the request, but a shared account should not be
+  // showing strangers a button that offers to delete it.
+  if (isDemo) {
+    return null;
+  }
+
   return (
     <Card className="">
       <CardHeader>

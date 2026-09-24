@@ -11,7 +11,7 @@ import authReducer, {
   selectAuthError,
   selectCanAccessAdminPanel,
   selectCanEditArticles,
-  selectCanQuickAdd,
+  selectCanAccessStudio,
   selectIsAdmin,
   selectIsAdminOrModerator,
   selectIsAuthenticated,
@@ -297,7 +297,7 @@ describe('authSlice', () => {
     expect(selectUserRoles({ auth: { ...state.auth, user: null } })).toEqual([]);
 
     (hasAnyRole as jest.Mock).mockReturnValue(true);
-    expect(selectCanQuickAdd(state)).toBe(true);
+    expect(selectCanAccessStudio(state)).toBe(true);
     expect(selectCanAccessAdminPanel(state)).toBe(true);
     expect(selectIsAdmin(state)).toBe(true);
     expect(selectIsAdminOrModerator(state)).toBe(true);
@@ -305,7 +305,7 @@ describe('authSlice', () => {
     expect(hasAnyRole).toHaveBeenCalled();
 
     (hasAnyRole as jest.Mock).mockReturnValue(false);
-    expect(selectCanQuickAdd({ auth: { ...state.auth, user: null } })).toBe(false);
+    expect(selectCanAccessStudio({ auth: { ...state.auth, user: null } })).toBe(false);
 
     expect(selectIsAuthorOf('u1')(state)).toBe(true);
     expect(selectIsAuthorOf('u2')(state)).toBe(false);
@@ -317,7 +317,7 @@ describe('authSlice', () => {
       isAuthenticated: true,
       isLoading: false,
       user,
-      canQuickAdd: true,
+      canAccessStudio: true,
       canAccessAdminPanel: true,
     });
   });

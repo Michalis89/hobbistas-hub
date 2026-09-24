@@ -18,6 +18,10 @@ jest.mock('next/link', () => ({
   ),
 }));
 
+jest.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'accept-language': 'en-US,en;q=0.9' }),
+}));
+
 jest.mock('next/navigation', () => ({
   __esModule: true,
   notFound: jest.fn(),
@@ -205,10 +209,16 @@ function createSupabaseMock({
   singleResolvers = [],
   listResolvers = [],
   likesResolvers = [],
+  translationResolver,
+  readerLocaleResolver,
 }: {
   singleResolvers?: Array<Resolver<{ data: unknown; error: unknown }>>;
   listResolvers?: Array<Resolver<{ data: unknown; error: unknown }>>;
   likesResolvers?: Array<Resolver<{ count: unknown }>>;
+  /** Rows in `article_translations`; defaults to none. */
+  translationResolver?: () => { data: unknown; error: unknown };
+  /** The reader's saved language; defaults to unset. */
+  readerLocaleResolver?: () => { data: unknown; error: unknown };
 }) {
   const singles = [...singleResolvers];
   const lists = [...listResolvers];
@@ -216,6 +226,30 @@ function createSupabaseMock({
 
   return {
     from: (table: string) => {
+      // Handled before the generic builder so they do not consume a resolver
+      // from the queues the article/related queries are sequenced against.
+      if (table === 'article_translations') {
+        const translationQuery = {
+          select: () => translationQuery,
+          eq: () => translationQuery,
+          then: (onFulfilled?: (value: { data: unknown; error: unknown }) => unknown) =>
+            Promise.resolve(
+              translationResolver ? translationResolver() : { data: [], error: null },
+            ).then(onFulfilled),
+        };
+        return translationQuery;
+      }
+
+      if (table === 'users') {
+        const userQuery = {
+          select: () => userQuery,
+          eq: () => userQuery,
+          maybeSingle: async () =>
+            readerLocaleResolver ? readerLocaleResolver() : { data: null, error: null },
+        };
+        return userQuery;
+      }
+
       if (table === 'article_likes') {
         return {
           select: () => ({
@@ -262,6 +296,10 @@ function createSupabaseMock({
             return { data: null, error: { message: 'no single resolver' } };
           }
           return resolver(state);
+        },
+        maybeSingle: async () => {
+          const resolver = singles.shift();
+          return resolver ? resolver(state) : { data: null, error: null };
         },
         then: (
           onFulfilled?: (value: { data: unknown; error: unknown }) => unknown,

@@ -5,8 +5,8 @@ import {
   LogOut,
   Menu,
   PenLine,
+  PenSquare,
   Settings,
-  Plus,
   ShieldCheck,
   Ticket,
   User,
@@ -33,12 +33,12 @@ type MobileNavSheetProps = {
   authResolved: boolean;
   isAuthenticated: boolean;
   user: UserEntity | null;
-  canQuickAdd: boolean;
+  canAccessStudio: boolean;
   canAccessAdminPanel: boolean;
   userTicketUnreadCount: number;
   adminTicketUnreadCount: number;
   hasAnyTicketUnread: boolean;
-  onAdd: () => void;
+  onOpenStudio: () => void;
   onLogout: () => Promise<void>;
   theme: Theme;
   onToggleTheme: () => void;
@@ -55,12 +55,12 @@ export const MobileNavSheet = React.memo(function MobileNavSheet({
   authResolved,
   isAuthenticated,
   user,
-  canQuickAdd,
+  canAccessStudio,
   canAccessAdminPanel,
   userTicketUnreadCount,
   adminTicketUnreadCount,
   hasAnyTicketUnread,
-  onAdd,
+  onOpenStudio,
   onLogout,
   theme,
   onToggleTheme,
@@ -238,18 +238,18 @@ export const MobileNavSheet = React.memo(function MobileNavSheet({
                   <NavbarAuthSkeletonMobile />
                 ) : isAuthenticated && user ? (
                   <div className="grid gap-2">
-                    {canQuickAdd ? (
+                    {canAccessStudio ? (
                       <Button
                         type="button"
                         variant="secondary"
                         className="h-11 justify-start border border-[var(--border)] bg-card px-3 text-[13px] font-medium tracking-[-0.01em] transition-[background-color,color,border-color,transform] duration-200 [transition-timing-function:var(--easing-default)] hover:bg-[hsl(var(--accent))/10] active:scale-[0.98]"
                         onClick={() => {
                           closeSheet();
-                          onAdd();
+                          onOpenStudio();
                         }}
                       >
-                        <Plus className="size-4" />
-                        <span>Quick add</span>
+                        <PenSquare className="size-4" />
+                        <span>Studio</span>
                       </Button>
                     ) : null}
                     <Button

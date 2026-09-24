@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import EmptyState from '@/components/ui/empty';
 import { FormattedDate } from '@/utils/components/FormattedDate';
 import { CATEGORIES } from '@/lib/articles/composerConfig';
+import DeleteArticleButton from '@/app/components/studio/DeleteArticleButton.client';
 import type { ArticleCategory } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -172,6 +173,11 @@ export default async function StudioPage() {
                           </Link>
                         </Button>
                       )}
+                      <DeleteArticleButton
+                        articleId={row.id}
+                        title={row.title}
+                        isPublished={row.status === 'published'}
+                      />
                     </span>
                   </li>
                 );

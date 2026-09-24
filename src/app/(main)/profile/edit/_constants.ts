@@ -15,7 +15,11 @@ export const SOCIAL_PLATFORMS = [
   { key: 'website', label: 'Portfolio / Website', icon: Globe2, placeholder: 'https://...' },
 ];
 
-export const TIMEZONES = [
+/**
+ * Used only when the runtime cannot enumerate zones itself, which in practice
+ * means a browser older than the ones this app targets.
+ */
+const TIMEZONE_FALLBACK = [
   'Europe/Athens',
   'Europe/London',
   'Europe/Berlin',
@@ -24,6 +28,24 @@ export const TIMEZONES = [
   'America/Los_Angeles',
   'Asia/Tokyo',
 ];
+
+/**
+ * Every zone the platform knows about. The list used to be seven hardcoded
+ * entries, which silently excluded most of the world from picking their own.
+ */
+function buildTimezones(): string[] {
+  try {
+    const supported = Intl.supportedValuesOf?.('timeZone');
+    if (supported && supported.length > 0) {
+      return [...supported];
+    }
+  } catch {
+    // Older runtimes throw on an unknown key rather than returning undefined.
+  }
+  return [...TIMEZONE_FALLBACK];
+}
+
+export const TIMEZONES = buildTimezones();
 
 export const PRIMARY_HOBBY_CATEGORIES = [
   'games',

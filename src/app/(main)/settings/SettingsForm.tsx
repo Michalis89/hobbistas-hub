@@ -179,7 +179,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       setFormState(previousState);
       const message = error instanceof Error ? error.message : 'Unable to save settings.';
       setErrorMessage(message);
-      toast.error('Unable to save settings. Please try again.');
+      // The banner and the toast said different things: the banner carried the
+      // server's reason while the toast always claimed a retry would help.
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }

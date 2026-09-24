@@ -9,25 +9,50 @@ import { Button } from '@/components/ui/button';
 import { AvatarImage } from '@/components/ui/avatar-image';
 import { COUNTRIES } from '@/data/hobbyConstants';
 import { SOCIAL_PLATFORMS, TIMEZONES } from '../_constants';
-import type { ProfileFormData } from '../_types';
-import type { User } from '@/types/user';
+import { ARTICLE_LOCALES, ARTICLE_LOCALE_LABELS } from '@/lib/articles/locales';
+import type { ProfileFormData, ProfilePrivacyState } from '../_types';
+import type { ProfileVisibility, User } from '@/types/user';
+
+export const BIO_MAX_LENGTH = 500;
+
+/**
+ * `friends` exists in the column's enum but nothing implements a friend list,
+ * so offering it would promise filtering the app does not do.
+ */
+const VISIBILITY_OPTIONS: readonly ProfileVisibility[] = ['public', 'private'];
+
+const VISIBILITY_LABELS: Record<string, string> = {
+  public: 'Public - anyone with the link',
+  private: 'Private - only you',
+};
+
+const PRIVACY_TOGGLES: ReadonlyArray<{
+  key: keyof Omit<ProfilePrivacyState, 'profile_visibility'>;
+  label: string;
+  hint: string;
+}> = [
+  { key: 'show_full_name', label: 'Show full name', hint: 'Your legal name on your profile.' },
+  { key: 'show_age', label: 'Show age', hint: 'Derived from your date of birth.' },
+  { key: 'show_location', label: 'Show country/city', hint: 'Where you are based.' },
+  { key: 'show_email', label: 'Show email', hint: 'Visible to anyone who opens your profile.' },
+  { key: 'show_social_links', label: 'Show social links', hint: 'Your linked accounts.' },
+  { key: 'show_stats', label: 'Show stats', hint: 'Library counts and totals.' },
+  { key: 'show_psn_id', label: 'Show gaming IDs', hint: 'PSN, Xbox, Steam and Nintendo handles.' },
+];
 
 interface PersonalInfoCardProps {
   user: User;
   formData: ProfileFormData;
   socialLinks: Record<string, string>;
   locationCity: string;
-  privacySettings: {
-    show_age: boolean;
-    show_social_links: boolean;
-    show_location: boolean;
-  };
+  privacySettings: ProfilePrivacyState;
   currentAvatar: string;
   onFormChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSelectChange: (name: string) => (value: string) => void;
   onSocialLinkChange: (key: string, value: string) => void;
   onLocationCityChange: (city: string) => void;
-  onPrivacyToggle: (key: 'show_age' | 'show_social_links' | 'show_location') => void;
+  onPrivacyToggle: (key: keyof Omit<ProfilePrivacyState, 'profile_visibility'>) => void;
+  onVisibilityChange: (visibility: ProfileVisibility) => void;
   onAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAvatarRemove: () => void;
 }
@@ -44,6 +69,7 @@ export function PersonalInfoCard({
   onSocialLinkChange,
   onLocationCityChange,
   onPrivacyToggle,
+  onVisibilityChange,
   onAvatarUpload,
   onAvatarRemove,
 }: PersonalInfoCardProps) {
@@ -60,7 +86,12 @@ export function PersonalInfoCard({
             <span>Account Information</span>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Input label="Username" value={user.username} disabled />
+            <div>
+              <Input label="Username" value={user.username} disabled />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Your handle is permanent - it is part of every link to your profile.
+              </p>
+            </div>
             <Input
               label="Display Name"
               type="text"
@@ -94,7 +125,7 @@ export function PersonalInfoCard({
         <div className="bg-card/88 rounded-lg border p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <MapPin className="h-4 w-4 text-primary" />
-            <span>Location Details</span>
+            <span>Location &amp; Language</span>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Select
@@ -119,6 +150,19 @@ export function PersonalInfoCard({
               value={(formData.timezone as string) || ''}
               onChange={onSelectChange('timezone')}
             />
+            <div>
+              <Select
+                key={`language-${formData.language_preference || 'none'}`}
+                label="Reading language"
+                options={ARTICLE_LOCALES}
+                optionLabels={ARTICLE_LOCALE_LABELS}
+                value={(formData.language_preference as string) || ''}
+                onChange={onSelectChange('language_preference')}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Articles and reviews open in this language when a translation exists.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -131,10 +175,11 @@ export function PersonalInfoCard({
               onChange={onFormChange}
               placeholder="Tell us a few words about yourself..."
               rows={4}
+              maxLength={BIO_MAX_LENGTH}
             />
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            {formData.bio?.length || 0} / 500 characters
+            {formData.bio?.length || 0} / {BIO_MAX_LENGTH} characters
           </div>
         </div>
 
@@ -144,9 +189,6 @@ export function PersonalInfoCard({
               <Link2 className="h-4 w-4 text-primary" />
               <span>Social Presence</span>
             </div>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              2 columns - with icons
-            </p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {SOCIAL_PLATFORMS.map(platform => {
@@ -174,102 +216,100 @@ export function PersonalInfoCard({
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="bg-card/88 rounded-lg border p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Camera className="h-4 w-4 text-primary" />
-              <span>Profile Photo</span>
+        <div className="bg-card/88 rounded-lg border p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Camera className="h-4 w-4 text-primary" />
+            <span>Profile Photo</span>
+          </div>
+          <div className="flex items-start gap-4">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full border border-border bg-card">
+              {currentAvatar ? (
+                <AvatarImage src={currentAvatar} alt="Avatar" size={80} className="rounded-full" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                  No avatar
+                </div>
+              )}
             </div>
-            <div className="flex items-start gap-4">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-border bg-card">
-                {currentAvatar ? (
-                  <AvatarImage
-                    src={currentAvatar}
-                    alt="Avatar"
-                    size={80}
-                    className="rounded-full"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                    No avatar
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Avatar Upload
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={onAvatarUpload}
-                    className="block w-full text-xs text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:font-semibold file:uppercase file:tracking-wide file:text-background hover:file:opacity-90"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Auto-avatar generation: placeholder for a future release.
-                  </p>
-                </div>
-                <Input
-                  label="Avatar URL"
-                  type="text"
-                  name="avatar_url"
-                  value={(formData.avatar_url as string) || ''}
-                  onChange={onFormChange}
-                  placeholder="https://..."
+            <div className="flex-1 space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Avatar Upload
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={onAvatarUpload}
+                  className="block w-full text-xs text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:font-semibold file:uppercase file:tracking-wide file:text-background hover:file:opacity-90"
                 />
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={onAvatarRemove}>
-                    Remove
-                  </Button>
-                  <Button type="button" variant={'primary'} disabled>
-                    Auto-avatar (soon)
-                  </Button>
-                </div>
               </div>
+              <Input
+                label="Avatar URL"
+                type="text"
+                name="avatar_url"
+                value={(formData.avatar_url as string) || ''}
+                onChange={onFormChange}
+                placeholder="https://..."
+              />
+              <Button type="button" variant="outline" onClick={onAvatarRemove}>
+                Remove
+              </Button>
             </div>
           </div>
+        </div>
 
-          <div className="bg-card/88 rounded-lg border p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              <span>Privacy Settings</span>
-            </div>
-            <div className="space-y-3">
-              {[
-                { key: 'show_age', label: 'Show age' },
-                { key: 'show_social_links', label: 'Show social links' },
-                { key: 'show_location', label: 'Show country/city' },
-              ].map(setting => {
-                const active = (privacySettings as Record<string, boolean>)[setting.key];
-                return (
-                  <Button
-                    type="button"
-                    key={setting.key}
-                    onClick={() =>
-                      onPrivacyToggle(
-                        setting.key as 'show_age' | 'show_social_links' | 'show_location',
-                      )
-                    }
-                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
-                      active
-                        ? `bg-primary/12 dark:bg-primary/22 border-primary/30 text-primary dark:border-primary/55 dark:text-[#8ec5ff]`
-                        : `hover:bg-primary/8 border-border bg-card text-foreground hover:border-primary/35`
-                    }`}
-                  >
-                    <span className="text-sm font-medium">{setting.label}</span>
-                    {active ? (
-                      <Eye className="h-4 w-4 text-primary" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </Button>
-                );
-              })}
-              <p className="text-[11px] text-muted-foreground">
-                Small settings that give you better control over your profile.
-              </p>
-            </div>
+        <div className="bg-card/88 rounded-lg border p-4">
+          <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <span>Privacy Settings</span>
+          </div>
+          <p className="mb-4 text-[11px] text-muted-foreground">
+            Visibility controls what other people can reach. The switches below control what each
+            visitor sees once they are there.
+          </p>
+
+          <div className="mb-4 max-w-md">
+            <Select
+              key={`visibility-${privacySettings.profile_visibility}`}
+              label="Profile visibility"
+              options={VISIBILITY_OPTIONS}
+              optionLabels={VISIBILITY_LABELS}
+              value={privacySettings.profile_visibility}
+              onChange={value => onVisibilityChange(value as ProfileVisibility)}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Private also disables your shared dashboard and backlog links.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {PRIVACY_TOGGLES.map(setting => {
+              const active = privacySettings[setting.key];
+              return (
+                <Button
+                  type="button"
+                  key={setting.key}
+                  onClick={() => onPrivacyToggle(setting.key)}
+                  className={`flex h-auto w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                    active
+                      ? `bg-primary/12 dark:bg-primary/22 border-primary/30 text-primary dark:border-primary/55 dark:text-[#8ec5ff]`
+                      : `hover:bg-primary/8 border-border bg-card text-foreground hover:border-primary/35`
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{setting.label}</span>
+                    <span className="block text-[11px] font-normal text-muted-foreground">
+                      {setting.hint}
+                    </span>
+                  </span>
+                  {active ? (
+                    <Eye className="h-4 w-4 shrink-0 text-primary" />
+                  ) : (
+                    <EyeOff className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                </Button>
+              );
+            })}
           </div>
         </div>
       </CardContent>

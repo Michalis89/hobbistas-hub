@@ -15,6 +15,11 @@ jest.mock('@/app/components/shared/AppRuntimeEnhancements', () => ({
   default: () => <div data-testid="runtime-enhancements" />,
 }));
 
+jest.mock('@/app/components/shared/DemoBanner.client', () => ({
+  __esModule: true,
+  default: () => <div data-testid="demo-banner" />,
+}));
+
 jest.mock('@/context/TicketNotificationContext', () => ({
   TicketNotificationProvider: ({ children }: { children: React.ReactNode }) => (
     <section data-testid="ticket-provider">{children}</section>
@@ -32,6 +37,7 @@ describe('AppShell', () => {
     expect(screen.getByTestId('runtime-enhancements')).toBeInTheDocument();
     expect(screen.getByTestId('ticket-provider')).toBeInTheDocument();
     expect(screen.getByTestId('navbar-wrapper')).toBeInTheDocument();
+    expect(screen.getByTestId('demo-banner')).toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content');
     expect(screen.getByRole('heading', { name: 'Dashboard content' })).toBeInTheDocument();
     expect(screen.getByTestId('footer')).toBeInTheDocument();

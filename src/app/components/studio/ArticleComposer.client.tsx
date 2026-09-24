@@ -14,6 +14,7 @@ import {
   Loader2,
   Send,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ErrorAlert } from '@/components/ui/alert';
 import { CONTENT_PUBLISHED_EVENT } from '@/app/constants/contentEvents';
@@ -21,6 +22,7 @@ import type { ContentPublishedEventDetail } from '@/app/constants/contentEvents'
 import { slugify } from '@/utils/slugify';
 import ComposerSidebar from './ComposerSidebar.client';
 import RevisionHistory, { type RestoredRevision } from './RevisionHistory.client';
+import ArticleTranslationEditor from './ArticleTranslationEditor.client';
 import { isSaveable, useArticleDraft, type ComposerDraft } from './useArticleDraft';
 
 const RichTextEditor = dynamic(() => import('@/app/components/editor/RichTextEditor.client'), {
@@ -146,16 +148,33 @@ export default function ArticleComposer({
     const succeeded = await save({ status: wantsSchedule ? 'scheduled' : 'published' });
     setIsPublishing(false);
 
-    if (succeeded) {
-      setSlug(previewSlug);
-      if (!wantsSchedule) {
-        window.dispatchEvent(
-          new CustomEvent<ContentPublishedEventDetail>(CONTENT_PUBLISHED_EVENT, {
-            detail: { type: draft.type },
-          }),
-        );
-      }
+    if (!succeeded) {
+      // `save` surfaced the reason in the error banner already.
+      return;
     }
+
+    setSlug(previewSlug);
+
+    if (wantsSchedule) {
+      toast.success(`Scheduled for ${scheduledAt?.toLocaleString() ?? 'later'}`);
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent<ContentPublishedEventDetail>(CONTENT_PUBLISHED_EVENT, {
+        detail: { type: draft.type },
+      }),
+    );
+
+    // Staying in the composer is deliberate: the first thing anyone does after
+    // publishing is fix a typo they just spotted. The toast carries the link
+    // out, so nothing forces a round trip through the studio list.
+    toast.success(isPublished ? 'Article updated' : 'Published', {
+      action: {
+        label: 'View',
+        onClick: () => window.open(`${basePath}/${previewSlug}`, '_blank'),
+      },
+    });
   };
 
   const canPublish = isSaveable(draft) && Boolean(draft.contentHtml.trim());
@@ -297,6 +316,18 @@ export default function ArticleComposer({
           />
           <RevisionHistory articleId={articleId} onRestore={handleRestore} />
         </div>
+      </div>
+
+      {/*
+        Full width rather than in the sidebar: it hosts a second rich text
+        editor, which needs the same room as the one above it.
+      */}
+      <div className="mt-8">
+        <ArticleTranslationEditor
+          articleId={articleId}
+          locale="el"
+          mediaCategory={draft.category}
+        />
       </div>
 
       {articleId === null && (

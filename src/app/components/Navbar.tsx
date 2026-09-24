@@ -36,7 +36,7 @@ export default function Navbar() {
     isAuthenticated,
     isLoading: isAuthLoading,
     user,
-    canQuickAdd,
+    canAccessStudio,
     canAccessAdminPanel,
   } = useSelector(selectNavbarAuth);
   const { theme, themePreference, setThemePreference } = useTheme();
@@ -220,12 +220,12 @@ export default function Navbar() {
           authResolved={authResolved}
           isAuthenticated={isAuthenticated}
           user={user}
-          canQuickAdd={canQuickAdd}
+          canAccessStudio={canAccessStudio}
           canAccessAdminPanel={canAccessAdminPanel}
           userTicketUnreadCount={userTicketUnreadCount}
           adminTicketUnreadCount={adminTicketUnreadCount}
           hasAnyTicketUnread={totalTicketUnreadCount > 0}
-          onAdd={() => router.push('/studio/new')}
+          onOpenStudio={() => router.push('/studio')}
           onLogout={handleLogout}
           theme={theme}
           onToggleTheme={handleThemeToggle}
@@ -243,12 +243,12 @@ export default function Navbar() {
           authResolved={authResolved}
           isAuthenticated={isAuthenticated}
           user={user}
-          canQuickAdd={canQuickAdd}
+          canAccessStudio={canAccessStudio}
           canAccessAdminPanel={canAccessAdminPanel}
           userTicketUnreadCount={userTicketUnreadCount}
           adminTicketUnreadCount={adminTicketUnreadCount}
           hasAnyTicketUnread={totalTicketUnreadCount > 0}
-          onAdd={() => router.push('/studio/new')}
+          onOpenStudio={() => router.push('/studio')}
           onLogout={handleLogout}
           theme={theme}
           onToggleTheme={handleThemeToggle}

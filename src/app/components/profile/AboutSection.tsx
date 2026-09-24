@@ -34,6 +34,9 @@ function toSocialLabel(key: string) {
 
 export function AboutSection({ user, identity }: Readonly<AboutSectionProps>) {
   const showSocial = getPrivacyValue(user, 'show_social_links', true);
+  // A legal name is the one profile detail nobody chose to publish, so it
+  // stays hidden until it is explicitly turned on.
+  const showFullName = getPrivacyValue(user, 'show_full_name', false);
   const showLocation = getPrivacyValue(user, 'show_location', true);
   const showEmail = getPrivacyValue(user, 'show_email', false);
   const socialLinks = (user.social_links ?? {}) as Record<string, unknown>;
@@ -54,7 +57,9 @@ export function AboutSection({ user, identity }: Readonly<AboutSectionProps>) {
     : [];
 
   const details: Array<{ label: string; value: string; icon: LucideIcon }> = [
-    identity?.fullName ? { label: 'Full Name', value: identity.fullName, icon: User } : null,
+    showFullName && identity?.fullName
+      ? { label: 'Full Name', value: identity.fullName, icon: User }
+      : null,
     user.timezone ? { label: 'Timezone', value: user.timezone, icon: Globe2 } : null,
     showLocation && location ? { label: 'Location', value: location, icon: MapPin } : null,
     showEmail && identity?.email ? { label: 'Email', value: identity.email, icon: Link2 } : null,
