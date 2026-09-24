@@ -38,6 +38,11 @@ jest.mock('next/navigation', () => ({
   useSearchParams: jest.fn(),
 }));
 
+let mockIsDemoUser = false;
+jest.mock('@/lib/demo/useIsDemoUser', () => ({
+  useIsDemoUser: () => mockIsDemoUser,
+}));
+
 jest.mock('react-redux', () => ({
   useDispatch: jest.fn(),
   useSelector: jest.fn(),
@@ -162,6 +167,7 @@ describe('Navbar', () => {
     useSearchParamsMock.mockImplementation(() => ({ toString: () => queryString }));
     useDispatchMock.mockReturnValue(dispatchMock);
     useSelectorMock.mockImplementation(() => navbarAuth);
+    mockIsDemoUser = false;
     useThemeMock.mockImplementation(() => ({
       ...themeState,
       setThemePreference: setThemePreferenceMock,
@@ -318,6 +324,33 @@ describe('Navbar', () => {
 
     expect(setThemePreferenceMock).toHaveBeenCalledWith('light');
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the demo account theme local instead of saving it', async () => {
+    // The demo account is shared, so persisting a theme would repaint the app
+    // for every other visitor - and `/api/settings` refuses the write anyway,
+    // which used to roll the toggle straight back to dark.
+    const user = userEvent.setup();
+    mockIsDemoUser = true;
+
+    render(<Navbar />);
+    await user.click(screen.getByRole('button', { name: 'Desktop theme' }));
+
+    expect(setThemePreferenceMock).toHaveBeenCalledWith('light');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not pull the shared demo settings back over the chosen theme', async () => {
+    mockIsDemoUser = true;
+    themeState = { theme: 'light', themePreference: 'light' };
+    settingsState = { ...settingsState, theme: 'dark' };
+
+    render(<Navbar />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Desktop theme' })).toBeInTheDocument();
+    });
+    expect(setThemePreferenceMock).not.toHaveBeenCalled();
   });
 
   it('redirects protected routes to login after logout', async () => {
