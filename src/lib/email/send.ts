@@ -1,4 +1,4 @@
-import { resend } from './resend';
+import { getResendClient } from './resend';
 import { renderConfirmEmail, renderResetPasswordEmail } from './templates';
 
 const FROM_ADDRESS = 'Hobbistas <no-reply@mail.hobbistas-hub.com>';
@@ -31,7 +31,7 @@ async function sendEmail(params: {
   }
 
   // Production or dev with API key: send actual email
-  await resend.emails.send({
+  await getResendClient().emails.send({
     from: FROM_ADDRESS,
     to: [to],
     subject,
