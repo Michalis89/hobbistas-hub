@@ -17,14 +17,6 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "jsxImportSource": "react",
-    // jest-dom is deliberately absent: `jest.setup.ts` already pulls it in with
-    // `import '@testing-library/jest-dom'`, which is how v6 is meant to be
-    // wired, and its matcher types augment `jest.Matchers` globally from there.
-    // Listing it here as well resolved only through the node_modules fallback
-    // rather than `@types`, which left the editor reporting TS2688 against this
-    // file whenever a reinstall happened behind its back - node_modules is in
-    // `files.watcherExclude`, so the language server never saw the folder come
-    // back and kept the failed lookup cached.
     "types": [
       "node",
       "jest"
