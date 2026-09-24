@@ -6,6 +6,11 @@ import { cn } from '@/lib/utils';
 import type { VariantProps } from 'class-variance-authority';
 import { buttonVariants } from '@/components/ui/button';
 
+/** See the note on the identical store in dialog.tsx. */
+const subscribeToNothing = () => () => {};
+const getMountedSnapshot = () => true;
+const getUnmountedSnapshot = () => false;
+
 interface AlertDialogContextValue {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -85,6 +90,11 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
   ({ className, children, onClose, ...props }, forwardedRef) => {
     const { open, onOpenChange } = useAlertDialogContext();
     const dialogRef = React.useRef<HTMLDialogElement>(null);
+    const isMounted = React.useSyncExternalStore(
+      subscribeToNothing,
+      getMountedSnapshot,
+      getUnmountedSnapshot,
+    );
     const contentRef = React.useRef<HTMLDivElement>(null);
 
     React.useImperativeHandle(forwardedRef, () => contentRef.current as HTMLDivElement);
@@ -105,7 +115,9 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
           dialog.close();
         }
       }
-    }, [open]);
+      // The portal - and so `dialogRef.current` - is absent on the render
+      // that hydrates, so this has to re-run once it appears.
+    }, [open, isMounted]);
 
     React.useEffect(() => {
       const dialog = dialogRef.current;
@@ -130,7 +142,7 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
         dialog.removeEventListener('close', handleClose);
         dialog.removeEventListener('cancel', handleCancel);
       };
-    }, [onOpenChange, onClose]);
+    }, [onOpenChange, onClose, isMounted]);
 
     const [triggerElement, setTriggerElement] = React.useState<HTMLElement | null>(null);
 
@@ -151,10 +163,11 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
           focusTarget.focus();
         }
       }
-    }, [open]);
+    }, [open, isMounted]);
 
-    /* c8 ignore next 3 */
-    if (typeof window === 'undefined') {
+    // Server and first client render agree on "nothing here"; branching on
+    // `typeof window` made them disagree and broke hydration.
+    if (!isMounted) {
       return null;
     }
 
