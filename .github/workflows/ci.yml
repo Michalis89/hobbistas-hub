@@ -20,39 +20,68 @@ permissions:
 env:
   NODE_VERSION: '20'
 
+# The four checks run as separate jobs rather than as steps of one, so wall
+# time is the slowest of them instead of their sum. Each pays its own
+# `npm ci`, but the npm cache keeps that cheap and this repository is
+# public, so runner minutes are free.
 jobs:
-  quality:
-    name: Lint, typecheck & test
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    # Deliberately secret-free and independent of `build`: this is the fast
-    # signal, and it must stay runnable on a checkout with no credentials.
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      - run: npm ci
+      - run: npm run lint
 
-      - name: Install dependencies
-        run: npm ci
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # tsconfig.ci.json narrows this to production source - see the comment
+      # in that file for why specs are left to jest.
+      - run: npx tsc --noEmit -p tsconfig.ci.json
 
-      - name: Lint
-        run: npm run lint
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
 
-      - name: Typecheck
-        # `next build` also typechecks, but that job needs secrets and takes
-        # minutes. This surfaces a type error in the cheap job instead.
-        # tsconfig.ci.json narrows the check to production source — see the
-        # comment in that file for why specs are left to jest.
-        run: npx tsc --noEmit -p tsconfig.ci.json
+      - name: Restore Jest transform cache
+        # Without this every run re-transforms the whole tree through SWC
+        # before a single test executes. Jest hashes each file and discards
+        # anything stale, so a partially outdated cache is still a win.
+        uses: actions/cache@v6
+        with:
+          path: .jest-cache
+          key: jest-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            jest-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            jest-${{ runner.os }}-
 
       - name: Test
-        run: npm test -- --ci --coverageReporters=text-summary --coverageReporters=lcov
+        # Coverage stays on: jest.config.mjs enforces a floor, and dropping
+        # it here would mean the thresholds never actually run.
+        run: npm test -- --ci --cacheDirectory=.jest-cache --coverageReporters=text-summary --coverageReporters=lcov
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage/
@@ -62,15 +91,12 @@ jobs:
     name: Production build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
       - name: Verify build secrets are configured
         # Without these the failure surfaces as an opaque module-init throw
@@ -95,7 +121,7 @@ jobs:
           echo "All required build secrets are present."
 
       - name: Restore Next.js build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .next/cache
           key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.[jt]s', 'src/**/*.[jt]sx') }}
@@ -105,9 +131,8 @@ jobs:
 
       - name: Build
         env:
-          # Prerendered routes (/, /about, /articles, /backlog, /dashboard)
-          # and sitemap.ts query Supabase at build time, so these have to be
-          # real credentials rather than placeholders.
+          # Prerendered routes and sitemap.ts query Supabase at build time,
+          # so these have to be real credentials rather than placeholders.
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -115,11 +140,8 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL || 'https://hobbistas-hub.com' }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL || 'https://hobbistas-hub.com' }}
           #
-          # Nothing else is listed on purpose. The three Supabase values above
-          # are the only env vars the build can actually fail without - they
-          # are the only ones the source dereferences with `!` (supabase-client
-          # .ts, db.ts, api/public/stats). Every other integration key is read
-          # defensively, so its absence just makes that widget inert in an
-          # artifact that is never deployed. Listing them would only add
-          # references to secrets this repo does not define.
+          # Nothing else is listed on purpose. The three Supabase values are
+          # the only env vars the build can fail without; every other
+          # integration key is read lazily, so its absence just makes that
+          # feature inert in an artifact that is never deployed.
         run: npm run build
