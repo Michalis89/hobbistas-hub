@@ -1,15 +1,24 @@
-# Dependabot alerts and Dependabot version updates are two separate features:
-# the first comes from the repository's security settings, the second needs this
-# file. Only the alerts were on, so 106 of them had accumulated against zero
-# pull requests by the time this was written - nothing was ever offering to fix
-# them.
+# This file configures Dependabot *version updates* only - routine freshening of
+# the lockfile, whether or not anything is vulnerable.
+#
+# It is not what fixes a security alert. That is *Dependabot security updates*,
+# a toggle under Settings > Code security, and it was off while alerts were on -
+# which is the actual reason 106 alerts had accumulated against zero pull
+# requests. Turning it on is what makes a vulnerability arrive as a fix rather
+# than as a notification. This file is the separate, optional habit on top.
+#
+# Version updates still earn their place here: every bump they propose already
+# sits inside a range package.json declares, so a fresh `npm install` picks it
+# up anyway. A stale lockfile just means CI tests something other than what a
+# clean clone gets.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    # Monthly, not weekly. This is hygiene rather than news, and the first
+    # weekly run alone produced five pull requests.
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     # One pull request per group instead of per package. Ungrouped, this
     # dependency tree produces dozens at a time - the volume is exactly what
     # made the backlog easy to ignore - and a single lockfile-only pull request
@@ -35,9 +44,16 @@ updates:
         applies-to: security-updates
         patterns:
           - '*'
-    # Majors are deliberately left out of the groups above, so each arrives on
-    # its own. next, react and tailwind majors need their upgrade guide read
-    # rather than a merge - see `node_modules/next/dist/docs/01-app/02-guides/upgrading`.
+    # Majors are not proposed at all. Letting them arrive one pull request each
+    # sounded tidy and in practice meant tailwindcss 3 -> 4 and jest 29 -> 30
+    # sitting open indefinitely: both need their migration guide worked through,
+    # which is a decision to schedule, not a pull request to review. Raising a
+    # major stays a deliberate act - and a major that matters for security still
+    # reaches you through the alerts.
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
