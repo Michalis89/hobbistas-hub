@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import Image from 'next/image';
+import { CoverThumbImage } from '@/components/ui/cover-image';
 import Link from 'next/link';
 import { Library } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -51,13 +51,12 @@ function MediaSearchResultCard({
       }`}
     >
       <div className="relative h-16 w-12 rounded-[10px] bg-card">
-        <Image
+        <CoverThumbImage
           src={entry.cover}
           alt={entry.title}
-          width={48}
-          height={64}
           sizes="48px"
-          className="h-full w-full object-cover"
+          className="h-full w-full"
+          fallbackClassName="rounded-[10px]"
         />
       </div>
       <div className="min-w-0 flex-1">
