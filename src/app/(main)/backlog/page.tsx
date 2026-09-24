@@ -55,6 +55,10 @@ export async function generateMetadata({ searchParams }: BacklogPageProps): Prom
     title,
     description,
     path,
+    // Behind `requireServerAuth`: a crawler only ever sees the redirect to
+    // login, and the `?category=` variants would otherwise read as a set of
+    // near-duplicate indexable URLs.
+    noindex: true,
   });
 }
 

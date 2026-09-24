@@ -10,26 +10,29 @@ describe('robots', () => {
         {
           userAgent: '*',
           allow: '/',
-          disallow: [
-            '/admin',
-            '/admin/',
-            '/api',
-            '/api/',
-            '/auth',
-            '/auth/',
-            '/settings',
-            '/dashboard',
-            '/profile',
-            '/profile/',
-            '/profile/edit',
-            '/support',
-            '/support/',
-            '/support/tickets',
-            '/support/tickets/',
-          ],
+          disallow: ['/api/', '/share/'],
         },
       ],
       sitemap: `${SITE_URL}/sitemap.xml`,
     });
+  });
+
+  it('leaves noindex-protected areas crawlable so the directive is readable', () => {
+    const [rule] = robots().rules as Array<{ disallow: string[] }>;
+
+    // Blocking these would stop a crawler from ever reading the `noindex`
+    // each of them sends, which is what actually keeps them out of search.
+    for (const path of [
+      '/admin',
+      '/dashboard',
+      '/settings',
+      '/profile',
+      '/studio',
+      '/support',
+      '/backlog',
+      '/diary',
+    ]) {
+      expect(rule.disallow.some(entry => path.startsWith(entry.replace(/\/$/, '')))).toBe(false);
+    }
   });
 });

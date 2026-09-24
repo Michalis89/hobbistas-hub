@@ -89,14 +89,22 @@ describe('share/[token]/page', () => {
         params: Promise.resolve({ token: 'missing' }),
         searchParams: Promise.resolve({}),
       }),
-    ).resolves.toEqual({ title: 'Invalid Share Link | Hobbistas' });
+    ).resolves.toEqual({
+      title: 'Invalid Share Link | Hobbistas',
+      // A dead token must be as unindexable as a live one.
+      robots: { index: false },
+    });
 
     await expect(
       generateMetadata({
         params: Promise.resolve({ token: 'expired' }),
         searchParams: Promise.resolve({}),
       }),
-    ).resolves.toEqual({ title: 'Invalid Share Link | Hobbistas' });
+    ).resolves.toEqual({
+      title: 'Invalid Share Link | Hobbistas',
+      // A dead token must be as unindexable as a live one.
+      robots: { index: false },
+    });
   });
 
   it('builds user-specific metadata for a valid token', async () => {

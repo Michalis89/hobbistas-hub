@@ -57,8 +57,12 @@ export const metadata: Metadata = {
     follow: true,
   },
 
-  alternates: {
-    canonical: '/',
-    // Add languages only when you have real i18n URLs
-  },
+  // Deliberately no `alternates` here.
+  //
+  // Metadata is inherited down the tree, so a canonical declared at the root
+  // is not a default - it is what every page that forgets to set its own ends
+  // up claiming. A page announcing the homepage as its canonical is worse
+  // than a page announcing none at all, because Google self-canonicalises in
+  // the second case and drops the page in the first. `buildMetadata` always
+  // sets a canonical, so every real page has one.
 };

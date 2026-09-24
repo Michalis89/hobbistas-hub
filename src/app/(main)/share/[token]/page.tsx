@@ -28,7 +28,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     .maybeSingle()) as { data: { user_id: string; expires_at: string | null } | null };
 
   if (!tokenRow || isTokenExpired(tokenRow.expires_at)) {
-    return { title: 'Invalid Share Link | Hobbistas' };
+    // A dead token has to carry the same `noindex` as a live one: otherwise
+    // an expired share link is the one share URL that is indexable.
+    return { title: 'Invalid Share Link | Hobbistas', robots: { index: false } };
   }
 
   const { data: user } = await supabase
