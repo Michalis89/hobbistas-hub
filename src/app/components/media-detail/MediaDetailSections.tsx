@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import Image from 'next/image';
+import { CoverHeroImage, CoverThumbImage } from '@/components/ui/cover-image';
 import { Globe, Star, Users } from 'lucide-react';
 import type { MediaCategory } from '@/app/components/backlog/types';
 import type { MediaEntryState, MediaItem } from '@/lib/media/types';
@@ -248,12 +248,10 @@ export function GallerySection({ title, images }: { title: string; images: Galle
                   className="w-full overflow-hidden rounded-xl border border-border/60 bg-card/80 text-left"
                 >
                   <div className="relative aspect-video w-full">
-                    <Image
+                    <CoverThumbImage
                       src={image.src}
                       alt={image.alt}
-                      fill
                       sizes="(max-width: 768px) 70vw, 28vw"
-                      className="object-cover"
                     />
                   </div>
                 </button>
@@ -274,11 +272,11 @@ export function GallerySection({ title, images }: { title: string; images: Galle
                 <DialogDescription>{activeImage.alt}</DialogDescription>
               </DialogHeader>
               <div className="relative aspect-video w-full overflow-hidden rounded-xl">
-                <Image
+                <CoverHeroImage
                   src={activeImage.src}
                   alt={activeImage.alt}
-                  fill
                   sizes="100vw"
+                  // Contain, not cover: the lightbox shows the whole frame.
                   className="object-contain"
                 />
               </div>

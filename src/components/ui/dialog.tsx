@@ -5,6 +5,17 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+/**
+ * A store whose value never changes - only its server and client snapshots
+ * differ. `useSyncExternalStore` returns the server snapshot during
+ * hydration and the client one on the render straight after, which is
+ * exactly the "has this mounted yet" signal a portal needs, without the
+ * setState-inside-an-effect that the lint rules reject.
+ */
+const subscribeToNothing = () => () => {};
+const getMountedSnapshot = () => true;
+const getUnmountedSnapshot = () => false;
+
 interface DialogContextValue {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -86,6 +97,11 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
     const { open, onOpenChange } = useDialogContext();
     const dialogRef = React.useRef<HTMLDialogElement>(null);
     const contentRef = React.useRef<HTMLDivElement>(null);
+    const isMounted = React.useSyncExternalStore(
+      subscribeToNothing,
+      getMountedSnapshot,
+      getUnmountedSnapshot,
+    );
 
     // Merge refs
     React.useImperativeHandle(forwardedRef, () => contentRef.current as HTMLDivElement);
@@ -106,7 +122,10 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
           dialog.close();
         }
       }
-    }, [open]);
+      // `isMounted` is a dependency because the portal - and therefore
+      // `dialogRef.current` - does not exist on the first render. Without it
+      // a dialog mounted already open would never get its `showModal()`.
+    }, [open, isMounted]);
 
     // Handle ESC key and close events
     React.useEffect(() => {
@@ -133,7 +152,7 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
         dialog.removeEventListener('close', handleClose);
         dialog.removeEventListener('cancel', handleCancel);
       };
-    }, [onOpenChange, onClose]);
+    }, [onOpenChange, onClose, isMounted]);
 
     // Click outside to close
     const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
@@ -165,9 +184,13 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
           focusable.focus();
         }
       }
-    }, [open]);
+    }, [open, isMounted]);
 
-    if (typeof window === 'undefined') {
+    // Server and first client render agree on "nothing here"; the portal
+    // arrives on the render after hydration. Branching on `typeof window`
+    // instead made the server render null while the client rendered a
+    // <dialog>, which is the textbook hydration mismatch React warns about.
+    if (!isMounted) {
       return null;
     }
 

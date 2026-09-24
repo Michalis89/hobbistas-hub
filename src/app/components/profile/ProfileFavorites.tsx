@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useState } from 'react';
-import Image from 'next/image';
+import { CoverThumbImage } from '@/components/ui/cover-image';
 import { GripVertical, Heart } from 'lucide-react';
 import EmptyState from '@/components/ui/empty';
 
@@ -92,13 +92,14 @@ function ProfileFavoritesComponent({
 
           {/* Cover image */}
           <div className="relative h-12 w-12 flex-shrink-0 rounded-xl bg-card sm:h-14 sm:w-14">
-            <Image
-              src={fav.game?.cover_image || fav.game?.background_image || '/og-image.jpg'}
+            <CoverThumbImage
+              // No `/og-image.jpg` fallback any more: the primitive treats
+              // that sentinel as "no cover" and draws the placeholder.
+              src={fav.game?.cover_image || fav.game?.background_image || ''}
               alt={fav.game?.title || 'Item'}
-              width={48}
-              height={48}
               sizes="(max-width: 640px) 48px, 56px"
-              className="h-full w-full object-cover"
+              className="h-full w-full"
+              fallbackClassName="rounded-xl"
             />
             {/* Favorite heart overlay */}
             <div className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80">

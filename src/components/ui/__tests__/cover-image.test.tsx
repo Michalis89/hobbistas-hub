@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import {
   BLUR_DATA_URL,
   CoverHeroImage,
@@ -17,6 +17,7 @@ jest.mock('next/image', () => ({
     blurDataURL,
     className,
     fill,
+    onError,
     placeholder,
     priority,
     sizes,
@@ -32,6 +33,7 @@ jest.mock('next/image', () => ({
     sizes?: string;
     src: string;
     title?: string;
+    onError?: () => void;
   }) => (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -42,6 +44,7 @@ jest.mock('next/image', () => ({
       data-placeholder={placeholder}
       data-priority={priority ? 'true' : 'false'}
       data-sizes={sizes}
+      onError={onError}
       src={src}
       title={title}
     />
@@ -148,5 +151,50 @@ describe('CoverHeroImage', () => {
     expect(image).toHaveAttribute('data-sizes', IMAGE_SIZES.grid3);
     expect(image).not.toHaveAttribute('data-placeholder');
     expect(image).not.toHaveAttribute('data-blur-data-url');
+  });
+});
+
+describe('missing cover art', () => {
+  it('draws the placeholder instead of an empty image when there is no src', () => {
+    render(<CoverThumbImage src="" alt="Witch on the Holy Night" />);
+
+    expect(screen.queryByRole('img', { name: 'Witch on the Holy Night' })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'Witch on the Holy Night - no cover art' }),
+    ).toBeInTheDocument();
+  });
+
+  it('treats the legacy /og-image.jpg sentinel as no cover', () => {
+    // The mappers still hand this out as DEFAULT_COVER. It is a 1200x630
+    // landscape banner, so in a 2:3 slot it renders as a squashed logo.
+    render(<CoverThumbImage src="/og-image.jpg" alt="Some Title" />);
+
+    expect(screen.getByRole('img', { name: 'Some Title - no cover art' })).toBeInTheDocument();
+  });
+
+  it('falls back to the placeholder when the image fails to load', () => {
+    render(<CoverHeroImage src="https://cdn.example.com/dead.jpg" alt="Dead Link" />);
+
+    fireEvent.error(screen.getByRole('img', { name: 'Dead Link' }));
+
+    expect(screen.getByRole('img', { name: 'Dead Link - no cover art' })).toBeInTheDocument();
+  });
+
+  it('recovers when the src changes after a failure', () => {
+    const { rerender } = render(<CoverThumbImage src="https://cdn.example.com/dead.jpg" alt="A" />);
+    fireEvent.error(screen.getByRole('img', { name: 'A' }));
+    expect(screen.getByRole('img', { name: 'A - no cover art' })).toBeInTheDocument();
+
+    // A recycled row must not inherit the previous item's failure.
+    rerender(<CoverThumbImage src="https://cdn.example.com/good.jpg" alt="B" />);
+
+    expect(screen.getByRole('img', { name: 'B' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'B - no cover art' })).not.toBeInTheDocument();
+  });
+
+  it('still names the placeholder when no title is available', () => {
+    render(<CoverThumbImage src="" alt="" />);
+
+    expect(screen.getByRole('img', { name: 'No cover art' })).toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
+import { CoverThumbImage } from '@/components/ui/cover-image';
 import { Heart, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -341,12 +341,10 @@ export default function EntryEditDialog({
         <section className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="rounded-2xl border border-border bg-card/70 p-3 sm:p-4">
             <div className="relative mx-auto aspect-[2/3] w-full max-w-[220px] overflow-hidden rounded-xl border border-border bg-muted/20">
-              <Image
+              <CoverThumbImage
                 src={entry.cover}
                 alt={entry.title}
-                fill
                 sizes="(max-width: 1024px) 220px, 280px"
-                className="object-cover"
               />
             </div>
 
