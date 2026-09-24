@@ -7,6 +7,7 @@ import { fail, ok } from '@/lib/api/response';
 import { UnauthorizedError } from '@/lib/api/auth';
 import { ForbiddenError, requireAdminRole } from '@/lib/api/permissions';
 import { hasAnyRole } from '@/lib/roles';
+import type { Database } from '@/lib/supabase/database.types';
 import type { UserRole } from '@/types/user';
 
 const ROLE_OPTIONS: UserRole[] = ['user', 'author', 'reviewer', 'moderator', 'admin', 'owner'];
@@ -126,7 +127,7 @@ async function PATCHHandler(req: Request, context: { params: Promise<{ id: strin
       );
     }
 
-    const updates: Record<string, unknown> = {};
+    const updates: Database['public']['Tables']['users']['Update'] = {};
     for (const [key, value] of Object.entries(input)) {
       if (!EDITABLE_KEYS.has(key)) {
         continue;
@@ -151,7 +152,9 @@ async function PATCHHandler(req: Request, context: { params: Promise<{ id: strin
         continue;
       }
 
-      updates[key] = normalizeText(value);
+      // `key` is validated against EDITABLE_KEYS above but is still a plain
+      // string, so this one write cannot be expressed against the row type.
+      (updates as Record<string, unknown>)[key] = normalizeText(value);
     }
 
     if (Object.keys(updates).length === 0) {
