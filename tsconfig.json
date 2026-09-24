@@ -19,8 +19,7 @@
     "jsxImportSource": "react",
     "types": [
       "node",
-      "jest",
-      "@testing-library/jest-dom"
+      "jest"
     ],
     "incremental": true,
     "forceConsistentCasingInFileNames": true,
