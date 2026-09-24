@@ -10,6 +10,27 @@ const createJestConfig = nextJest({
   dir: './',
 });
 
+// Dependencies that ship ESM only and therefore have to go through the
+// transform instead of being loaded as CommonJS.
+//
+// `sanitize-html` 2.17.7 moved to htmlparser2 12, which is `"type": "module"`
+// with no CommonJS build. Node can `require()` such a package, Jest's CommonJS
+// runtime cannot, so without this every suite that reaches
+// `src/utils/security/sanitizeHtml.ts` dies on `Cannot use import statement
+// outside a module`. htmlparser2's own dependency chain - domhandler, domutils,
+// dom-serializer, domelementtype, entities - went ESM only in the same
+// generation, so the whole subtree has to be listed.
+const esmOnlyDependencies = [
+  'lucide-react',
+  'sanitize-html',
+  'htmlparser2',
+  'domhandler',
+  'domutils',
+  'dom-serializer',
+  'domelementtype',
+  'entities',
+];
+
 const config = {
   // All imported modules in your tests should be mocked automatically
   // automock: false,
@@ -211,7 +232,10 @@ const config = {
   //   "\\\\node_modules\\\\",
   //   "\\.pnp\\.[^\\\\]+$"
   // ],
-  transformIgnorePatterns: ['/node_modules/(?!lucide-react)'],
+  //
+  // Not set here: next/jest prepends its own blanket `/node_modules/` entry and
+  // only lets callers *append*, and the list is an OR, so a negative lookahead
+  // passed through this object never takes effect. See the export below.
 
   // An array of regexp pattern strings that are matched against all modules before the module loader will automatically return a mock for them
   // unmockedModulePathPatterns: undefined,
@@ -226,4 +250,52 @@ const config = {
   // watchman: true,
 };
 
-export default createJestConfig(config);
+// next/jest builds its own `transformIgnorePatterns` and documents that custom
+// config may only *append* to it. Appending is useless here: the option is an
+// OR, so next's broad `/node_modules/...` entry matches first and nothing in
+// node_modules is ever transformed - which is why the negative lookahead this
+// file used to pass through `config` had no effect at all.
+//
+// So resolve the config next/jest produces and widen its node_modules entry in
+// place, adding one more negative lookahead next to the ones it already carries
+// for `transpilePackages`. Its remaining entries - the .pnpm variant and the
+// CSS-modules one - are left alone.
+const NODE_MODULES = '/node_modules/';
+
+const allowEsmOnlyDependencies = patterns => {
+  const allowance = `(?!(${esmOnlyDependencies.join('|')})/)`;
+  let widened = 0;
+
+  const next = patterns.map(pattern => {
+    if (!pattern.startsWith(NODE_MODULES)) {
+      return pattern;
+    }
+    widened += 1;
+    return (
+      NODE_MODULES + allowance + pattern.slice(NODE_MODULES.length)
+    );
+  });
+
+  // Fail loudly rather than silently shipping dead config again if a future
+  // next/jest stops emitting a plain `/node_modules/`-prefixed pattern.
+  if (widened === 0) {
+    throw new Error(
+      'jest.config.mjs: no next/jest transformIgnorePatterns entry starts with ' +
+        `"${NODE_MODULES}", so ESM-only dependencies would not be transformed. ` +
+        `Got: ${JSON.stringify(patterns)}`
+    );
+  }
+
+  return next;
+};
+
+export default async () => {
+  const resolved = await createJestConfig(config)();
+
+  return {
+    ...resolved,
+    transformIgnorePatterns: allowEsmOnlyDependencies(
+      resolved.transformIgnorePatterns
+    ),
+  };
+};

@@ -200,6 +200,12 @@ const nextConfig: NextConfigWithInstrumentation = {
   experimental: {
     optimizeCss: true,
   },
+  typescript: {
+    // Production source only. The root tsconfig also matches `__tests__`, and
+    // Next 16.3 started type checking the complete TypeScript project during
+    // build - see the comment in `tsconfig.build.json`.
+    tsconfigPath: 'tsconfig.build.json',
+  },
   outputFileTracingRoot: join(process.cwd()),
   images: {
     minimumCacheTTL: 86400,
