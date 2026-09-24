@@ -177,3 +177,59 @@ export function findTranslation(
   }
   return (translations ?? []).find(row => row.locale === locale) ?? null;
 }
+
+/**
+ * `og:locale` form of each reading language.
+ *
+ * Open Graph wants `language_TERRITORY` with an underscore, which is not the
+ * same shape as an hreflang tag, so the two are kept as separate maps rather
+ * than derived from one another.
+ */
+export const ARTICLE_OG_LOCALES: Record<ArticleLocale, string> = {
+  en: 'en_US',
+  el: 'el_GR',
+};
+
+/**
+ * The addressable URL of one language of an article.
+ *
+ * The source language keeps the bare path, so every English URL the site has
+ * ever published stays exactly as it was; a translation is that same path
+ * plus `?lang=`, which is what the switcher already links to.
+ */
+export function articleLocalePath(
+  basePath: string,
+  slug: string,
+  locale: ArticleLocale,
+): string {
+  const path = `${basePath}/${slug}`;
+  return locale === SOURCE_ARTICLE_LOCALE ? path : `${path}?lang=${locale}`;
+}
+
+/**
+ * The hreflang map for one article.
+ *
+ * Every version lists every version, itself included: Google only treats a set
+ * of pages as one translation cluster when the annotations are reciprocal, and
+ * drops the lot when they are not. `x-default` points at the source language,
+ * which is the version a reader of any other language should land on.
+ *
+ * Returns null for a single-language article — one self-referencing hreflang
+ * says nothing, and emitting it would only add noise to the head.
+ */
+export function articleLocaleAlternates(
+  basePath: string,
+  slug: string,
+  available: readonly ArticleLocale[],
+): Record<string, string> | null {
+  if (available.length < 2) {
+    return null;
+  }
+
+  const languages: Record<string, string> = {};
+  for (const locale of available) {
+    languages[locale] = articleLocalePath(basePath, slug, locale);
+  }
+  languages['x-default'] = articleLocalePath(basePath, slug, SOURCE_ARTICLE_LOCALE);
+  return languages;
+}

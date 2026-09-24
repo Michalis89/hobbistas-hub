@@ -1,0 +1,125 @@
+name: CI
+
+# Nothing else validates a branch: vercel.json restricts deployments to
+# `deploy-vercel`, so without this workflow the first thing that ever runs
+# lint, tests or a build on a change is the production deploy itself.
+on:
+  pull_request:
+  push:
+    branches: [main, develop, deploy-vercel]
+  workflow_dispatch:
+
+# A force-push or a quick follow-up commit makes the previous run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  quality:
+    name: Lint, typecheck & test
+    runs-on: ubuntu-latest
+    # Deliberately secret-free and independent of `build`: this is the fast
+    # signal, and it must stay runnable on a checkout with no credentials.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        # `next build` also typechecks, but that job needs secrets and takes
+        # minutes. This surfaces a type error in the cheap job instead.
+        # tsconfig.ci.json narrows the check to production source — see the
+        # comment in that file for why specs are left to jest.
+        run: npx tsc --noEmit -p tsconfig.ci.json
+
+      - name: Test
+        run: npm test -- --ci --coverageReporters=text-summary --coverageReporters=lcov
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify build secrets are configured
+        # Without these the failure surfaces as an opaque module-init throw
+        # from supabase-client.ts, or a sitemap prerender error. Fail early
+        # with a message that names the missing secret instead.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          missing=()
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository secret(s): ${missing[*]}"
+            echo "Add them under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "All required build secrets are present."
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.[jt]s', 'src/**/*.[jt]sx') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            nextjs-${{ runner.os }}-
+
+      - name: Build
+        env:
+          # Prerendered routes (/, /about, /articles, /backlog, /dashboard)
+          # and sitemap.ts query Supabase at build time, so these have to be
+          # real credentials rather than placeholders.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Baked into canonical URLs and the sitemap at build time.
+          SITE_URL: ${{ vars.SITE_URL || 'https://hobbistas-hub.com' }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL || 'https://hobbistas-hub.com' }}
+          #
+          # Nothing else is listed on purpose. The three Supabase values above
+          # are the only env vars the build can actually fail without - they
+          # are the only ones the source dereferences with `!` (supabase-client
+          # .ts, db.ts, api/public/stats). Every other integration key is read
+          # defensively, so its absence just makes that widget inert in an
+          # artifact that is never deployed. Listing them would only add
+          # references to secrets this repo does not define.
+        run: npm run build

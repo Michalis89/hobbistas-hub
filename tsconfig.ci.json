@@ -1,0 +1,26 @@
+{
+  // Typecheck for CI: production source only.
+  //
+  // The root tsconfig also matches `__tests__`, and jest specs legitimately
+  // pass partial mocks where the real type wants a full interface. Running
+  // `tsc` over them reports errors that say nothing about whether the app is
+  // sound, so CI checks what actually ships and jest keeps proving the tests.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // No tsbuildinfo on a throwaway runner.
+    "incremental": false
+  },
+  // `exclude` replaces the base list rather than extending it, so the base
+  // entries are repeated here on purpose.
+  "exclude": [
+    "node_modules",
+    "cypress",
+    "cypress.config.ts",
+    "supabase/functions/**/*.ts",
+    "__mocks__/**",
+    "jest.setup.ts",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
+}

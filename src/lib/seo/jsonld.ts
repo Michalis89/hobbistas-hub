@@ -49,6 +49,8 @@ type ArticleJsonLdInput = {
   updatedAt?: string | null;
   authorName?: string | null;
   tags?: string[] | null;
+  /** Reading language of this version, as a BCP-47 tag. */
+  locale?: string | null;
 };
 
 type ReviewJsonLdInput = {
@@ -62,6 +64,8 @@ type ReviewJsonLdInput = {
   category?: ArticleCategory | null;
   tags?: string[] | null;
   score?: number | null;
+  /** Reading language of this version, as a BCP-47 tag. */
+  locale?: string | null;
 };
 
 type MediaJsonLdInput = {
@@ -95,6 +99,7 @@ export function buildArticleJsonLd({
   updatedAt,
   authorName,
   tags,
+  locale,
 }: ArticleJsonLdInput) {
   const author: Person = {
     '@type': 'Person',
@@ -111,6 +116,9 @@ export function buildArticleJsonLd({
     dateModified: updatedAt ?? publishedAt ?? undefined,
     author,
     publisher,
+    // Tells Google which translation this markup describes; without it every
+    // language of an article claims to be the site default.
+    inLanguage: locale || SITE_LANGUAGE,
     keywords: tags?.length ? tags.join(', ') : undefined,
     mainEntityOfPage: {
       '@type': 'WebPage',
@@ -130,6 +138,7 @@ export function buildReviewJsonLd({
   category,
   tags,
   score,
+  locale,
 }: ReviewJsonLdInput) {
   const author: Person = {
     '@type': 'Person',
@@ -146,6 +155,7 @@ export function buildReviewJsonLd({
     dateModified: updatedAt ?? publishedAt ?? undefined,
     author,
     publisher,
+    inLanguage: locale || SITE_LANGUAGE,
     image: [toAbsoluteUrl(image || DEFAULT_OG_IMAGE)],
     reviewRating:
       score != null

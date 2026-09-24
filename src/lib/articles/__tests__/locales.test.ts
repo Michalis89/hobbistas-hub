@@ -1,5 +1,7 @@
 import {
   applyArticleTranslation,
+  articleLocaleAlternates,
+  articleLocalePath,
   availableLocales,
   findTranslation,
   localeFromAcceptLanguage,
@@ -208,5 +210,38 @@ describe('toArticleLocale', () => {
     expect(toArticleLocale('el')).toBe('el');
     expect(toArticleLocale('de')).toBe('en');
     expect(toArticleLocale(undefined)).toBe('en');
+  });
+});
+
+describe('articleLocalePath', () => {
+  it('leaves the source language on the bare path', () => {
+    expect(articleLocalePath('/articles', 'my-post', 'en')).toBe('/articles/my-post');
+  });
+
+  it('addresses a translation with ?lang=', () => {
+    expect(articleLocalePath('/articles', 'my-post', 'el')).toBe('/articles/my-post?lang=el');
+  });
+
+  it('works for reviews too', () => {
+    expect(articleLocalePath('/review', 'a-review', 'el')).toBe('/review/a-review?lang=el');
+  });
+});
+
+describe('articleLocaleAlternates', () => {
+  it('returns null for a single-language article', () => {
+    expect(articleLocaleAlternates('/articles', 'my-post', ['en'])).toBeNull();
+  });
+
+  it('annotates every language reciprocally, including itself', () => {
+    expect(articleLocaleAlternates('/articles', 'my-post', ['en', 'el'])).toEqual({
+      en: '/articles/my-post',
+      el: '/articles/my-post?lang=el',
+      'x-default': '/articles/my-post',
+    });
+  });
+
+  it('points x-default at the source language', () => {
+    const alternates = articleLocaleAlternates('/review', 'a-review', ['en', 'el']);
+    expect(alternates?.['x-default']).toBe('/review/a-review');
   });
 });

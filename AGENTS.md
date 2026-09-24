@@ -94,7 +94,9 @@ Before any Next.js work, find and read the relevant doc in `node_modules/next/di
 ## SEO & Redirects
 
 - Metadata centralized in `src/utils/seo/metadata/`. Structured data uses JSON-LD.
-- Sitemap auto-generated via `next-sitemap` in postbuild.
+- Sitemap and robots are App Router route handlers — `src/app/sitemap.ts` and `src/app/robots.ts`. There is no `next-sitemap` dependency and no postbuild step.
+- Keeping a page out of search is the job of `noindex` (via `buildMetadata({ noindex: true })`, often on the section's `layout.tsx`), not of a `Disallow` in `robots.ts` — a blocked URL is never fetched, so its `noindex` is never read. Reserve `robots.ts` for paths that must not be fetched at all.
+- Article translations are indexable URLs: the source language lives on the bare path, every other locale is `?lang=<locale>`. Each one canonicalises to itself and carries the full reciprocal `hreflang` set — see `articleLocalePath` / `articleLocaleAlternates` in `src/lib/articles/locales.ts`.
 - Permanent redirects in `next.config.ts` preserve legacy URLs (`/news` -> `/articles`, `/reviews` -> `/review`). Do not remove these.
 
 ## Cross-Cutting Concerns

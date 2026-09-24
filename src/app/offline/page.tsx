@@ -1,6 +1,19 @@
 import Link from 'next/link';
 import { WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { buildMetadata } from '@/utils/seo/metadata/helpers';
+
+/**
+ * The service worker's navigation fallback, not a page anyone should reach
+ * from search. Without its own metadata it inherited the root defaults, which
+ * made it indexable *and* had it declare the homepage as its canonical.
+ */
+export const metadata = buildMetadata({
+  title: 'Offline',
+  description: 'You are offline. Cached pages may still be available.',
+  path: '/offline',
+  noindex: true,
+});
 
 export default function OfflinePage() {
   return (
