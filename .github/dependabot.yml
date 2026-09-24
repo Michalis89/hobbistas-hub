@@ -1,0 +1,61 @@
+# Dependabot alerts and Dependabot version updates are two separate features:
+# the first comes from the repository's security settings, the second needs this
+# file. Only the alerts were on, so 106 of them had accumulated against zero
+# pull requests by the time this was written - nothing was ever offering to fix
+# them.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # One pull request per group instead of per package. Ungrouped, this
+    # dependency tree produces dozens at a time - the volume is exactly what
+    # made the backlog easy to ignore - and a single lockfile-only pull request
+    # per group is also the shape `npm audit fix` already produces.
+    #
+    # Production and development are kept apart because they carry different
+    # risk: a transitive DoS in a jest transform is not the same news as one in
+    # a request path.
+    groups:
+      production-minor-and-patch:
+        applies-to: version-updates
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-minor-and-patch:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+    # Majors are deliberately left out of the groups above, so each arrives on
+    # its own. next, react and tailwind majors need their upgrade guide read
+    # rather than a merge - see `node_modules/next/dist/docs/01-app/02-guides/upgrading`.
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+  # The workflow actions pin major tags (actions/checkout@v7 and friends), so
+  # there is little churn here; monthly is enough to catch a deprecation before
+  # a runner drops the version.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: chore
+    labels:
+      - DevOps
