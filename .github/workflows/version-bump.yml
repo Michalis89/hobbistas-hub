@@ -1,0 +1,97 @@
+name: Version Bump
+
+# The bump used to run after the merge and push straight to `deploy-vercel`.
+# That push cannot coexist with protecting the branch: a ruleset requiring a
+# pull request - or passing checks - rejects it, and the commit carried
+# `[skip ci]`, so it could never have had checks of its own to satisfy one.
+# Integration bypass is not available on a personal repository either.
+#
+# Bumping inside the pull request removes the direct push entirely: the merge
+# commit already carries the new version, and nothing but a merge ever writes
+# to `deploy-vercel`.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [deploy-vercel]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-bump-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    name: Bump version in the pull request
+    # A fork's GITHUB_TOKEN is read-only, so there would be nothing to push
+    # with. Forks therefore carry no bump, which a maintainer can add.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - name: Decide bump type from the branch name
+        id: bump
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          echo "Source branch: $BRANCH"
+          case "$BRANCH" in
+            feat/*)             TYPE=minor ;;
+            fix/* | hotfix/*)   TYPE=patch ;;
+            major/* | breaking/*) TYPE=major ;;
+            *)                  TYPE=none ;;
+          esac
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+          echo "Bump type: $TYPE"
+
+      - name: Stop when the branch type is not versioned
+        if: steps.bump.outputs.type == 'none'
+        run: echo "No version bump rule for this branch type. Skipping."
+
+      - name: Bump the version and commit it to the pull request
+        if: steps.bump.outputs.type != 'none'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BUMP_TYPE: ${{ steps.bump.outputs.type }}
+        run: |
+          git fetch origin "$BASE_REF"
+          git show "origin/$BASE_REF:package.json" > /tmp/base-package.json
+
+          base_version=$(node -p "require('/tmp/base-package.json').version")
+          head_version=$(node -p "require('./package.json').version")
+
+          # Pushing to the branch re-triggers this workflow, and a reviewer may
+          # push again afterwards. A version that already differs from the base
+          # means the bump has happened, so further runs must not stack on it.
+          if [ "$base_version" != "$head_version" ]; then
+            echo "Already bumped: $base_version -> $head_version. Nothing to do."
+            exit 0
+          fi
+
+          npm version "$BUMP_TYPE" --no-git-tag-version
+          new_version=$(node -p "require('./package.json').version")
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+
+          if git diff --cached --quiet; then
+            echo "No version changes to commit."
+            exit 0
+          fi
+
+          # No `[skip ci]`: this commit is what actually gets merged, so it is
+          # the one the checks need to have run against.
+          git commit -m "chore(release): bump $BUMP_TYPE version to $new_version"
+          git push origin "HEAD:$HEAD_REF"
+          echo "Bumped $base_version -> $new_version"
