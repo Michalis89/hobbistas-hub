@@ -18,6 +18,15 @@ type MetadataInput = {
   authors?: string[];
   modifiedTime?: string;
   noindex?: boolean;
+  /**
+   * hreflang map, `tag -> path`, emitted as `<link rel="alternate">`. Include
+   * this page's own tag: Google needs the annotations to be reciprocal.
+   */
+  languages?: Record<string, string>;
+  /** `og:locale` for this page, in Open Graph's `en_US` underscore form. */
+  ogLocale?: string;
+  /** Other languages this page exists in, as `og:locale:alternate`. */
+  ogAlternateLocales?: string[];
 };
 
 const toAbsoluteUrl = (path: string) => new URL(path, SITE_URL).toString();
@@ -32,7 +41,11 @@ const trimText = (value: string, maxLength = 160) => {
 const normalizeCanonicalPath = (value: string) => {
   const url = new URL(value, SITE_URL);
   const pathname = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '');
-  return pathname || '/';
+  // The query survives normalization because a translated article is
+  // addressed as `?lang=el`, and a canonical that dropped it would point
+  // every language at the English page. Callers pass literal paths, so
+  // nothing else reaches this with a query string.
+  return `${pathname || '/'}${url.search}`;
 };
 
 const SITE_TITLE_SUFFIX = `| ${SITE_NAME}`;
@@ -87,13 +100,19 @@ export const buildMetadata = (input: MetadataInput): Metadata => {
     description: resolvedDescription,
     alternates: {
       canonical: canonicalUrl,
+      ...(input.languages ? { languages: input.languages } : {}),
     },
     openGraph: {
       title: resolvedTitle,
       description: resolvedDescription,
       url,
       siteName: SITE_NAME,
-      locale: SITE_LOCALE,
+      // Open Graph spells locales `en_US`, not `en-US`; SITE_LOCALE is the
+      // hreflang-shaped constant, so it is converted rather than passed on.
+      locale: input.ogLocale ?? SITE_LOCALE.replace('-', '_'),
+      ...(input.ogAlternateLocales?.length
+        ? { alternateLocale: input.ogAlternateLocales }
+        : {}),
       type: input.openGraphType ?? 'website',
       images: ogImages,
       ...(isArticle && input.publishedTime ? { publishedTime: input.publishedTime } : {}),

@@ -399,6 +399,83 @@ describe('ArticleDetailPage', () => {
     expect((result as { description: string }).description.length).toBe(162);
   });
 
+  it('leaves a single-language article on its bare canonical with no hreflang', async () => {
+    (getSupabaseServer as jest.Mock).mockReturnValue(
+      createSupabaseMock({
+        singleResolvers: [() => ({ data: { ...baseArticle, slug: 'solo-post' }, error: null })],
+      }),
+    );
+
+    const result = (await buildArticleDetailMetadata({
+      params: Promise.resolve({ slug: 'solo-post' }),
+      options: { basePath: '/articles', breadcrumbLabel: 'Articles' },
+    })) as { path: string; languages?: unknown };
+
+    expect(result.path).toBe('/articles/solo-post');
+    // One self-referencing hreflang says nothing, so none is emitted.
+    expect(result.languages).toBeUndefined();
+  });
+
+  it('canonicalises a requested translation to its own ?lang= URL', async () => {
+    (getSupabaseServer as jest.Mock).mockReturnValue(
+      createSupabaseMock({
+        singleResolvers: [() => ({ data: { ...baseArticle, slug: 'solo-post' }, error: null })],
+        translationResolver: () => ({
+          data: [{ article_id: 'article-1', locale: 'el', title: 'Greek title' }],
+          error: null,
+        }),
+      }),
+    );
+
+    const result = (await buildArticleDetailMetadata({
+      params: Promise.resolve({ slug: 'solo-post' }),
+      searchParams: Promise.resolve({ lang: 'el' }),
+      options: { basePath: '/articles', breadcrumbLabel: 'Articles' },
+    })) as {
+      path: string;
+      languages: Record<string, string>;
+      ogLocale: string;
+      ogAlternateLocales: string[];
+    };
+
+    // The regression this guards: the Greek version used to declare the
+    // English URL as its canonical, which kept it out of the index entirely.
+    expect(result.path).toBe('/articles/solo-post?lang=el');
+    expect(result.languages).toEqual({
+      en: '/articles/solo-post',
+      el: '/articles/solo-post?lang=el',
+      'x-default': '/articles/solo-post',
+    });
+    expect(result.ogLocale).toBe('el_GR');
+    expect(result.ogAlternateLocales).toEqual(['en_US']);
+  });
+
+  it('keeps the English canonical when a translation exists but none is requested', async () => {
+    (getSupabaseServer as jest.Mock).mockReturnValue(
+      createSupabaseMock({
+        singleResolvers: [() => ({ data: { ...baseArticle, slug: 'solo-post' }, error: null })],
+        translationResolver: () => ({
+          data: [{ article_id: 'article-1', locale: 'el', title: 'Greek title' }],
+          error: null,
+        }),
+      }),
+    );
+
+    const result = (await buildArticleDetailMetadata({
+      params: Promise.resolve({ slug: 'solo-post' }),
+      options: { basePath: '/articles', breadcrumbLabel: 'Articles' },
+    })) as { path: string; languages: Record<string, string>; ogLocale: string };
+
+    expect(result.path).toBe('/articles/solo-post');
+    expect(result.ogLocale).toBe('en_US');
+    // Both versions still carry the full reciprocal annotation.
+    expect(result.languages).toEqual({
+      en: '/articles/solo-post',
+      el: '/articles/solo-post?lang=el',
+      'x-default': '/articles/solo-post',
+    });
+  });
+
   it('calls notFound for missing metadata row', async () => {
     (getSupabaseServer as jest.Mock).mockReturnValue(
       createSupabaseMock({

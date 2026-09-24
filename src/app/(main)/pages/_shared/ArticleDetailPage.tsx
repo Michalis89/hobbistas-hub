@@ -18,10 +18,13 @@ import ArticleToc from '@/components/article/ArticleToc.client';
 import { verifyPreviewToken } from '@/lib/articles/previewToken';
 import {
   applyArticleTranslation,
+  articleLocaleAlternates,
+  articleLocalePath,
   availableLocales,
   findTranslation,
   isArticleLocale,
   resolveArticleLocale,
+  ARTICLE_OG_LOCALES,
   type ArticleLocale,
   type ArticleTranslationRow,
 } from '@/lib/articles/locales';
@@ -359,7 +362,13 @@ export async function buildArticleDetailMetadata({
     'Stay tuned for updates or explore another story while we resolve this.';
   const metaDescription = truncateForMeta(rawMetaDescription);
   const normalizedSlug = normalizeSlug(article.slug);
-  const canonicalPath = `${basePath}/${normalizedSlug}`;
+  const localeOptions = availableLocales(translations);
+  // Each language is its own indexable URL, so the canonical is the URL of
+  // the language actually being rendered. Pointing a translation at the bare
+  // English path told Google it was a duplicate of the English article and
+  // kept it out of the index entirely.
+  const canonicalPath = articleLocalePath(basePath, normalizedSlug, metadataLocale);
+  const languages = articleLocaleAlternates(basePath, normalizedSlug, localeOptions);
   const modifiedTime = article.updated_at ?? article.published_at ?? undefined;
 
   return buildMetadata({
@@ -367,6 +376,11 @@ export async function buildArticleDetailMetadata({
     description: metaDescription,
     path: canonicalPath,
     openGraphType: 'article',
+    ...(languages ? { languages } : {}),
+    ogLocale: ARTICLE_OG_LOCALES[metadataLocale],
+    ogAlternateLocales: localeOptions
+      .filter(locale => locale !== metadataLocale)
+      .map(locale => ARTICLE_OG_LOCALES[locale]),
     // A preview link must never end up in an index.
     noindex: article.status !== 'published',
     publishedTime: article.published_at ?? undefined,
@@ -448,7 +462,10 @@ export default async function ArticleDetailPage({
   const readTime = article.reading_time_minutes ? `${article.reading_time_minutes} min read` : null;
   const articleSlug = normalizeSlug(article.slug);
   const articlePath = `${basePath}/${articleSlug}`;
-  const articleUrl = `${SITE_URL}${articlePath}`;
+  // `articlePath` stays bare - the language switcher appends its own `?lang=`.
+  // JSON-LD and the breadcrumb point at the language on screen, so their
+  // URLs agree with the canonical the head declares for this render.
+  const articleLocaleUrl = `${SITE_URL}${articleLocalePath(basePath, articleSlug, activeLocale)}`;
   const sanitizedContentHtml = sanitizeHtmlContent(article.content_html).trim();
   const contentWithHeadingIds = enrichContentHeadings(sanitizedContentHtml);
   // Rich documents carry heading structure directly; legacy HTML is read back
@@ -471,7 +488,7 @@ export default async function ArticleDetailPage({
     { name: 'Home', url: `${SITE_URL}/` },
     { name: breadcrumbLabel, url: `${SITE_URL}${basePath}` },
     { name: categoryLabel, url: `${SITE_URL}${basePath}?category=${article.category}` },
-    { name: article.title, url: articleUrl },
+    { name: article.title, url: articleLocaleUrl },
   ];
   const articleDescription =
     article.meta_description || article.description || 'Explore this entry on Hobbistas.';
@@ -482,11 +499,12 @@ export default async function ArticleDetailPage({
     ? buildReviewJsonLd({
         title: article.title,
         description: articleDescription,
-        url: articleUrl,
+        url: articleLocaleUrl,
         image: article.cover_image,
         publishedAt: article.published_at,
         updatedAt: article.updated_at,
         authorName: article.users?.display_name || article.users?.username || null,
+        locale: activeLocale,
         category: article.category,
         tags: article.tags,
         score: article.score,
@@ -494,11 +512,12 @@ export default async function ArticleDetailPage({
     : buildArticleJsonLd({
         title: article.title,
         description: articleDescription,
-        url: articleUrl,
+        url: articleLocaleUrl,
         image: article.cover_image,
         publishedAt: article.published_at,
         updatedAt: article.updated_at,
         authorName: article.users?.display_name || article.users?.username || null,
+        locale: activeLocale,
         tags: article.tags,
       });
   const jsonLdMarkup = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
