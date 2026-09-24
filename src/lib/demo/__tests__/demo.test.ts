@@ -71,17 +71,47 @@ describe('demo account detection', () => {
     expect(isDemoWriteBlocked(requestWith())).toBe(false);
   });
 
-  it.each(['/api/auth/demo-login', '/api/auth/logout', '/api/auth/refresh'])(
-    'allows the demo session to POST to %s',
+  it.each([
+    '/api/auth/demo-login',
+    '/api/auth/logout',
+    '/api/auth/refresh',
+    // Leaving the demo has to work. Blocking these locked a visitor into the
+    // demo session, with an error telling them to create an account on a
+    // route the same guard was rejecting.
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/signup',
+    '/api/auth/forgot-password',
+    '/api/auth/resend-verification',
+  ])('allows the demo session to POST to %s', async pathname => {
+    const { isDemoWriteBlocked } = await import('@/lib/demo');
+    const request = requestWith({
+      url: `https://example.test${pathname}`,
+      token: tokenFor(DEMO_ID),
+    });
+    expect(isDemoWriteBlocked(request)).toBe(false);
+  });
+
+  it.each(['/api/auth/delete-account', '/api/auth/update-password'])(
+    'still blocks %s, which acts on the signed-in account itself',
     async pathname => {
       const { isDemoWriteBlocked } = await import('@/lib/demo');
       const request = requestWith({
         url: `https://example.test${pathname}`,
         token: tokenFor(DEMO_ID),
       });
-      expect(isDemoWriteBlocked(request)).toBe(false);
+      expect(isDemoWriteBlocked(request)).toBe(true);
     },
   );
+
+  it('still blocks ordinary writes outside the auth namespace', async () => {
+    const { isDemoWriteBlocked } = await import('@/lib/demo');
+    const request = requestWith({
+      url: 'https://example.test/api/games/library',
+      token: tokenFor(DEMO_ID),
+    });
+    expect(isDemoWriteBlocked(request)).toBe(true);
+  });
 
   it('does nothing when no demo account is configured', async () => {
     delete process.env.NEXT_PUBLIC_DEMO_USER_ID;

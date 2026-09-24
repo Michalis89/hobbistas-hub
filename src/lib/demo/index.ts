@@ -92,14 +92,20 @@ export function isDemoRequest(request: Request): boolean {
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
- * Routes a demo session may POST to. Signing in is the obvious one; signing
- * out has to work or a visitor could never leave the demo, and the token
- * refresh is a POST that keeps a long browsing session alive.
+ * The two auth routes that act on whoever is currently signed in, and so are
+ * genuinely writes to the demo account.
+ *
+ * Everything else under `/api/auth/` is how somebody *leaves* the demo -
+ * signing in with their own account, registering, recovering a password -
+ * and changes no demo data. Guarding those trapped a visitor in the demo
+ * session: after logging out, any lingering demo cookie made `/api/auth/login`
+ * fail with "This is the read-only demo account. Create your own account to
+ * save changes." - advice pointing at `/api/auth/register`, which the same
+ * guard was also rejecting.
  */
-const DEMO_WRITE_ALLOWLIST = new Set([
-  '/api/auth/demo-login',
-  '/api/auth/logout',
-  '/api/auth/refresh',
+const DEMO_GUARDED_AUTH_ROUTES = new Set([
+  '/api/auth/delete-account',
+  '/api/auth/update-password',
 ]);
 
 export function isDemoWriteBlocked(request: Request): boolean {
@@ -112,7 +118,7 @@ export function isDemoWriteBlocked(request: Request): boolean {
   } catch {
     return false;
   }
-  if (DEMO_WRITE_ALLOWLIST.has(pathname)) {
+  if (pathname.startsWith('/api/auth/') && !DEMO_GUARDED_AUTH_ROUTES.has(pathname)) {
     return false;
   }
   return isDemoRequest(request);
