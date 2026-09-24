@@ -141,7 +141,7 @@ async function PATCHHandler(req: Request, context: { params: Promise<{ id: strin
       return fail(API_ERRORS.NOT_FOUND, API_ERRORS.NOT_FOUND.status);
     }
 
-    const updates: Record<string, unknown> = {};
+    const updates: Database['public']['Tables']['support_tickets']['Update'] = {};
     const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
 
     if (status && isSupportStatus(status) && status !== currentTicket.status) {
