@@ -63,3 +63,6 @@ supabase/.temp
 /generated_issues.txt
 /scripts
 .claude/settings.local.json
+
+# Jest transform cache (CI)
+.jest-cache

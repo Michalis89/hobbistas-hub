@@ -34,27 +34,41 @@ const config = {
   coverageDirectory: 'coverage',
 
   // An array of regexp pattern strings used to skip coverage collection
+  //
+  // `src/lib` and `src/utils` used to be excluded, which hid most of the
+  // business logic - the recommendation engines, the article and SEO
+  // helpers, the API plumbing - from every coverage number the project
+  // reported. Including them roughly doubles the measured surface (64k ->
+  // 120k statements) at a near-identical ratio, so the old figure was not
+  // flattering, just narrow. Five further entries pointed at directories
+  // deleted long ago and have been dropped.
   coveragePathIgnorePatterns: [
     '/node_modules/',
     '/src/types/',
-    'src/mocks/',
+    // Root layout: fonts, providers and the html shell, exercised by the
+    // app rather than by unit tests.
     'src/app/layout',
-    'src/lib',
-    'src/utils',
-    'src/app/pages/scraper',
-    'src/app/pages/edit-guide',
-    'app/api/scrape',
-    'app/api/update-guide',
   ],
+
+  // A floor, not a target.
+  //
+  // Set just under the numbers the suite produces today so the build fails
+  // on a regression rather than on the current state of the codebase. Raise
+  // these as coverage grows; they are meant to ratchet.
+  coverageThreshold: {
+    global: {
+      statements: 50,
+      branches: 84,
+      functions: 65,
+      lines: 50,
+    },
+  },
 
   // Indicates which provider should be used to instrument code for coverage
   coverageProvider: 'v8',
 
   // A list of reporter names that Jest uses when writing coverage reports
   coverageReporters: ['json', 'text', 'lcov', 'clover'],
-
-  // An object that configures minimum threshold enforcement for coverage results
-  // coverageThreshold: undefined,
 
   // A path to a custom dependency extractor
   // dependencyExtractor: undefined,
