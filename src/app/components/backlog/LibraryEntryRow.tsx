@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { memo, useMemo, useState } from 'react';
-import Image from 'next/image';
+import { CoverThumbImage } from '@/components/ui/cover-image';
 import Link from 'next/link';
 import { Heart, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -144,13 +144,11 @@ function LibraryEntryRow({
       >
         <div className="grid grid-cols-[80px,minmax(0,1fr)] gap-3 md:grid-cols-[92px,1.4fr,0.55fr,0.5fr,112px] md:items-center md:gap-4">
           <div className="relative h-28 w-20 overflow-hidden rounded-xl border border-border/60 bg-card">
-            <Image
+            <CoverThumbImage
               src={entry.cover}
               alt={entry.title}
-              width={80}
-              height={112}
               sizes="80px"
-              className="h-full w-full object-cover"
+              className="h-full w-full"
             />
           </div>
 
