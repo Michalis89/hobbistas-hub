@@ -50,6 +50,11 @@ export type SearchResult = MediaEntry & {
   /** Present only on personal-suggestion results, which are a recorded recommendation serve. */
   serveId?: string;
   slotIndex?: number;
+  /**
+   * Where the result came from (our DB or which external APIs). The server
+   * sends it only outside production; see src/lib/api/media/provenance.ts.
+   */
+  provenance?: { origin: 'local' | 'external'; providers: string[] };
 };
 
 export type CategoryConfig = {

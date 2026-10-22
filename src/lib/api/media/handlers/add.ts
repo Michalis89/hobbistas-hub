@@ -14,7 +14,11 @@ import {
 import type { MediaCategoryConfig } from '../config';
 import type { AddMediaRequestBody, UserProfile } from '../types';
 import { resolveTitle } from '../utils/title-resolver';
-import { findExistingMedia } from '../utils/media-lookup';
+import {
+  backfillMediaGaps,
+  findExistingMedia,
+  resolveExternalIdValue,
+} from '../utils/media-lookup';
 import '../handlers/enrichers'; // Import to initialize enricher functions in configs
 import { isAllowedIgdbGameCandidate } from '@/lib/igdb/categories';
 import { refreshGenreAffinity } from '@/lib/profile/genre-affinity';
@@ -189,9 +193,8 @@ async function handleExternalSource(
 ): Promise<Response> {
   const { payload } = body;
 
-  // Validate external ID exists
-  const externalIdField = config.externalId.field;
-  const externalIdValue = payload![externalIdField];
+  // Validate external ID exists (the primary field, or one of its alternates)
+  const externalIdValue = resolveExternalIdValue(config, payload!);
   if (!externalIdValue || !payload!.category) {
     return NextResponse.json({ error: MISSING_PAYLOAD }, { status: 400 });
   }
@@ -230,13 +233,19 @@ async function handleExternalSource(
     .maybeSingle();
 
   // Check if media already exists
-  let mediaId = await findExistingMedia(
-    supabase,
-    config,
-    externalIdValue as number | string,
-    payload!.category as string,
-  );
+  let mediaId = await findExistingMedia(supabase, config, payload!, payload!.category as string);
   let insertedNewMedia = false;
+
+  // A second provider can know what the first did not: fill the existing row's gaps
+  if (mediaId && config.backfillFields) {
+    await backfillMediaGaps(
+      getSupabaseServer(),
+      mediaId,
+      payload!,
+      config.backfillFields,
+      config.logPrefix,
+    );
+  }
 
   // Insert new media if doesn't exist
   if (!mediaId) {
@@ -247,8 +256,12 @@ async function handleExternalSource(
     }
 
     // Enrich payload if configured (e.g., for movies)
-    if (config.enricher && typeof externalIdValue === 'number') {
-      const enrichedData = await config.enricher(payload!.category as string, externalIdValue);
+    if (config.enricher) {
+      const enrichedData = await config.enricher(
+        payload!.category as string,
+        externalIdValue,
+        insertPayload,
+      );
       insertPayload = { ...insertPayload, ...enrichedData };
     }
 
@@ -263,11 +276,13 @@ async function handleExternalSource(
     if (insertError) {
       // Duplicate key (23505) = another request inserted this media concurrently.
       // Re-fetch the existing row instead of crashing.
+      // The enriched payload is used: enrichment can add an id (e.g. nlg_id)
+      // that is the one that collided.
       if (insertError.code === '23505') {
         mediaId = await findExistingMedia(
           supabase,
           config,
-          externalIdValue as number | string,
+          insertPayload,
           payload!.category as string,
         );
       } else {

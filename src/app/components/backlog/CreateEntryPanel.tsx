@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import EmptyState from '@/components/ui/empty';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import MediaSearchResultCard from './MediaSearchResultCard';
 import type { MediaCategory, MediaEntry, SearchResult } from './types';
@@ -17,6 +18,10 @@ interface CreateEntryPanelProps {
   onOpenDialog: (entry: SearchResult) => void;
   onClose: () => void;
   libraryEntries: MediaEntry[];
+  /** Whether the API has another page of results (paginated categories only). */
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export default function CreateEntryPanel({
@@ -28,6 +33,9 @@ export default function CreateEntryPanel({
   onOpenDialog,
   onClose,
   libraryEntries,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
 }: Readonly<CreateEntryPanelProps>) {
   const config = CATEGORY_CONFIG[category];
   const normalizeLookupValue = (value: string | undefined) =>
@@ -124,6 +132,18 @@ export default function CreateEntryPanel({
           )}
           {!isLoading && searchResults.length === 0 && (
             <EmptyState title="No results found." size="sm" className="md:col-span-2" />
+          )}
+          {!isLoading && hasMore && searchResults.length > 0 && onLoadMore && (
+            <div className="flex justify-center pt-1 md:col-span-2">
+              <Button
+                variant="outline"
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                className="h-9 rounded-[12px] px-4"
+              >
+                {isLoadingMore ? 'Loading...' : 'Load more'}
+              </Button>
+            </div>
           )}
         </div>
       </div>

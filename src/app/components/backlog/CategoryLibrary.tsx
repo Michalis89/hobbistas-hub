@@ -91,6 +91,10 @@ type CategoryLibraryState = {
   createQuery: string;
   createResults: SearchResult[];
   createLoading: boolean;
+  /** Last page loaded and whether the API has another (paginated categories only). */
+  createPage: number;
+  createHasMore: boolean;
+  createLoadingMore: boolean;
   suggestions: SearchResult[];
   suggestionsLoading: boolean;
   alert: AlertState;
@@ -182,6 +186,9 @@ const buildInitialState = (
   createQuery: '',
   createResults: [],
   createLoading: false,
+  createPage: 1,
+  createHasMore: false,
+  createLoadingMore: false,
   suggestions: [],
   suggestionsLoading: false,
   alert: null,
@@ -204,6 +211,8 @@ function categoryLibraryReducer(
         ctaMode: null,
         createQuery: '',
         createResults: [],
+        createPage: 1,
+        createHasMore: false,
       };
     case 'showAlert':
       return {
@@ -386,6 +395,9 @@ export default function CategoryLibrary({
     createQuery,
     createResults,
     createLoading,
+    createPage,
+    createHasMore,
+    createLoadingMore,
     suggestions,
     suggestionsLoading,
     alert,
@@ -396,6 +408,7 @@ export default function CategoryLibrary({
   const supportsExternal = supportsExternalApi(category);
   const apiBase = getApiBase(category);
   const selectedEntryRef = useRef<SelectedEntry | null>(selectedEntry);
+  const loadMoreControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     selectedEntryRef.current = selectedEntry;
@@ -484,10 +497,25 @@ export default function CategoryLibrary({
 
     const query = createQuery.trim();
     if (!query) {
-      dispatch({ type: 'patch', payload: { createResults: [] } });
+      // createLoading too: an aborted in-flight search leaves it set
+      dispatch({
+        type: 'patch',
+        payload: {
+          createResults: [],
+          createLoading: false,
+          createPage: 1,
+          createHasMore: false,
+          createLoadingMore: false,
+        },
+      });
       return;
     }
 
+    // A request for an older query must never overwrite a newer one: a pause
+    // mid-word fires a search for the partial query, and if that answers
+    // after the final query it would replace the right results with the
+    // wrong ones. Each new query aborts the previous request.
+    const controller = new AbortController();
     const timeout = setTimeout(async () => {
       dispatch({ type: 'patch', payload: { createLoading: true } });
       try {
@@ -497,25 +525,102 @@ export default function CategoryLibrary({
         }
         const response = await apiClient.request(
           `${apiBase}/search?category=${category}&q=${encodeURIComponent(query)}`,
+          { signal: controller.signal },
         );
+        if (controller.signal.aborted) {
+          return;
+        }
         if (!response.ok) {
           dispatch({ type: 'patch', payload: { createResults: [] } });
           return;
         }
-        const data = (await response.json()) as { items?: SearchResult[] };
+        const data = (await response.json()) as { items?: SearchResult[]; hasMore?: boolean };
+        if (controller.signal.aborted) {
+          return;
+        }
         const items = Array.isArray(data.items) ? data.items : [];
-        dispatch({ type: 'patch', payload: { createResults: items } });
+        dispatch({
+          type: 'patch',
+          payload: {
+            createResults: items,
+            createPage: 1,
+            createHasMore: data.hasMore === true,
+            createLoadingMore: false,
+          },
+        });
       } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
         console.warn('Create search failed:', error);
         dispatch({ type: 'patch', payload: { createResults: [] } });
       } finally {
-        dispatch({ type: 'patch', payload: { createLoading: false } });
+        if (!controller.signal.aborted) {
+          dispatch({ type: 'patch', payload: { createLoading: false } });
+        }
       }
     }, 350);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+      // A "load more" for the previous query must not land in the new one
+      loadMoreControllerRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, createQuery, ctaMode, supportsExternal]);
+
+  const loadMoreCreateResults = useCallback(async () => {
+    const query = createQuery.trim();
+    if (!apiBase || !query || createLoadingMore || !createHasMore) {
+      return;
+    }
+    const controller = new AbortController();
+    loadMoreControllerRef.current = controller;
+    const nextPage = createPage + 1;
+    dispatch({ type: 'patch', payload: { createLoadingMore: true } });
+    try {
+      const response = await apiClient.request(
+        `${apiBase}/search?category=${category}&q=${encodeURIComponent(query)}&page=${nextPage}`,
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (!response.ok) {
+        dispatch({ type: 'patch', payload: { createHasMore: false } });
+        return;
+      }
+      const data = (await response.json()) as { items?: SearchResult[]; hasMore?: boolean };
+      if (controller.signal.aborted) {
+        return;
+      }
+      // Providers page independently, so a later page can repeat a book
+      // already shown; keep the first occurrence.
+      const seen = new Set(
+        createResults.flatMap(result => [result.id, result.externalId].filter(Boolean)),
+      );
+      const fresh = (Array.isArray(data.items) ? data.items : []).filter(
+        result => !seen.has(result.id) && !(result.externalId && seen.has(result.externalId)),
+      );
+      dispatch({
+        type: 'patch',
+        payload: {
+          createResults: [...createResults, ...fresh],
+          createPage: nextPage,
+          createHasMore: data.hasMore === true,
+        },
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        console.warn('Create search (more) failed:', error);
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        dispatch({ type: 'patch', payload: { createLoadingMore: false } });
+      }
+    }
+  }, [apiBase, category, createQuery, createResults, createPage, createHasMore, createLoadingMore]);
 
   useEffect(() => {
     if (ctaMode !== 'suggestions') {
@@ -1391,6 +1496,9 @@ export default function CategoryLibrary({
               onSearchChange={value => dispatch({ type: 'patch', payload: { createQuery: value } })}
               searchResults={createResults}
               isLoading={createLoading}
+              hasMore={createHasMore}
+              isLoadingMore={createLoadingMore}
+              onLoadMore={loadMoreCreateResults}
               onOpenDialog={openEntryDialog}
               onClose={() => dispatch({ type: 'patch', payload: { ctaMode: null } })}
               libraryEntries={libraryEntries}
@@ -1466,6 +1574,9 @@ export default function CategoryLibrary({
               onSearchChange={value => dispatch({ type: 'patch', payload: { createQuery: value } })}
               searchResults={createResults}
               isLoading={createLoading}
+              hasMore={createHasMore}
+              isLoadingMore={createLoadingMore}
+              onLoadMore={loadMoreCreateResults}
               onOpenDialog={openEntryDialog}
               onClose={() => dispatch({ type: 'patch', payload: { ctaMode: null } })}
               libraryEntries={libraryEntries}

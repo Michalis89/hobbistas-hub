@@ -1,4 +1,9 @@
 import { withApiRoute } from '@/lib/observability/withApiRoute';
+import {
+  isOpenLibraryWorkId,
+  parseHardcoverExternalId,
+  parseNlgExternalId,
+} from '@/lib/books/identifiers';
 
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
@@ -201,7 +206,20 @@ async function fetchByExternalId(category: string, externalId: number | string) 
     }
     query = query.eq('igdb_id', numericId);
   } else if (category === 'books') {
-    query = query.eq('google_books_id', String(externalId));
+    // Books found only on Open Library are addressed by their work id (OL…W),
+    // books found only in the NLG catalogue by NLG<biblionumber>, on Hardcover by HC<id>
+    const bookId = String(externalId);
+    const nlgId = parseNlgExternalId(bookId);
+    const hardcoverId = parseHardcoverExternalId(bookId);
+    if (nlgId) {
+      query = query.eq('nlg_id', nlgId);
+    } else if (hardcoverId) {
+      query = query.eq('hardcover_id', hardcoverId);
+    } else if (isOpenLibraryWorkId(bookId)) {
+      query = query.eq('open_library_id', bookId);
+    } else {
+      query = query.eq('google_books_id', bookId);
+    }
   }
 
   const { data, error } = await query.maybeSingle();

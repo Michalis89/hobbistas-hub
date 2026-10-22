@@ -30,7 +30,8 @@ export function getActivityHref(activity: ActivityItem): string | null {
     readValue(payload, 'tmdb_id') ||
     readValue(payload, 'mal_id') ||
     readValue(payload, 'rawg_id') ||
-    readValue(payload, 'google_books_id');
+    readValue(payload, 'google_books_id') ||
+    readValue(payload, 'open_library_id');
 
   if (!slugValue) {
     return null;

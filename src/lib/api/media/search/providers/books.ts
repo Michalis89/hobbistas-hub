@@ -1,25 +1,37 @@
 import { DEFAULT_COVER, UNTITLED_FALLBACK } from '@/lib/constants/messages';
-import { EXTERNAL_API_REVALIDATE_SECONDS } from '@/lib/constants/cache';
-import { cachedExternalFetch } from '@/lib/api-cache/external';
+import { searchGoogleBooks } from '@/lib/books/googleBooks';
+import { searchOpenLibrary } from '@/lib/books/openLibrary';
+import { hasGreekLetters, searchNlg } from '@/lib/books/nlg';
+import { searchHardcover } from '@/lib/books/hardcover';
+import { toHardcoverExternalId, toNlgExternalId } from '@/lib/books/identifiers';
+import { bookIdentityKeys, mergeProviderResults, rankBooksByQuery } from '@/lib/books/merge';
+import { isGreekIsbn, parseIsbnQuery } from '@/lib/books/isbn';
+import type { BookCandidate } from '@/lib/books/types';
+import { provenanceField } from '../../provenance';
 import type { MediaSearchConfig, SearchLocalItem } from '../../handlers/search';
 
 type BooksCategory = 'books';
 
-type GoogleBook = {
-  id: string;
-  volumeInfo?: {
-    title?: string;
-    subtitle?: string;
-    authors?: string[];
-    categories?: string[];
-    description?: string;
-    pageCount?: number;
-    publishedDate?: string;
-    imageLinks?: {
-      thumbnail?: string;
-      smallThumbnail?: string;
-    };
-  };
+const readString = (item: SearchLocalItem, field: string) => {
+  const value = item[field];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+};
+
+const readNumber = (item: SearchLocalItem, field: string) => {
+  const value = item[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+};
+
+/** The id local rows expose to the UI, in the same priority as external results. */
+const localExternalId = (item: SearchLocalItem) => {
+  const nlgId = readNumber(item, 'nlg_id');
+  const hardcoverId = readNumber(item, 'hardcover_id');
+  return (
+    readString(item, 'google_books_id') ??
+    readString(item, 'open_library_id') ??
+    (nlgId ? toNlgExternalId(nlgId) : null) ??
+    (hardcoverId ? toHardcoverExternalId(hardcoverId) : null)
+  );
 };
 
 const mapLocalItem = (item: SearchLocalItem) => {
@@ -27,15 +39,17 @@ const mapLocalItem = (item: SearchLocalItem) => {
     (item.title as string | undefined) ||
     (item.original_title as string | undefined) ||
     UNTITLED_FALLBACK;
-  const subtitle = (item.original_title as string | undefined) || '';
-  const googleId = item.google_books_id as string | undefined;
+  // tags holds the authors for books; same fallback as external results
+  const authors = Array.isArray(item.tags) ? (item.tags as unknown[]) : [];
+  const firstAuthor = typeof authors[0] === 'string' ? authors[0] : '';
+  const subtitle = (item.original_title as string | undefined) || firstAuthor;
   const year = (item.release_date as string | undefined)?.slice(0, 4);
 
   return {
     source: 'local',
     id: `local-${item.id}`,
     mediaId: item.id,
-    externalId: googleId,
+    externalId: localExternalId(item) ?? undefined,
     title,
     subtitle,
     year,
@@ -46,17 +60,11 @@ const mapLocalItem = (item: SearchLocalItem) => {
       (item.cover_image_large as string | undefined) ||
       (item.cover_image_medium as string | undefined) ||
       DEFAULT_COVER,
+    ...provenanceField('local', [readString(item, 'source')]),
   };
 };
 
-const normalizeImage = (url?: string) => {
-  if (!url) {
-    return null;
-  }
-  return url.startsWith('http://') ? url.replace('http://', 'https://') : url;
-};
-
-const normalizeDate = (value?: string) => {
+const normalizeDate = (value?: string | null) => {
   if (!value) {
     return null;
   }
@@ -72,96 +80,159 @@ const normalizeDate = (value?: string) => {
   return null;
 };
 
-const mapGoogleItem = (media: GoogleBook) => {
-  const info = media.volumeInfo || {};
-  const title = info.title || UNTITLED_FALLBACK;
-  const subtitle = info.subtitle || (info.authors || [])[0] || '';
-  const year = info.publishedDate ? info.publishedDate.slice(0, 4) : undefined;
-  const coverLarge = normalizeImage(info.imageLinks?.thumbnail) ?? null;
-  const coverSmall = normalizeImage(info.imageLinks?.smallThumbnail) ?? null;
-  const releaseDate = normalizeDate(info.publishedDate);
+/**
+ * The id the UI and /media/books/[id] links use: Google id, else Open
+ * Library work id, else NLG<biblionumber>, else HC<id>.
+ */
+const primaryExternalId = (book: BookCandidate) =>
+  book.googleBooksId ??
+  book.openLibraryId ??
+  (book.nlgId ? toNlgExternalId(book.nlgId) : null) ??
+  (book.hardcoverId ? toHardcoverExternalId(book.hardcoverId) : '');
+
+const resultId = (book: BookCandidate) => {
+  if (book.googleBooksId) {
+    return `google-${book.googleBooksId}`;
+  }
+  if (book.openLibraryId) {
+    return `ol-${book.openLibraryId}`;
+  }
+  if (book.nlgId) {
+    return `nlg-${book.nlgId}`;
+  }
+  return `hc-${book.hardcoverId}`;
+};
+
+/** Fallback when a candidate carries no source list: the provider its first id belongs to. */
+const inferSource = (book: BookCandidate) => {
+  if (book.googleBooksId) {
+    return 'google_books';
+  }
+  if (book.openLibraryId) {
+    return 'open_library';
+  }
+  return book.nlgId ? 'nlg' : 'hardcover';
+};
+
+const mapBookCandidate = (book: BookCandidate) => {
+  const title = book.title || UNTITLED_FALLBACK;
+  const subtitle = book.subtitle || book.authors[0] || '';
+  const year = book.publishedDate ? book.publishedDate.slice(0, 4) : undefined;
 
   return {
     source: 'external',
-    id: `google-${media.id}`,
-    externalId: media.id,
+    id: resultId(book),
+    externalId: primaryExternalId(book),
     title,
     subtitle,
     year,
     status: 'planned',
     score: null,
-    tags: info.categories ?? [],
-    cover: coverLarge || coverSmall || DEFAULT_COVER,
+    tags: book.categories,
+    cover: book.coverLarge || book.coverSmall || DEFAULT_COVER,
     payload: {
-      google_books_id: media.id,
+      google_books_id: book.googleBooksId,
+      open_library_id: book.openLibraryId,
+      nlg_id: book.nlgId,
+      hardcover_id: book.hardcoverId,
+      isbn_13: book.isbn13,
       category: 'books' as BooksCategory,
-      source: 'google_books',
+      // The provider whose title and core data the row carries
+      source: book.sources[0] ?? inferSource(book),
       title,
-      original_title: info.subtitle || null,
-      description: info.description || null,
-      page_count: info.pageCount ?? null,
-      release_date: releaseDate,
-      cover_image_large: coverLarge,
-      cover_image_medium: coverSmall,
-      genres: info.categories ?? [],
-      tags: info.authors ?? [],
+      original_title: book.subtitle || null,
+      description: book.description,
+      page_count: book.pageCount,
+      release_date: normalizeDate(book.publishedDate),
+      publisher: book.publisher,
+      cover_image_large: book.coverLarge,
+      cover_image_medium: book.coverSmall,
+      genres: book.categories,
+      tags: book.authors,
     },
+    ...provenanceField('external', book.sources),
   };
 };
 
 const normalizeSearchTerm = (value: string) => {
+  // \p{L} rather than \w: \w is ASCII-only and would erase a Greek query.
   return value
-    .replace(/[^\w\s]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 };
 
+/** Greek queries (Greek letters, or a Greek ISBN) also go to the NLG catalogue. */
+const isGreekSearch = (search: string, isbn: string | null) =>
+  isbn ? isGreekIsbn(isbn) : hasGreekLetters(search);
+
+/**
+ * Providers are queried in parallel and merged: a book several of them know
+ * becomes one result whose gaps are filled from the others, and books only
+ * one knows are added. Any provider failing just leaves the rest.
+ *
+ * Merge priority (whose title and data win):
+ * - Greek searches: National Library of Greece first, so a Greek book keeps
+ *   its Greek title, edition and publisher.
+ * - Then Google Books, Hardcover (only with a token), Open Library.
+ *
+ * The merged list is then ranked: the best of each provider first, then by
+ * title match and reader count (see rankBooksByQuery).
+ */
 const fetchBooks = async (
   search: string,
-  { limit }: { category: BooksCategory; limit: number },
-) => {
-  const apiKey = process.env.GOOGLE_BOOKS_API_KEY || '';
-  if (!apiKey) {
-    console.warn('Missing GOOGLE_BOOKS_API_KEY');
-    return [] as GoogleBook[];
-  }
+  { limit, page }: { category: BooksCategory; limit: number; page: number },
+): Promise<BookCandidate[]> => {
+  const isbn = parseIsbnQuery(search);
+  const greek = isGreekSearch(search, isbn);
+  const options = { limit, isbn, page };
+  const [google, hardcover, openLibrary, nlg] = await Promise.all([
+    searchGoogleBooks(search, options),
+    searchHardcover(search, options),
+    searchOpenLibrary(search, options),
+    greek ? searchNlg(search, options) : Promise.resolve([]),
+  ]);
+  const googleBooks = google.filter(book => book.title);
+  const merged = mergeProviderResults(
+    greek ? [nlg, googleBooks, hardcover, openLibrary] : [googleBooks, hardcover, openLibrary],
+  );
 
-  const url = new URL('https://www.googleapis.com/books/v1/volumes');
-  url.searchParams.set('q', search);
-  url.searchParams.set('maxResults', String(limit));
-  url.searchParams.set('printType', 'books');
-  url.searchParams.set('key', apiKey);
-
-  try {
-    const result = await cachedExternalFetch<{ items?: GoogleBook[] }>({
-      apiName: 'google-books-search',
-      endpoint: url.toString(),
-      ttlSeconds: EXTERNAL_API_REVALIDATE_SECONDS,
-    });
-    return result.items ?? [];
-  } catch (error) {
-    console.warn('Google Books error:', error);
-    return [] as GoogleBook[];
+  if (!isbn) {
+    return rankBooksByQuery(merged, search);
   }
+  // An ISBN query names one edition: that is the ISBN to store, not whichever
+  // edition the provider listed first.
+  return merged.map(book => (book.isbns.includes(isbn) ? { ...book, isbn13: isbn } : book));
 };
 
 export const booksSearchConfig: MediaSearchConfig<
   BooksCategory,
-  GoogleBook,
-  ReturnType<typeof mapLocalItem> | ReturnType<typeof mapGoogleItem>
+  BookCandidate,
+  ReturnType<typeof mapLocalItem> | ReturnType<typeof mapBookCandidate>
 > = {
   defaultCategory: 'books',
   supportedCategories: ['books'],
   limit: 12,
+  paginated: true,
   logPrefix: 'Books',
-  buildLocalOrFilter: query => `title.ilike.%${query}%,original_title.ilike.%${query}%`,
-  mapLocalItem,
-  mapExternalItem: mapGoogleItem,
-  getLocalExternalId: item => {
-    const googleId = item.google_books_id;
-    return typeof googleId === 'string' ? googleId : null;
+  buildLocalOrFilter: query => {
+    const titleFilter = `title.ilike.%${query}%,original_title.ilike.%${query}%`;
+    const isbn = parseIsbnQuery(query);
+    return isbn ? `isbn_13.eq.${isbn},${titleFilter}` : titleFilter;
   },
-  getExternalId: item => item.id,
+  mapLocalItem,
+  mapExternalItem: mapBookCandidate,
+  getLocalExternalId: localExternalId,
+  getExternalId: primaryExternalId,
+  getLocalExternalIds: item =>
+    bookIdentityKeys({
+      googleBooksId: readString(item, 'google_books_id'),
+      openLibraryId: readString(item, 'open_library_id'),
+      nlgId: readNumber(item, 'nlg_id'),
+      hardcoverId: readNumber(item, 'hardcover_id'),
+      isbn13: readString(item, 'isbn_13'),
+    }),
+  getExternalIds: book => bookIdentityKeys(book),
   fetchExternal: fetchBooks,
   normalizeSearchTerm,
 };

@@ -1734,6 +1734,7 @@ export type Database = {
           format: string | null
           genres: string[] | null
           google_books_id: string | null
+          hardcover_id: number | null
           id: number
           igdb_artwork_image_ids: string[] | null
           igdb_category: number | null
@@ -1745,12 +1746,15 @@ export type Database = {
           igdb_themes: string[] | null
           igdb_updated_at: string | null
           imdb_id: string | null
+          isbn_13: string | null
           last_air_date: string | null
           mal_id: number | null
           metacritic: number | null
+          nlg_id: number | null
           number_of_episodes: number | null
           number_of_seasons: number | null
           official_website: string | null
+          open_library_id: string | null
           original_title: string | null
           page_count: number | null
           platforms: string[] | null
@@ -1804,6 +1808,7 @@ export type Database = {
           format?: string | null
           genres?: string[] | null
           google_books_id?: string | null
+          hardcover_id?: number | null
           id?: number
           igdb_artwork_image_ids?: string[] | null
           igdb_category?: number | null
@@ -1815,12 +1820,15 @@ export type Database = {
           igdb_themes?: string[] | null
           igdb_updated_at?: string | null
           imdb_id?: string | null
+          isbn_13?: string | null
           last_air_date?: string | null
           mal_id?: number | null
           metacritic?: number | null
+          nlg_id?: number | null
           number_of_episodes?: number | null
           number_of_seasons?: number | null
           official_website?: string | null
+          open_library_id?: string | null
           original_title?: string | null
           page_count?: number | null
           platforms?: string[] | null
@@ -1874,6 +1882,7 @@ export type Database = {
           format?: string | null
           genres?: string[] | null
           google_books_id?: string | null
+          hardcover_id?: number | null
           id?: number
           igdb_artwork_image_ids?: string[] | null
           igdb_category?: number | null
@@ -1885,12 +1894,15 @@ export type Database = {
           igdb_themes?: string[] | null
           igdb_updated_at?: string | null
           imdb_id?: string | null
+          isbn_13?: string | null
           last_air_date?: string | null
           mal_id?: number | null
           metacritic?: number | null
+          nlg_id?: number | null
           number_of_episodes?: number | null
           number_of_seasons?: number | null
           official_website?: string | null
+          open_library_id?: string | null
           original_title?: string | null
           page_count?: number | null
           platforms?: string[] | null

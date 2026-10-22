@@ -1,4 +1,4 @@
-import type { ExternalIdConfig, MediaPayload, TitlePriority } from './types';
+import type { ExternalIdConfig, ExternalIdValue, MediaPayload, TitlePriority } from './types';
 
 /**
  * Media category keys supported by the factory
@@ -22,7 +22,18 @@ export type MediaCategoryConfig = {
   titlePriority: TitlePriority;
 
   /** Optional data enrichment function (e.g., fetching additional details from external API) */
-  enricher?: (category: string, externalId: number) => Promise<Partial<MediaPayload>>;
+  enricher?: (
+    category: string,
+    externalId: ExternalIdValue,
+    payload: MediaPayload,
+  ) => Promise<Partial<MediaPayload>>;
+
+  /**
+   * Columns to fill on an existing media row when a later add carries values
+   * for them and the row's are empty. Only set for categories with more than
+   * one provider, where a second provider can know what the first did not.
+   */
+  backfillFields?: string[];
 
   /** Optional payload transformation function for category-specific field mapping */
   payloadMapper?: (payload: Record<string, unknown>) => Record<string, unknown>;
@@ -60,14 +71,33 @@ export const MEDIA_CATEGORY_CONFIGS: Record<MediaCategoryKey, MediaCategoryConfi
   books: {
     key: 'books',
     subcategories: ['books'],
-    externalId: { field: 'google_books_id', type: 'string' },
+    externalId: {
+      field: 'google_books_id',
+      type: 'string',
+      alternateFields: ['open_library_id', 'nlg_id', 'hardcover_id', 'isbn_13'],
+    },
     titlePriority: ['title', 'original_title'],
+    backfillFields: [
+      'google_books_id',
+      'open_library_id',
+      'nlg_id',
+      'hardcover_id',
+      'isbn_13',
+      'description',
+      'page_count',
+      'release_date',
+      'publisher',
+      'cover_image_large',
+      'cover_image_medium',
+      'genres',
+    ],
     logPrefix: 'Books',
     defaultCategory: 'books',
     librarySelectFields:
       'id,status,updated_at,is_favorite,import_source,selected_platform,priority,score,progress,notes,media_items!inner(id,category,source,google_books_id,title,original_title,description,release_date,page_count,cover_image_large,cover_image_medium,genres,tags)',
     suggestionsSelectFields:
       'media_id,score,media_items!inner(id,category,title,original_title,description,release_date,page_count,cover_image_large,cover_image_medium,genres,tags)',
+    // enricher (Open Library work, NLG record, cross-provider gaps) is set in enrichers.ts to avoid circular dependency
   },
 
   games: {

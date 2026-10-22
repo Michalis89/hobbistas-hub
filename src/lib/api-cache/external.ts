@@ -8,6 +8,11 @@ type CachedExternalFetchParams = {
   endpoint: string;
   ttlSeconds?: number;
   init?: RequestInit;
+  /**
+   * Replaces the global fetch for this call, e.g. for a host whose TLS chain
+   * needs an extra CA certificate. Not part of the cache key.
+   */
+  fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
 };
 
 export class ExternalFetchError extends Error {
@@ -67,6 +72,7 @@ export async function cachedExternalFetch<T>({
   endpoint,
   ttlSeconds = 24 * 60 * 60,
   init,
+  fetchImpl,
 }: CachedExternalFetchParams): Promise<T> {
   const cacheClient = getCacheClient();
   const cacheKey = `${apiName}:${hashCacheKey(`${endpoint}:${stringifyRequestInit(init)}`)}`;
@@ -91,7 +97,7 @@ export async function cachedExternalFetch<T>({
     }
   }
 
-  const response = await fetch(endpoint, init);
+  const response = await (fetchImpl ?? fetch)(endpoint, init);
   if (!response.ok) {
     const bodyText = await response.text().catch(() => '');
     throw new ExternalFetchError(

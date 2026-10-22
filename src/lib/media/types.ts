@@ -31,6 +31,10 @@ export type MediaItem = {
   mal_id?: number | null;
   tmdb_id?: number | null;
   google_books_id?: string | null;
+  open_library_id?: string | null;
+  nlg_id?: number | null;
+  hardcover_id?: number | null;
+  isbn_13?: string | null;
   rawg_id?: number | null;
   igdb_id?: number | null;
   igdb_category?: number | null;

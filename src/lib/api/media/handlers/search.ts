@@ -8,18 +8,37 @@ export type SearchLocalItem = Record<string, unknown>;
 type SearchFetchContext<TCategory extends string> = {
   category: TCategory;
   limit: number;
+  /** 1-based; always 1 unless the config is `paginated`. */
+  page: number;
 };
+
+/** Upper bound on ?page=, so a crawler cannot walk providers indefinitely. */
+const MAX_SEARCH_PAGE = 10;
 
 export type MediaSearchConfig<TCategory extends string, TExternalItem, TResultItem> = {
   defaultCategory: TCategory;
   supportedCategories: readonly TCategory[];
   limit?: number;
+  /**
+   * Honour ?page= by passing it to fetchExternal and paging the local query.
+   * Only for categories whose providers all page; the others would return
+   * the same external results for every page.
+   */
+  paginated?: boolean;
   logPrefix: string;
   buildLocalOrFilter: (query: string) => string;
   mapLocalItem: (item: SearchLocalItem) => TResultItem;
   mapExternalItem: (item: TExternalItem, category: TCategory) => TResultItem;
   getLocalExternalId: (item: SearchLocalItem) => SearchExternalId | null;
   getExternalId: (item: TExternalItem) => SearchExternalId;
+  /**
+   * Optional multi-key identity, for categories whose items can be known by
+   * more than one id (books: Google Books id, Open Library id, ISBN). When
+   * set, an external result is dropped if any of its keys matches any key
+   * of a local item. Both sides must use the same key format.
+   */
+  getLocalExternalIds?: (item: SearchLocalItem) => SearchExternalId[];
+  getExternalIds?: (item: TExternalItem) => SearchExternalId[];
   fetchExternal: (
     query: string,
     context: SearchFetchContext<TCategory>,
@@ -43,13 +62,14 @@ async function fetchWithNormalization<TCategory extends string, TExternalItem>(
   query: string,
   category: TCategory,
   limit: number,
+  page: number,
   normalize: ((value: string) => string) | undefined,
   fetchExternal: (
     search: string,
     context: SearchFetchContext<TCategory>,
   ) => Promise<TExternalItem[]>,
 ) {
-  let items = await fetchExternal(query, { category, limit });
+  let items = await fetchExternal(query, { category, limit, page });
   const normalized = normalize?.(query);
 
   if (
@@ -58,7 +78,7 @@ async function fetchWithNormalization<TCategory extends string, TExternalItem>(
     normalized.length > 0 &&
     normalized !== query
   ) {
-    items = await fetchExternal(normalized, { category, limit });
+    items = await fetchExternal(normalized, { category, limit, page });
   }
 
   return items;
@@ -73,6 +93,10 @@ export async function handleMediaSearch<TCategory extends string, TExternalItem,
     const q = searchParams.get('q')?.trim() || '';
     const category = (searchParams.get('category') || config.defaultCategory) as TCategory;
     const limit = config.limit ?? 12;
+    const requestedPage = Number.parseInt(searchParams.get('page') ?? '1', 10);
+    const page = config.paginated
+      ? Math.min(Math.max(Number.isFinite(requestedPage) ? requestedPage : 1, 1), MAX_SEARCH_PAGE)
+      : 1;
 
     if (!q) {
       return NextResponse.json({ source: 'local' as SearchSource, items: [] as TResultItem[] });
@@ -83,12 +107,13 @@ export async function handleMediaSearch<TCategory extends string, TExternalItem,
     }
 
     const supabase = await createRouteHandlerClient();
+    const localOffset = (page - 1) * limit;
     const { data: localItems, error: localError } = await supabase
       .from('media_items')
       .select('*')
       .eq('category', category)
       .or(config.buildLocalOrFilter(q))
-      .limit(limit);
+      .range(localOffset, localOffset + limit - 1);
 
     if (localError) {
       console.warn(`Local ${config.logPrefix.toLowerCase()} search error:`, localError);
@@ -101,10 +126,14 @@ export async function handleMediaSearch<TCategory extends string, TExternalItem,
     const localResults = typedLocalItems.map(config.mapLocalItem);
     const remaining = Math.max(limit - localResults.length, 0);
     const localExternalIds = new Set(
-      typedLocalItems
-        .map(config.getLocalExternalId)
-        .filter((id): id is SearchExternalId => id !== null),
+      typedLocalItems.flatMap(item =>
+        config.getLocalExternalIds
+          ? config.getLocalExternalIds(item)
+          : [config.getLocalExternalId(item)].filter((id): id is SearchExternalId => id !== null),
+      ),
     );
+    const externalIdsOf = (item: TExternalItem) =>
+      config.getExternalIds ? config.getExternalIds(item) : [config.getExternalId(item)];
 
     let externalFetched: TExternalItem[] = [];
     if (remaining > 0) {
@@ -112,6 +141,7 @@ export async function handleMediaSearch<TCategory extends string, TExternalItem,
         q,
         category,
         limit,
+        page,
         config.normalizeSearchTerm,
         config.fetchExternal,
       );
@@ -122,14 +152,30 @@ export async function handleMediaSearch<TCategory extends string, TExternalItem,
       : externalFetched;
 
     const externalResults = filteredExternalFetched
-      .filter(item => !localExternalIds.has(config.getExternalId(item)))
+      .filter(item => !externalIdsOf(item).some(id => localExternalIds.has(id)))
       .slice(0, remaining)
       .map(item => config.mapExternalItem(item, category));
+
+    // Another page is worth asking for while the local page was full or a
+    // provider still returned results for this one.
+    const pagination = config.paginated
+      ? { page, hasMore: typedLocalItemsRaw.length === limit || externalFetched.length > 0 }
+      : {};
 
     if (localResults.length > 0 || externalResults.length > 0) {
       return NextResponse.json({
         source: resolveSource(localResults.length, externalResults.length),
         items: [...localResults, ...externalResults],
+        ...pagination,
+      });
+    }
+
+    if (page > 1) {
+      return NextResponse.json({
+        source: 'external' as SearchSource,
+        items: [],
+        page,
+        hasMore: false,
       });
     }
 
@@ -137,6 +183,7 @@ export async function handleMediaSearch<TCategory extends string, TExternalItem,
       q,
       category,
       limit,
+      page,
       config.normalizeSearchTerm,
       config.fetchExternal,
     );

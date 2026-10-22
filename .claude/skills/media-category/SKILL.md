@@ -10,7 +10,7 @@ Four categories exist today, each grouping subcategories:
 | Key | Subcategories | External ID | Provider |
 |---|---|---|---|
 | `anime` | anime, manga | `mal_id` (number) | MyAnimeList |
-| `books` | books | `google_books_id` (string) | Google Books |
+| `books` | books | `google_books_id` (string) + alternates `open_library_id`, `nlg_id`, `hardcover_id`, `isbn_13` | Google Books + Open Library + Hardcover, National Library of Greece for Greek books (see `INTEGRATIONS.md`) |
 | `games` | games | `igdb_id` (number) | IGDB |
 | `movies` | movies, tv | `tmdb_id` (number) | TMDB |
 

@@ -13,7 +13,7 @@ Defined in `src/lib/api/media/config.ts`:
 | Category Key | Subcategories | External ID Field | External Source | Title Priority |
 |-------------|---------------|-------------------|-----------------|---------------|
 | `anime` | anime, manga | `mal_id` (number) | MyAnimeList API | title_english > title_romaji > title_native |
-| `books` | books | `google_books_id` (string) | Google Books API | title > original_title |
+| `books` | books | `google_books_id` (string); alternates `open_library_id`, `nlg_id`, `isbn_13` | Google Books + Open Library + National Library of Greece | title > original_title |
 | `games` | games | `igdb_id` (number) | IGDB API | title > title_english |
 | `movies` | movies, tv | `tmdb_id` (number) | TMDB API | title > original_title > title_english > title_romaji > title_native |
 
@@ -67,15 +67,83 @@ Defined in `src/lib/api/media/config.ts`:
 
 ---
 
-## Google Books
+## Books (Google Books, Open Library, National Library of Greece, Hardcover)
 
-**Files**: `src/lib/api/media/search/providers/books.ts`
+**Files**: `src/lib/api/media/search/providers/books.ts`, `src/lib/books/`
 
-**Capabilities**:
-- Book search by title/author
-- `google_books_id` (string) as external identifier
+Books are the one category with more than one provider. Every provider result is mapped
+to a provider-neutral `BookCandidate` (`src/lib/books/types.ts`) before it reaches the
+search handler.
 
-**Authentication**: Google Books API key.
+**Search** queries the providers in parallel and merges them (`src/lib/books/merge.ts`): a
+book several know (shared ISBN-13, or same normalised title + first author) becomes one
+result whose gaps are filled from the others; books only one knows are interleaved. The
+merged list is then ranked (`rankBooksByQuery`): the best match of each provider first, so
+one provider cannot crowd the others off the page (a provider whose best does not match the
+title at all is not promoted, unless nothing does, e.g. an author search), then by title
+match, then by Hardcover reader count. ISBN-shaped queries
+are sent as exact ISBN lookups and also matched against local `isbn_13`.
+
+- Google Books and Open Library take part in every search; Hardcover too when
+  `HARDCOVER_API_TOKEN` is set.
+- The National Library of Greece (ΕΒΕ) catalogue takes part only in Greek searches (Greek
+  letters in the query, or a 978-960 / 978-618 ISBN), and is the primary source for them,
+  so a Greek book keeps its Greek title, edition and publisher. Its queries replace the
+  first letter of χτ/κτ and φτ/πτ inside a word with a `?` wildcard, so "δαχτυλίδι" also
+  finds records spelled "δακτυλίδι".
+
+**Pagination**: books set `paginated: true` in their `MediaSearchConfig`, so the search
+handler honours `?page=` (capped at 10): the local query is paged with `range()`, the page is
+passed to every provider (Google `startIndex`, Open Library `page`, ΕΒΕ `offset`, Hardcover
+`page`), and the response carries `page` and `hasMore`. Other categories ignore `?page=`. The
+Add Entry panel shows "Load more" and drops repeats, since providers page independently.
+
+**Provenance (dev/preview only)**: each result carries `provenance: { origin, providers }`
+(`src/lib/api/media/provenance.ts`), shown as a badge such as "DB · Google Books" or
+"Google Books + Open Library". It is decided on the server and omitted from the response
+in production (`VERCEL_ENV=production`, or `NODE_ENV=production` off Vercel).
+
+**Identity**: `google_books_id` stays the primary external id; `open_library_id`, `nlg_id`,
+`hardcover_id` and `isbn_13` are `alternateFields` in the category config. The search handler
+deduplicates on all of them via `getLocalExternalIds` / `getExternalIds` (namespaced keys
+`gb:`, `ol:`, `nlg:`, `hc:`, `isbn:`), and the add handler looks for an existing row by each in
+order. When an add matches an existing row, the row's empty columns (`backfillFields`) are
+filled from the payload, never overwritten. Books known only to Open Library are addressed
+at `/media/books/OL…W`, books known only to the ΕΒΕ at `/media/books/NLG<biblionumber>`,
+books known only to Hardcover at `/media/books/HC<id>`.
+
+**Enrichment on add** (`enrichBookPayload` in `handlers/enrichers.ts`) mixes the
+providers into one row, filling gaps only:
+
+1. ΕΒΕ MARC record: page count, publisher, subjects, ISBN. A Greek-ISBN book that came
+   from another provider is matched to its ΕΒΕ record by ISBN first. Cover URLs built from
+   an ISBN (ΕΒΕ, Open Library by ISBN) are kept only if the image exists.
+2. Open Library work: description and subjects.
+3. Google Books by ISBN: description and cover of the same edition, plus its volume id.
+4. Open Library by ISBN: a description as a last resort. Its work id is *not* stored: an
+   Open Library work groups every edition and language, and a Greek edition must not be
+   folded into the English work's row.
+
+| Provider | Auth | Role |
+|---|---|---|
+| Google Books | `GOOGLE_BOOKS_API_KEY` | search + same-edition enrichment |
+| Open Library | none (sends an identifying `User-Agent`) | search + work enrichment |
+| National Library of Greece | none | Greek search (Koha OpenSearch RSS), record details (MARCXML), covers (`covers.nlg.gr`) |
+| Hardcover | `HARDCOVER_API_TOKEN` (personal API token; `Bearer ` prefix optional). Unset = skipped | search: descriptions, genres, reader counts for ranking |
+
+**Hardcover terms that shape the code** (`src/lib/books/hardcover.ts`): server-side only;
+a public site may use book data and aggregate counts but not data owned by users
+(libraries, reviews, ratings, lists); covers are user uploads and need a DMCA takedown policy
+to be shown publicly, which this site does not have, so Hardcover covers are **not** used (a
+Hardcover-only book shows Open Library's cover by ISBN). Free plan: 5,000 requests/day,
+60/minute. GraphQL errors arrive with HTTP 200 and are turned into a 502 before the cache,
+so they are never cached.
+
+**ΕΒΕ TLS**: `catalogue.nlg.gr` does not send its intermediate certificate, which Node
+rejects. `src/lib/books/nlgTransport.ts` supplies that public intermediate (GEANT TLS ECC
+1, from the certificate's AIA URL) alongside Node's root store, with verification fully
+on. `covers.nlg.gr` has a correct chain and uses plain `fetch`. The catalogue is a public
+service: it is asked only about Greek searches and every answer is cached for 6 hours.
 
 ---
 
@@ -171,6 +239,8 @@ Registered in `next.config.ts` `images.remotePatterns`:
 | `*.myanimelist.net` | MAL |
 | `image.tmdb.org` | TMDB |
 | `books.google.com` | Google Books |
+| `covers.openlibrary.org` | Open Library covers |
+| `covers.nlg.gr` | National Library of Greece covers |
 | `jolfksxuhyktpwncniks.supabase.co` | Supabase Storage |
 | `www.replacesmoke.com` | Vape content |
 | `images.thedirect.com` | Article images |
