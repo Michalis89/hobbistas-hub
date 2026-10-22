@@ -2712,6 +2712,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_user_overview: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          article_count: number
+          character_sheet_count: number
+          comment_count: number
+          diary_count: number
+          email_confirmed_at: string
+          last_sign_in_at: string
+          library_count: number
+          user_id: string
+        }[]
+      }
       calculate_user_stats: { Args: { p_user_id: string }; Returns: Json }
       category_dashboard_history: {
         Args: { p_category: string; p_since: string; p_user_id: string }

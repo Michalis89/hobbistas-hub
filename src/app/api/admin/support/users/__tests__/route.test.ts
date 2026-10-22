@@ -50,6 +50,7 @@ type StatusQueryResult = { data: Array<{ account_status: unknown }> | null; erro
 function makeAdminMock(config?: {
   mainResult?: MainQueryResult;
   statusResult?: StatusQueryResult;
+  rpcResult?: { data: unknown; error: unknown };
 }) {
   const mainResult = config?.mainResult ?? { data: [], error: null, count: 0 };
   const statusResult = config?.statusResult ?? { data: [], error: null };
@@ -82,9 +83,12 @@ function makeAdminMock(config?: {
     return {};
   });
 
+  const rpc = jest.fn().mockResolvedValue(config?.rpcResult ?? { data: [], error: null });
+
   return {
-    client: { from },
+    client: { from, rpc },
     spies: {
+      rpc,
       usersSelect,
       mainQuery,
       statusesQuery,
@@ -150,7 +154,8 @@ describe('app/api/admin/support/users/route', () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.data).toEqual([{ id: 'u1', username: 'alice' }]);
+    // No overview row for this user: the list still loads, without activity
+    expect(body.data).toEqual([{ id: 'u1', username: 'alice', activity: null }]);
     expect(body.meta).toEqual({
       total: 1,
       limit: 100,
@@ -250,5 +255,100 @@ describe('app/api/admin/support/users/route', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.meta.filters.statuses).toEqual(['active']);
+  });
+
+  describe('activity overview', () => {
+    const NOW_ISO = new Date().toISOString();
+
+    it('adds derived status, latest sign-in and content counts from admin_user_overview', async () => {
+      const admin = makeAdminMock({
+        mainResult: {
+          data: [
+            { id: 'u1', username: 'reader', account_status: 'active', last_login: null },
+            { id: 'u2', username: 'banned', account_status: 'banned', last_login: null },
+          ],
+          error: null,
+          count: 2,
+        },
+        rpcResult: {
+          data: [
+            {
+              user_id: 'u1',
+              email_confirmed_at: '2026-01-01T00:00:00Z',
+              last_sign_in_at: NOW_ISO,
+              library_count: '120',
+              diary_count: 3,
+              article_count: 0,
+              comment_count: 0,
+              character_sheet_count: 0,
+            },
+            {
+              user_id: 'u2',
+              email_confirmed_at: '2026-01-01T00:00:00Z',
+              last_sign_in_at: null,
+              library_count: 0,
+              diary_count: 0,
+              article_count: 0,
+              comment_count: 0,
+              character_sheet_count: 0,
+            },
+          ],
+          error: null,
+        },
+      });
+      createSupabaseAdminClientMock.mockReturnValue(admin.client);
+
+      const response = await GET(new Request('https://example.com/api/admin/support/users'));
+      const body = await response.json();
+
+      expect(admin.spies.rpc).toHaveBeenCalledWith('admin_user_overview', {
+        p_user_ids: ['u1', 'u2'],
+      });
+      expect(body.data[0].activity).toEqual({
+        status: 'active',
+        emailConfirmed: true,
+        lastSignInAt: new Date(NOW_ISO).toISOString(),
+        content: {
+          library: 120,
+          diary: 3,
+          articles: 0,
+          comments: 0,
+          characterSheets: 0,
+          total: 123,
+        },
+      });
+      // A moderation state wins over activity
+      expect(body.data[1].activity.status).toBe('banned');
+      expect(body.data[1].activity.content.total).toBe(0);
+    });
+
+    it('still lists users when the overview function is missing', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const admin = makeAdminMock({
+        mainResult: { data: [{ id: 'u1', username: 'alice' }], error: null, count: 1 },
+        rpcResult: {
+          data: null,
+          error: { message: 'function admin_user_overview does not exist' },
+        },
+      });
+      createSupabaseAdminClientMock.mockReturnValue(admin.client);
+
+      const response = await GET(new Request('https://example.com/api/admin/support/users'));
+
+      expect(response.status).toBe(200);
+      expect((await response.json()).data).toEqual([
+        { id: 'u1', username: 'alice', activity: null },
+      ]);
+      warn.mockRestore();
+    });
+
+    it('does not call the overview for an empty page', async () => {
+      const admin = makeAdminMock();
+      createSupabaseAdminClientMock.mockReturnValue(admin.client);
+
+      await GET(new Request('https://example.com/api/admin/support/users'));
+
+      expect(admin.spies.rpc).not.toHaveBeenCalled();
+    });
   });
 });

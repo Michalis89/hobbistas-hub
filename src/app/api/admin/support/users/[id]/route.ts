@@ -14,6 +14,14 @@ const ROLE_OPTIONS: UserRole[] = ['user', 'author', 'reviewer', 'moderator', 'ad
 const VALID_ROLE_SET = new Set<UserRole>(ROLE_OPTIONS);
 const EDITABLE_KEYS = new Set(['display_name', 'full_name', 'country', 'account_status', 'roles']);
 
+/**
+ * The account states the login and session routes act on. Anything else
+ * would be stored but ignored, so a typo like "suspnded" would silently
+ * leave the account usable. 'deleted' is set by account deletion, and kept
+ * valid so an already-deleted row can still be edited.
+ */
+const ACCOUNT_STATUSES = new Set(['active', 'suspended', 'banned', 'deleted']);
+
 function normalizeText(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -149,6 +157,15 @@ async function PATCHHandler(req: Request, context: { params: Promise<{ id: strin
         updates.roles = normalizedRoles.includes('user')
           ? normalizedRoles
           : Array.from(new Set(['user', ...normalizedRoles]));
+        continue;
+      }
+
+      if (key === 'account_status') {
+        const status = typeof value === 'string' ? value.trim().toLowerCase() : '';
+        if (!ACCOUNT_STATUSES.has(status)) {
+          return fail({ error: 'Invalid account status.', code: 'BAD_REQUEST' }, 400);
+        }
+        updates.account_status = status;
         continue;
       }
 

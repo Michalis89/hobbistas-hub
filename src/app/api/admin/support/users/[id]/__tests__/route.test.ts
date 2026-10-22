@@ -387,6 +387,38 @@ describe('app/api/admin/support/users/[id]/route', () => {
     expect(s.spies.updates[0]).toMatchObject({ roles: ['user'] });
   });
 
+  it('PATCH rejects an account status the login flow does not know', async () => {
+    const s = makeAdminMock({
+      maybeSingleQueue: [{ data: { id: 'u2', roles: ['user'] }, error: null }],
+      updateResult: { data: { id: 'u2' }, error: null },
+    });
+    createSupabaseAdminClientMock.mockReturnValue(s.client);
+
+    const response = await PATCH(patchReq({ updates: { account_status: 'suspnded' } }), {
+      params: Promise.resolve({ id: 'u2' }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(s.spies.updates).toHaveLength(0);
+  });
+
+  it('PATCH accepts suspended and banned', async () => {
+    for (const status of ['suspended', 'BANNED']) {
+      const s = makeAdminMock({
+        maybeSingleQueue: [{ data: { id: 'u2', roles: ['user'] }, error: null }],
+        updateResult: { data: { id: 'u2' }, error: null },
+      });
+      createSupabaseAdminClientMock.mockReturnValue(s.client);
+
+      const response = await PATCH(patchReq({ updates: { account_status: status } }), {
+        params: Promise.resolve({ id: 'u2' }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(s.spies.updates[0]).toMatchObject({ account_status: status.toLowerCase() });
+    }
+  });
+
   it('DELETE maps unauthorized and forbidden exceptions', async () => {
     createSupabaseAdminClientMock.mockReturnValue(makeAdminMock().client);
     requireAdminRoleMock.mockRejectedValueOnce(new UnauthorizedError());

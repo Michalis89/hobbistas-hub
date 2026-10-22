@@ -148,7 +148,7 @@ export default function EditProfilePage() {
       setFormData({
         full_name: user.full_name || '',
         date_of_birth: user.date_of_birth || '',
-        country: user.country || 'GR',
+        country: user.country || '',
         timezone: user.timezone || '',
         language_preference: user.language_preference || 'en',
         display_name: user.display_name || '',
@@ -201,7 +201,7 @@ export default function EditProfilePage() {
         {
           full_name: user.full_name || '',
           date_of_birth: user.date_of_birth || '',
-          country: user.country || 'GR',
+          country: user.country || '',
           timezone: user.timezone || '',
           language_preference: user.language_preference || 'en',
           display_name: user.display_name || '',

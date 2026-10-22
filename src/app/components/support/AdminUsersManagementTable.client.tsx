@@ -31,6 +31,20 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { UserRole } from '@/types/user';
+import {
+  ACCOUNT_STATUS_OPTIONS,
+  DORMANT_AFTER_DAYS,
+  deriveUserActivityStatus,
+  type UserActivityStatus,
+  type UserContentCounts,
+} from '@/lib/admin/userActivity';
+
+type UserActivity = {
+  status: UserActivityStatus;
+  emailConfirmed: boolean;
+  lastSignInAt: string | null;
+  content: UserContentCounts;
+};
 
 type UserRow = {
   id: string;
@@ -44,6 +58,8 @@ type UserRow = {
   created_at: string | null;
   updated_at: string | null;
   last_login: string | null;
+  /** Null when the overview could not be loaded (e.g. migration rc055 not applied). */
+  activity?: UserActivity | null;
 };
 
 type FiltersState = {
@@ -65,7 +81,6 @@ type MetaState = {
 type EditingState = {
   display_name: string;
   full_name: string;
-  country: string;
   account_status: string;
   roles: UserRole[];
 };
@@ -81,6 +96,55 @@ const ROLE_LABELS: Record<UserRole, string> = {
 };
 
 const DEFAULT_LIMIT = 20;
+
+const STATUS_LABELS: Record<UserActivityStatus, string> = {
+  active: 'Active',
+  dormant: 'Dormant',
+  never_signed_in: 'Never signed in',
+  unverified: 'Unverified email',
+  suspended: 'Suspended',
+  banned: 'Banned',
+  deleted: 'Deleted',
+};
+
+const STATUS_HINTS: Record<UserActivityStatus, string> = {
+  active: `Signed in within the last ${DORMANT_AFTER_DAYS} days.`,
+  dormant: `No sign-in for more than ${DORMANT_AFTER_DAYS} days.`,
+  never_signed_in: 'Confirmed the email but never signed in.',
+  unverified: 'Never confirmed the email address.',
+  suspended: 'Suspended by an admin: cannot sign in.',
+  banned: 'Banned by an admin: cannot sign in.',
+  deleted: 'Account deleted.',
+};
+
+const STATUS_VARIANTS: Record<
+  UserActivityStatus,
+  'default' | 'secondary' | 'destructive' | 'outline'
+> = {
+  active: 'default',
+  dormant: 'secondary',
+  never_signed_in: 'outline',
+  unverified: 'outline',
+  suspended: 'destructive',
+  banned: 'destructive',
+  deleted: 'destructive',
+};
+
+const CONTENT_LABELS: [keyof Omit<UserContentCounts, 'total'>, string][] = [
+  ['library', 'Library'],
+  ['diary', 'Diary'],
+  ['articles', 'Articles'],
+  ['comments', 'Comments'],
+  ['characterSheets', 'D&D'],
+];
+
+/** "Library 120 · Diary 3", or null when the user created nothing. */
+function contentSummary(content: UserContentCounts): string | null {
+  const parts = CONTENT_LABELS.filter(([key]) => content[key] > 0).map(
+    ([key, label]) => `${label} ${content[key]}`,
+  );
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
 
 const initialFilters: FiltersState = {
   q: '',
@@ -184,8 +248,7 @@ export default function AdminUsersManagementTable() {
     setEditingState({
       display_name: row.display_name ?? '',
       full_name: row.full_name ?? '',
-      country: row.country ?? '',
-      account_status: row.account_status ?? '',
+      account_status: row.account_status || 'active',
       roles: normalizeRoleList(row.roles),
     });
   };
@@ -227,7 +290,6 @@ export default function AdminUsersManagementTable() {
           updates: {
             display_name: editingState.display_name,
             full_name: editingState.full_name,
-            country: editingState.country,
             account_status: editingState.account_status,
             roles: editingState.roles,
           },
@@ -240,7 +302,26 @@ export default function AdminUsersManagementTable() {
 
       const updated = payload?.data as UserRow | undefined;
       if (updated) {
-        setRows(prev => prev.map(row => (row.id === rowId ? updated : row)));
+        // The PATCH response has no activity; keep it and re-derive the status,
+        // which changes when an admin suspends, bans or restores the account.
+        setRows(prev =>
+          prev.map(row => {
+            if (row.id !== rowId) {
+              return row;
+            }
+            const activity = row.activity
+              ? {
+                  ...row.activity,
+                  status: deriveUserActivityStatus({
+                    accountStatus: updated.account_status,
+                    emailConfirmedAt: row.activity.emailConfirmed ? 'confirmed' : null,
+                    lastSignInAt: row.activity.lastSignInAt,
+                  }),
+                }
+              : row.activity;
+            return { ...updated, activity };
+          }),
+        );
       }
       setSuccessMessage('User updated successfully.');
       resetEdit();
@@ -353,7 +434,7 @@ export default function AdminUsersManagementTable() {
                   <TableHead>Full Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Country</TableHead>
+                  <TableHead>Content</TableHead>
                   <TableHead className="min-w-[260px]">Roles</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last Login</TableHead>
@@ -397,31 +478,46 @@ export default function AdminUsersManagementTable() {
                       <TableCell className="min-w-[220px]">{row.email}</TableCell>
                       <TableCell className="min-w-[150px]">
                         {isEditing ? (
-                          <Input
+                          <Select
+                            label="Account"
                             value={editingState.account_status}
-                            onChange={event =>
+                            onChange={value =>
                               setEditingState(prev =>
-                                prev ? { ...prev, account_status: event.target.value } : prev,
+                                prev ? { ...prev, account_status: value } : prev,
                               )
                             }
-                            placeholder="active"
+                            options={Array.from(
+                              new Set<string>([
+                                ...ACCOUNT_STATUS_OPTIONS,
+                                editingState.account_status,
+                              ]),
+                            )}
                           />
+                        ) : row.activity ? (
+                          <Badge
+                            variant={STATUS_VARIANTS[row.activity.status]}
+                            title={[
+                              STATUS_HINTS[row.activity.status],
+                              `Account: ${row.account_status || 'active'}`,
+                              `Email ${row.activity.emailConfirmed ? 'confirmed' : 'not confirmed'}`,
+                            ].join('\n')}
+                            data-testid="user-activity-status"
+                          >
+                            {STATUS_LABELS[row.activity.status]}
+                          </Badge>
                         ) : (
                           row.account_status || '-'
                         )}
                       </TableCell>
-                      <TableCell className="min-w-[140px]">
-                        {isEditing ? (
-                          <Input
-                            value={editingState.country}
-                            onChange={event =>
-                              setEditingState(prev =>
-                                prev ? { ...prev, country: event.target.value } : prev,
-                              )
-                            }
-                          />
+                      <TableCell className="min-w-[170px] text-xs" data-testid="user-content">
+                        {row.activity ? (
+                          (contentSummary(row.activity.content) ?? (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              No data
+                            </Badge>
+                          ))
                         ) : (
-                          row.country || '-'
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
                       <TableCell className="min-w-[260px]">
@@ -457,7 +553,7 @@ export default function AdminUsersManagementTable() {
                         {formatDate(row.created_at, locale)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(row.last_login, locale)}
+                        {formatDate(row.activity?.lastSignInAt ?? row.last_login, locale)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
@@ -553,7 +649,15 @@ export default function AdminUsersManagementTable() {
             <AlertDialogTitle>Delete user account</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
               {deleteTarget
-                ? `This will permanently delete "${deleteTarget.username}" from users and authentication. This action cannot be undone.`
+                ? `This will permanently delete "${deleteTarget.username}" from users and authentication.${
+                    deleteTarget.activity
+                      ? ` ${
+                          contentSummary(deleteTarget.activity.content)
+                            ? `Their content goes with it: ${contentSummary(deleteTarget.activity.content)}.`
+                            : 'They have no content.'
+                        }`
+                      : ''
+                  } This action cannot be undone.`
                 : 'This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>

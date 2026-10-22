@@ -131,7 +131,8 @@ export function PersonalInfoCard({
             <Select
               key={`country-${formData.country || 'none'}`}
               label="Country"
-              options={COUNTRIES}
+              options={['', ...COUNTRIES]}
+              optionLabels={{ '': 'Not set' }}
               value={(formData.country as string) || ''}
               onChange={onSelectChange('country')}
             />
