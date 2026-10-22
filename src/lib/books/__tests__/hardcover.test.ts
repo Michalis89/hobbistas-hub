@@ -119,3 +119,46 @@ describe('searchHardcover', () => {
     fetchSpy.mockRestore();
   });
 });
+
+describe('Hardcover covers and text', () => {
+  it("uses Hardcover's own cover when it has one", () => {
+    const book = mapHardcoverDocument({
+      id: 1,
+      title: 'Homeland',
+      isbns: ['9780786939541'],
+      image: {
+        url: 'https://assets.hardcover.app/edition/4959462/cover.jpeg',
+        width: 304,
+        height: 500,
+      },
+    });
+
+    expect(book?.coverLarge).toBe('https://assets.hardcover.app/edition/4959462/cover.jpeg');
+    expect(book?.coverSmall).toBe('https://assets.hardcover.app/edition/4959462/cover.jpeg');
+  });
+
+  it('ignores image URLs from any other host', () => {
+    const book = mapHardcoverDocument({
+      id: 1,
+      title: 'Homeland',
+      image: { url: 'https://evil.example/cover.jpeg' },
+    });
+
+    expect(book?.coverLarge).toBeNull();
+  });
+
+  it('decodes the HTML entities Hardcover leaves in titles', () => {
+    const book = mapHardcoverDocument({
+      id: 1,
+      title: 'Homeland: Dungeons &amp; Dragons',
+      subtitle: 'Book &#49; of &quot;Drizzt&quot;',
+      author_names: ['R.A. Salvatore &amp; Co'],
+    });
+
+    expect(book).toMatchObject({
+      title: 'Homeland: Dungeons & Dragons',
+      subtitle: 'Book 1 of "Drizzt"',
+      authors: ['R.A. Salvatore & Co'],
+    });
+  });
+});

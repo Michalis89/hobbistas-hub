@@ -131,6 +131,16 @@ export default function TermsPage() {
                   We reserve the right (but have no obligation) to remove content that we determine
                   violates these Terms, applicable law, or is otherwise inappropriate.
                 </p>
+                <p className="mt-2">
+                  If you believe content on the Service infringes your copyright, please follow our{' '}
+                  <Link
+                    href="/copyright"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    Copyright &amp; Takedown Policy
+                  </Link>
+                  .
+                </p>
               </section>
 
               {/* 5. Acceptable Use */}

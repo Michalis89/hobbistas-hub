@@ -35,6 +35,14 @@ export type MediaCategoryConfig = {
    */
   backfillFields?: string[];
 
+  /**
+   * Cleans a client-sent payload before it is used for anything — matching,
+   * backfilling an existing row, enriching or inserting — and again after
+   * enrichment. Books use it to drop cover images taken down after a
+   * copyright notice (src/lib/books/coverBlocklist.ts).
+   */
+  sanitizePayload?: (payload: MediaPayload) => MediaPayload;
+
   /** Optional payload transformation function for category-specific field mapping */
   payloadMapper?: (payload: Record<string, unknown>) => Record<string, unknown>;
 

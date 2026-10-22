@@ -26,6 +26,17 @@ jest.mock('@/lib/books/hardcover', () => ({
 
 jest.mock('@/lib/api-cache/external', () => ({ cachedExternalFetch: jest.fn() }));
 
+const TAKEN_DOWN = 'https://assets.hardcover.app/edition/1/taken-down.jpeg';
+
+jest.mock('@/lib/books/coverBlocklist', () => {
+  const actual = jest.requireActual('@/lib/books/coverBlocklist');
+  return {
+    ...actual,
+    withoutBlockedCovers: (book: Parameters<typeof actual.withoutBlockedCovers>[0]) =>
+      actual.withoutBlockedCovers(book, new Set([TAKEN_DOWN])),
+  };
+});
+
 import { booksSearchConfig } from '../books';
 import type { BookCandidate } from '@/lib/books/types';
 
@@ -257,5 +268,37 @@ describe('booksSearchConfig', () => {
 
       expect(booksSearchConfig.mapLocalItem({ id: 1, title: 'x' })).toHaveProperty('provenance');
     });
+  });
+
+  it("drops a cover taken down after a notice, and another provider's cover takes its place", async () => {
+    mockSearchHardcover.mockResolvedValue([
+      book({
+        hardcoverId: 1,
+        sources: ['hardcover'],
+        title: 'Homeland',
+        isbns: ['9780786939541'],
+        coverLarge: TAKEN_DOWN,
+        coverSmall: TAKEN_DOWN,
+      }),
+    ]);
+    mockSearchOpenLibrary.mockResolvedValue([
+      book({
+        openLibraryId: 'OL1W',
+        sources: ['open_library'],
+        title: 'Homeland',
+        isbns: ['9780786939541'],
+        coverLarge: 'https://covers.openlibrary.org/b/id/1-L.jpg',
+        coverSmall: 'https://covers.openlibrary.org/b/id/1-M.jpg',
+      }),
+    ]);
+
+    const [result] = await booksSearchConfig.fetchExternal('homeland', {
+      category: 'books',
+      limit: 12,
+      page: 1,
+    });
+
+    expect(result.hardcoverId).toBe(1);
+    expect(result.coverLarge).toBe('https://covers.openlibrary.org/b/id/1-L.jpg');
   });
 });
