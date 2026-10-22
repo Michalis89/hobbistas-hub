@@ -90,6 +90,21 @@ jobs:
   build:
     name: Production build
     runs-on: ubuntu-latest
+    # Skipped for Dependabot. Workflow runs it triggers cannot read the
+    # repository's Actions secrets - GitHub hands them a separate Dependabot
+    # secrets store - so all three Supabase values arrive empty and the check
+    # below fails before a line is built. That is not a signal about the
+    # dependency, it fires on every Dependabot pull request equally.
+    #
+    # The alternative is copying the secrets into the Dependabot store, which
+    # is deliberately not done: this repository is public, the service role key
+    # bypasses RLS, and the build imports exactly the newly bumped packages.
+    # Lint, Typecheck and Test need no secrets and still gate these pull
+    # requests - Typecheck is what caught the supabase-js breaking change in
+    # #114, not the build. When a build is wanted on a Dependabot branch, run
+    # the workflow from the Actions tab: workflow_dispatch runs as you and does
+    # get the secrets.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
