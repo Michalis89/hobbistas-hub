@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { setAuthCookies } from '@/lib/auth';
 import { sendVerificationEmail } from '@/lib/auth/verification';
+import { scheduleOwnerNewUserNotification } from '@/lib/auth/registrationNotification';
 import { resolveSiteUrl } from '@/lib/auth/site-url';
 import { ONBOARDING_PATH } from '@/lib/routes/authRoutes';
 import {
@@ -230,6 +231,19 @@ async function POSTHandler(req: Request) {
       console.error('Profile upsert error:', updateError);
       return fail(API_ERRORS.INTERNAL, API_ERRORS.INTERNAL.status);
     }
+
+    // The auth user and profile row both exist now: the account is genuinely
+    // new and persisted. The owner notification runs after the response and
+    // cannot affect it. This route is the only account-creation path; demo
+    // seeding calls the admin API directly and never reaches it.
+    step = 'schedule_owner_notification';
+    scheduleOwnerNewUserNotification({
+      userId: createdUser.id,
+      username,
+      displayName: safeFullName,
+      createdAt: createdUser.created_at,
+      siteUrl,
+    });
 
     // Store steam_id in user_category_profiles if provided
     if (steam_id) {

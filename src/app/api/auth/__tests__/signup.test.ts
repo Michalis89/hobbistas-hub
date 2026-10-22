@@ -26,6 +26,7 @@ const createRouteHandlerClientMock = jest.fn();
 const setAuthCookiesMock = jest.fn();
 const sendVerificationEmailMock = jest.fn();
 const signInWithPasswordMock = jest.fn();
+const scheduleOwnerNewUserNotificationMock = jest.fn();
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -84,6 +85,11 @@ jest.mock('@/lib/supabase/admin', () => ({
 
 jest.mock('@/lib/email/send', () => ({
   sendConfirmEmail: (...args: unknown[]) => sendConfirmEmailMock(...args),
+}));
+
+jest.mock('@/lib/auth/registrationNotification', () => ({
+  scheduleOwnerNewUserNotification: (...args: unknown[]) =>
+    scheduleOwnerNewUserNotificationMock(...args),
 }));
 
 jest.mock('@/lib/auth/site-url', () => ({
@@ -523,6 +529,75 @@ describe('app/api/auth/signup/route', () => {
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.toEqual({
       error: 'Signup failed at step "verify_captcha": Unknown signup error',
+    });
+  });
+
+  describe('owner notification on new registration', () => {
+    it('is scheduled once, after the profile row is persisted, without the email', async () => {
+      createUserMock.mockResolvedValue({
+        data: { user: { id: 'auth-user-1', created_at: '2026-10-22T18:04:05Z' } },
+        error: null,
+      });
+
+      const response = await POST(makeRequest());
+
+      expect(response.status).toBe(200);
+      expect(scheduleOwnerNewUserNotificationMock).toHaveBeenCalledTimes(1);
+      expect(scheduleOwnerNewUserNotificationMock).toHaveBeenCalledWith({
+        userId: 'auth-user-1',
+        username: 'user123',
+        displayName: 'User Example',
+        createdAt: '2026-10-22T18:04:05Z',
+        siteUrl: 'https://example.com',
+      });
+      expect(JSON.stringify(scheduleOwnerNewUserNotificationMock.mock.calls)).not.toContain(
+        'user@example.com',
+      );
+      expect(usersUpsertMock.mock.invocationCallOrder[0]).toBeLessThan(
+        scheduleOwnerNewUserNotificationMock.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('is not scheduled for an existing email or username', async () => {
+      usersMaybeSingleMock.mockResolvedValueOnce({ data: { id: 'existing' } });
+      expect((await POST(makeRequest())).status).toBe(409);
+
+      usersMaybeSingleMock
+        .mockResolvedValueOnce({ data: null })
+        .mockResolvedValueOnce({ data: { id: 'existing' } });
+      expect((await POST(makeRequest())).status).toBe(409);
+
+      expect(scheduleOwnerNewUserNotificationMock).not.toHaveBeenCalled();
+    });
+
+    it('is not scheduled when the auth user is not created', async () => {
+      createUserMock.mockResolvedValueOnce({
+        data: { user: null },
+        error: { message: 'User already registered', status: 422 },
+      });
+
+      expect((await POST(makeRequest())).status).toBe(409);
+      expect(scheduleOwnerNewUserNotificationMock).not.toHaveBeenCalled();
+    });
+
+    it('is not scheduled when the profile row cannot be persisted', async () => {
+      usersUpsertMock.mockReturnValueOnce(makeUserUpsertChain({ error: { code: '23505' } }));
+      expect((await POST(makeRequest())).status).toBe(409);
+
+      usersUpsertMock.mockReturnValueOnce(makeUserUpsertChain({ error: { code: '500' } }));
+      expect((await POST(makeRequest())).status).toBe(500);
+
+      expect(scheduleOwnerNewUserNotificationMock).not.toHaveBeenCalled();
+    });
+
+    it('is not scheduled when the request is rejected before creation', async () => {
+      verifyCaptchaTokenMock.mockResolvedValueOnce({ success: false, errors: ['bad'] });
+      expect((await POST(makeRequest())).status).toBe(403);
+
+      rateLimitMock.mockResolvedValueOnce({ success: false });
+      expect((await POST(makeRequest())).status).toBe(429);
+
+      expect(scheduleOwnerNewUserNotificationMock).not.toHaveBeenCalled();
     });
   });
 });

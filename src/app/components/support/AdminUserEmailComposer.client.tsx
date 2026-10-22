@@ -205,8 +205,8 @@ function ComposerBody({
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Sent from no-reply@mail.hobbistas-hub.com; replies go to the support address. This
-              email will be recorded in the admin audit log.
+              Sent under the personal admin sender on the Hobbistas mail domain; replies go to the
+              support address. This email will be recorded in the admin audit log.
             </p>
           </div>
         )}
