@@ -147,29 +147,31 @@ const EMAIL_FONT_STACK =
   "'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 /**
- * A plain-text message from the Hobbistas team to one user. Both inputs are
- * already-personalized plain text and are escaped here; blank lines become
- * paragraphs and single newlines line breaks. No images, remote resources or
- * tracking.
+ * The branded frame shared by the violet-bloom emails: wordmark, subtitle,
+ * one card and a footer. `title`, `subtitle` and `footerNote` are plain text
+ * and escaped here; `contentHtml` must already be safe HTML.
+ *
+ * border-collapse:separate on the card table: with `collapse`, clients draw
+ * the border square around the rounded background.
  */
-export function renderAdminMessageEmail(params: { subject: string; message: string }): string {
+function renderVioletBloomEmail(params: {
+  title: string;
+  subtitle: string;
+  contentHtml: string;
+  signature?: string;
+  footerNote: string;
+}): string {
   const c = violetBloom;
-  const safeSubject = escapeHtml(params.subject);
-  const paragraphs = params.message
-    .replaceAll('\r\n', '\n')
-    .split(/\n{2,}/)
-    .map(paragraph => paragraph.trim())
-    .filter(Boolean)
-    .map(
-      paragraph =>
-        `<p style="margin:0 0 16px;font-size:15px;line-height:1.75;color:${c.text};">${escapeHtml(
-          paragraph,
-        ).replaceAll('\n', '<br />')}</p>`,
-    )
-    .join('\n                ');
+  const safeTitle = escapeHtml(params.title);
+  const signatureRow = params.signature
+    ? `
+                  <tr>
+                    <td style="padding:0 28px 28px;">
+                      <p style="margin:0;padding-top:16px;border-top:1px solid ${c.border};font-size:14px;line-height:1.5;color:${c.secondaryText};">${escapeHtml(params.signature)}</p>
+                    </td>
+                  </tr>`
+    : '';
 
-  // border-collapse:separate on the card table: with `collapse`, clients
-  // draw the border square around the rounded background.
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -177,7 +179,7 @@ export function renderAdminMessageEmail(params: { subject: string; message: stri
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <meta name="supported-color-schemes" content="dark" />
-    <title>${safeSubject}</title>
+    <title>${safeTitle}</title>
   </head>
   <body style="margin:0;padding:0;background:${c.background};font-family:${EMAIL_FONT_STACK};color:${c.text};">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:${c.background};">
@@ -187,31 +189,26 @@ export function renderAdminMessageEmail(params: { subject: string; message: stri
             <tr>
               <td style="padding:0 4px 20px;">
                 <p style="margin:0;font-size:20px;line-height:1.25;font-weight:700;letter-spacing:-0.02em;color:${c.text};">Hobbistas<span style="color:${c.primary};">.</span></p>
-                <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:${c.secondaryText};">A message from the Hobbistas team</p>
+                <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:${c.secondaryText};">${escapeHtml(params.subtitle)}</p>
               </td>
             </tr>
             <tr>
               <td>
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:0;background:${c.card};border:1px solid ${c.border};border-radius:16px;">
                   <tr>
-                    <td style="padding:32px 28px 16px;">
+                    <td style="padding:32px 28px ${params.signature ? '16px' : '28px'};">
                       <div style="width:40px;height:4px;border-radius:999px;background:${c.primary};margin:0 0 20px;font-size:0;line-height:0;">&nbsp;</div>
-                      <h1 style="margin:0 0 20px;font-size:20px;line-height:1.25;font-weight:600;letter-spacing:-0.01em;color:${c.text};">${safeSubject}</h1>
-                      ${paragraphs}
+                      <h1 style="margin:0 0 20px;font-size:20px;line-height:1.25;font-weight:600;letter-spacing:-0.01em;color:${c.text};">${safeTitle}</h1>
+                      ${params.contentHtml}
                     </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:0 28px 28px;">
-                      <p style="margin:0;padding-top:16px;border-top:1px solid ${c.border};font-size:14px;line-height:1.5;color:${c.secondaryText};">The Hobbistas team</p>
-                    </td>
-                  </tr>
+                  </tr>${signatureRow}
                 </table>
               </td>
             </tr>
             <tr>
               <td style="padding:20px 4px 0;">
                 <p style="margin:0;font-size:12px;line-height:1.6;color:${c.tertiaryText};">
-                  You are receiving this because you have a Hobbistas account. Reply to this email to reach the team.
+                  ${escapeHtml(params.footerNote)}
                 </p>
                 <p style="margin:8px 0 0;font-size:12px;line-height:1.6;">
                   <a href="https://www.hobbistas-hub.com/" style="color:${c.link};font-weight:600;text-decoration:none;">hobbistas-hub.com</a>
@@ -224,4 +221,76 @@ export function renderAdminMessageEmail(params: { subject: string; message: stri
     </table>
   </body>
 </html>`;
+}
+
+/**
+ * A plain-text message from the Hobbistas team to one user. Both inputs are
+ * already-personalized plain text and are escaped here; blank lines become
+ * paragraphs and single newlines line breaks. No images, remote resources or
+ * tracking.
+ */
+export function renderAdminMessageEmail(params: { subject: string; message: string }): string {
+  const paragraphs = params.message
+    .replaceAll('\r\n', '\n')
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.trim())
+    .filter(Boolean)
+    .map(
+      paragraph =>
+        `<p style="margin:0 0 16px;font-size:15px;line-height:1.75;color:${violetBloom.text};">${escapeHtml(
+          paragraph,
+        ).replaceAll('\n', '<br />')}</p>`,
+    )
+    .join('\n                ');
+
+  return renderVioletBloomEmail({
+    title: params.subject,
+    subtitle: 'A personal note from the creator of Hobbistas',
+    contentHtml: paragraphs,
+    signature: 'The Hobbistas team',
+    footerNote:
+      'You are receiving this because you have a Hobbistas account. Reply to this email to reach the team.',
+  });
+}
+
+export const NEW_USER_NOTIFICATION_SUBJECT = '🎉 New Hobbistas user registered!';
+
+/**
+ * Internal notice to the owner that an account was created. Carries only what
+ * an admin needs to find the account: no email address, credentials or IP.
+ */
+export function renderNewUserNotificationEmail(params: {
+  username: string;
+  displayName: string | null;
+  registeredAtUtc: string;
+  adminUsersUrl: string;
+}): string {
+  const c = violetBloom;
+  const rows: [string, string][] = [['Username', `@${params.username}`]];
+  if (params.displayName) {
+    rows.push(['Display name', params.displayName]);
+  }
+  rows.push(['Registered', params.registeredAtUtc]);
+
+  const detailRows = rows
+    .map(
+      ([label, value]) => `
+                        <tr>
+                          <td style="width:1%;padding:8px 24px 8px 0;font-size:13px;line-height:1.5;color:${c.secondaryText};white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
+                          <td style="padding:8px 0;font-size:14px;line-height:1.5;color:${c.text};font-weight:600;word-break:break-word;">${escapeHtml(value)}</td>
+                        </tr>`,
+    )
+    .join('');
+
+  const contentHtml = `<p style="margin:0 0 20px;font-size:15px;line-height:1.75;color:${c.text};">A new user just joined Hobbistas Hub!</p>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 24px;border-top:1px solid ${c.border};border-bottom:1px solid ${c.border};">${detailRows}
+                      </table>
+                      <a href="${escapeHtml(params.adminUsersUrl)}" style="display:inline-block;padding:12px 20px;border-radius:10px;background:${c.primary};color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;">Open Users Management</a>`;
+
+  return renderVioletBloomEmail({
+    title: NEW_USER_NOTIFICATION_SUBJECT,
+    subtitle: 'Admin notification',
+    contentHtml,
+    footerNote: 'Internal notification for Hobbistas admins. It is not sent to the new user.',
+  });
 }

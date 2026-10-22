@@ -8,7 +8,28 @@ jest.mock('../resend', () => ({
 }));
 
 import { renderAdminMessageEmail } from '../templates';
-import { sendAdminMessageEmail } from '../send';
+import { sendAdminMessageEmail, sendConfirmEmail, sendResetPasswordEmail } from '../send';
+
+const env = process.env as Record<string, string | undefined>;
+const SENDER_ENV = ['ADMIN_EMAIL_FROM', 'ADMIN_EMAIL_REPLY_TO'] as const;
+const originalSenderEnv = SENDER_ENV.map(name => [name, env[name]] as const);
+
+const DEFAULT_FROM = 'Michail from Hobbistas <hello@mail.hobbistas-hub.com>';
+const TRANSACTIONAL_FROM = 'Hobbistas <no-reply@mail.hobbistas-hub.com>';
+
+beforeEach(() => {
+  for (const name of SENDER_ENV) {
+    delete env[name];
+  }
+});
+
+afterAll(() => {
+  for (const [name, value] of originalSenderEnv) {
+    if (value !== undefined) {
+      env[name] = value;
+    }
+  }
+});
 
 const params = {
   to: 'maria@example.com',
@@ -47,6 +68,75 @@ describe('renderAdminMessageEmail', () => {
   it('uses the violet-bloom brand color', () => {
     expect(renderAdminMessageEmail({ subject: 's', message: 'm' })).toContain('#8c5cff');
   });
+
+  it('presents the email as a personal note from the creator', () => {
+    const html = renderAdminMessageEmail({ subject: 's', message: 'm' });
+    expect(html).toContain('A personal note from the creator of Hobbistas');
+    expect(html).not.toContain('A message from the Hobbistas team');
+  });
+});
+
+describe('admin email sender identity', () => {
+  const sent = () => sendMock.mock.calls[0][0];
+  const sentReplyTo = () => sent().replyTo;
+
+  beforeEach(() => {
+    sendMock.mockResolvedValue({ data: { id: 'msg_1' }, error: null });
+  });
+
+  it('sets Reply-To to support@hobbistas-hub.com in the provider request by default', async () => {
+    await sendAdminMessageEmail(params);
+    expect(sentReplyTo()).toBe('support@hobbistas-hub.com');
+  });
+
+  it('uses ADMIN_EMAIL_REPLY_TO when it is a single valid address', async () => {
+    env.ADMIN_EMAIL_REPLY_TO = '  owner@hobbistas-hub.com ';
+    await sendAdminMessageEmail(params);
+    expect(sentReplyTo()).toBe('owner@hobbistas-hub.com');
+  });
+
+  it.each([
+    ['empty', ''],
+    ['not an address', 'support'],
+    ['header injection', 'a@b.com\r\nBcc: x@y.com'],
+    ['a list', 'a@b.com, c@d.com'],
+    ['a display name', 'Support <support@hobbistas-hub.com>'],
+  ])('falls back to the default when ADMIN_EMAIL_REPLY_TO is %s', async (_label, value) => {
+    env.ADMIN_EMAIL_REPLY_TO = value;
+    await sendAdminMessageEmail(params);
+    expect(sentReplyTo()).toBe('support@hobbistas-hub.com');
+  });
+
+  it('sends from the personal sender on the verified domain by default', async () => {
+    await sendAdminMessageEmail(params);
+    expect(sent().from).toBe(DEFAULT_FROM);
+    expect(sentReplyTo()).toBe('support@hobbistas-hub.com');
+  });
+
+  it('uses ADMIN_EMAIL_FROM when it is on the verified domain', async () => {
+    env.ADMIN_EMAIL_FROM = 'Michail at Hobbistas <michail@mail.hobbistas-hub.com>';
+    await sendAdminMessageEmail(params);
+    expect(sent().from).toBe('Michail at Hobbistas <michail@mail.hobbistas-hub.com>');
+  });
+
+  it('falls back to the default sender when ADMIN_EMAIL_FROM is on another domain', async () => {
+    env.ADMIN_EMAIL_FROM = 'Michail <michail@gmail.com>';
+    await sendAdminMessageEmail(params);
+    expect(sent().from).toBe(DEFAULT_FROM);
+  });
+
+  it('leaves transactional emails on the no-reply sender with no Reply-To', async () => {
+    env.ADMIN_EMAIL_FROM = 'Michail at Hobbistas <michail@mail.hobbistas-hub.com>';
+    env.ADMIN_EMAIL_REPLY_TO = 'owner@hobbistas-hub.com';
+    await sendConfirmEmail('maria@example.com', 'https://example.com/confirm');
+    await sendResetPasswordEmail('maria@example.com', 'https://example.com/reset');
+
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    for (const [payload] of sendMock.mock.calls) {
+      expect(payload.from).toBe(TRANSACTIONAL_FROM);
+      expect(payload).not.toHaveProperty('replyTo');
+    }
+  });
 });
 
 describe('sendAdminMessageEmail', () => {
@@ -61,9 +151,9 @@ describe('sendAdminMessageEmail', () => {
     const [payload, options] = sendMock.mock.calls[0];
     expect(payload).toEqual(
       expect.objectContaining({
-        from: 'Hobbistas <no-reply@mail.hobbistas-hub.com>',
+        from: DEFAULT_FROM,
         to: ['maria@example.com'],
-        replyTo: expect.any(String),
+        replyTo: 'support@hobbistas-hub.com',
         subject: 'Hello Maria',
         text: 'Line one',
         html: expect.stringContaining('Line one'),
