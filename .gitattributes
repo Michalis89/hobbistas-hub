@@ -1,0 +1,23 @@
+# Line endings: LF everywhere, in the repository and in every working copy.
+#
+# The repository has always stored LF, and Prettier writes LF. A Windows
+# checkout with core.autocrlf=true used to turn every file into CRLF on disk,
+# so the first Prettier run rewrote whole files and the editor showed hundreds
+# of "changes" with no content difference. eol=lf overrides autocrlf for this
+# repository, on every machine, without anyone changing their git config.
+* text=auto eol=lf
+
+# Binary: never touch line endings or try to diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.zip binary
