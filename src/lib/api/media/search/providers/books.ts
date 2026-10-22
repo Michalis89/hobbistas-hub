@@ -7,6 +7,7 @@ import { toHardcoverExternalId, toNlgExternalId } from '@/lib/books/identifiers'
 import { bookIdentityKeys, mergeProviderResults, rankBooksByQuery } from '@/lib/books/merge';
 import { isGreekIsbn, parseIsbnQuery } from '@/lib/books/isbn';
 import { verifyGuessedCovers } from '@/lib/books/coverCheck';
+import { withoutBlockedCovers } from '@/lib/books/coverBlocklist';
 import type { BookCandidate } from '@/lib/books/types';
 import { provenanceField } from '../../provenance';
 import type { MediaSearchConfig, SearchLocalItem } from '../../handlers/search';
@@ -195,9 +196,12 @@ const fetchBooks = async (
     greek ? searchNlg(search, options) : Promise.resolve([]),
   ]);
   const googleBooks = google.filter(book => book.title);
-  const merged = mergeProviderResults(
-    greek ? [nlg, googleBooks, hardcover, openLibrary] : [googleBooks, hardcover, openLibrary],
-  );
+  // Covers taken down after a copyright notice are removed before merging,
+  // so another provider's cover can take their place
+  const lists = (
+    greek ? [nlg, googleBooks, hardcover, openLibrary] : [googleBooks, hardcover, openLibrary]
+  ).map(list => list.map(book => withoutBlockedCovers(book)));
+  const merged = mergeProviderResults(lists);
 
   // An ISBN query names one edition: that is the ISBN to store, not whichever
   // edition the provider listed first.

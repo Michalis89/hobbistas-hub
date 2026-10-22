@@ -191,7 +191,8 @@ async function handleExternalSource(
   body: AddMediaRequestBody,
   config: MediaCategoryConfig,
 ): Promise<Response> {
-  const { payload } = body;
+  const payload =
+    body.payload && config.sanitizePayload ? config.sanitizePayload(body.payload) : body.payload;
 
   // Validate external ID exists (the primary field, or one of its alternates)
   const externalIdValue = resolveExternalIdValue(config, payload!);
@@ -263,6 +264,10 @@ async function handleExternalSource(
         insertPayload,
       );
       insertPayload = { ...insertPayload, ...enrichedData };
+    }
+    // Enrichment can bring in a cover of its own; clean the final payload too
+    if (config.sanitizePayload) {
+      insertPayload = config.sanitizePayload(insertPayload);
     }
 
     // Use service role client for catalog writes (RLS blocks user writes)

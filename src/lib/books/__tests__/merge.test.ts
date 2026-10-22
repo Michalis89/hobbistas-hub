@@ -297,3 +297,37 @@ describe('cover and ranking with Hardcover data', () => {
     expect(rankBooksByQuery(results, 'fellowship of the ring')[0].hardcoverId).toBe(2);
   });
 });
+
+describe('cover quality across providers', () => {
+  const HARDCOVER = 'https://assets.hardcover.app/edition/1/cover.jpeg';
+  const GOOGLE = 'https://books.google.com/books/content?id=g1&printsec=frontcover&img=1&zoom=1';
+  const OPEN_LIBRARY = 'https://covers.openlibrary.org/b/id/14627060-L.jpg';
+
+  it("shows Hardcover's sharp cover even when Google's data wins", () => {
+    const [merged] = mergeBookCandidates(
+      [book({ googleBooksId: 'g1', title: 'Homeland', isbns: ['1'], coverLarge: GOOGLE })],
+      [book({ hardcoverId: 1, title: 'Homeland', isbns: ['1'], coverLarge: HARDCOVER })],
+    );
+
+    expect(merged.googleBooksId).toBe('g1');
+    expect(merged.coverLarge).toBe(HARDCOVER);
+  });
+
+  it("prefers an Open Library work cover over Google's thumbnail", () => {
+    const [merged] = mergeBookCandidates(
+      [book({ googleBooksId: 'g1', title: 'Dune', isbns: ['1'], coverLarge: GOOGLE })],
+      [book({ openLibraryId: 'OL1W', title: 'Dune', isbns: ['1'], coverLarge: OPEN_LIBRARY })],
+    );
+
+    expect(merged.coverLarge).toBe(OPEN_LIBRARY);
+  });
+
+  it('never trades a Hardcover cover for a lesser one', () => {
+    const [merged] = mergeBookCandidates(
+      [book({ hardcoverId: 1, title: 'Dune', isbns: ['1'], coverLarge: HARDCOVER })],
+      [book({ openLibraryId: 'OL1W', title: 'Dune', isbns: ['1'], coverLarge: OPEN_LIBRARY })],
+    );
+
+    expect(merged.coverLarge).toBe(HARDCOVER);
+  });
+});

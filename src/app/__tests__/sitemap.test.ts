@@ -121,6 +121,7 @@ describe('sitemap', () => {
       'https://hobbistas-hub.com/review',
       'https://hobbistas-hub.com/terms',
       'https://hobbistas-hub.com/privacy',
+      'https://hobbistas-hub.com/copyright',
       'https://hobbistas-hub.com/articles/normal-article',
       'https://hobbistas-hub.com/review/review-article',
       'https://hobbistas-hub.com/articles/legacy-slug',
