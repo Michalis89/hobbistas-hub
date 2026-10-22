@@ -18,6 +18,9 @@
     "cypress:open": "concurrently \"npm run build && npm run start\" \"cypress open\" ",
     "db:types": "supabase gen types typescript --project-id jolfksxuhyktpwncniks > src/lib/supabase/database.types.ts"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/react": "^0.5.1",
