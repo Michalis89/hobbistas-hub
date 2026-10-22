@@ -2,6 +2,9 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 jest.mock('@/context/LocaleContext', () => ({ useLocale: () => 'en-US' }));
+// A non-owner admin: no per-row actions menu, so the row's last button is Delete.
+jest.mock('react-redux', () => ({ useSelector: () => ({ roles: ['admin'] }) }));
+jest.mock('@/store/slices/authSlice', () => ({ selectUser: jest.fn() }));
 
 import AdminUsersManagementTable from '../AdminUsersManagementTable.client';
 

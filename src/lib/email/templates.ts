@@ -125,3 +125,103 @@ export function renderResetPasswordEmail(actionLink: string): string {
     helper: 'If the button does not work, open the link below directly:',
   });
 }
+
+/**
+ * The violet-bloom dark theme (`src/app/globals.css`) as literal colors:
+ * email clients do not support CSS variables. Keep in sync with the tokens.
+ */
+const violetBloom = {
+  background: '#1a1b1e', // --background
+  card: '#222327', // --card / --surface-raised
+  border: '#33353a', // --border
+  text: '#f0f0f0', // --foreground / --text-primary
+  secondaryText: '#a0a0a0', // --muted-foreground / --text-secondary
+  tertiaryText: '#7a7a7a', // --text-tertiary
+  primary: '#8c5cff', // --primary / --accent-primary
+  link: '#9a70ff', // --link
+};
+
+// --font-sans, with system fallbacks. Not loaded remotely: a font request on
+// open would tell a third party the email was read.
+const EMAIL_FONT_STACK =
+  "'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+/**
+ * A plain-text message from the Hobbistas team to one user. Both inputs are
+ * already-personalized plain text and are escaped here; blank lines become
+ * paragraphs and single newlines line breaks. No images, remote resources or
+ * tracking.
+ */
+export function renderAdminMessageEmail(params: { subject: string; message: string }): string {
+  const c = violetBloom;
+  const safeSubject = escapeHtml(params.subject);
+  const paragraphs = params.message
+    .replaceAll('\r\n', '\n')
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.trim())
+    .filter(Boolean)
+    .map(
+      paragraph =>
+        `<p style="margin:0 0 16px;font-size:15px;line-height:1.75;color:${c.text};">${escapeHtml(
+          paragraph,
+        ).replaceAll('\n', '<br />')}</p>`,
+    )
+    .join('\n                ');
+
+  // border-collapse:separate on the card table: with `collapse`, clients
+  // draw the border square around the rounded background.
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="supported-color-schemes" content="dark" />
+    <title>${safeSubject}</title>
+  </head>
+  <body style="margin:0;padding:0;background:${c.background};font-family:${EMAIL_FONT_STACK};color:${c.text};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:${c.background};">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;border-collapse:collapse;">
+            <tr>
+              <td style="padding:0 4px 20px;">
+                <p style="margin:0;font-size:20px;line-height:1.25;font-weight:700;letter-spacing:-0.02em;color:${c.text};">Hobbistas<span style="color:${c.primary};">.</span></p>
+                <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:${c.secondaryText};">A message from the Hobbistas team</p>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:0;background:${c.card};border:1px solid ${c.border};border-radius:16px;">
+                  <tr>
+                    <td style="padding:32px 28px 16px;">
+                      <div style="width:40px;height:4px;border-radius:999px;background:${c.primary};margin:0 0 20px;font-size:0;line-height:0;">&nbsp;</div>
+                      <h1 style="margin:0 0 20px;font-size:20px;line-height:1.25;font-weight:600;letter-spacing:-0.01em;color:${c.text};">${safeSubject}</h1>
+                      ${paragraphs}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 28px 28px;">
+                      <p style="margin:0;padding-top:16px;border-top:1px solid ${c.border};font-size:14px;line-height:1.5;color:${c.secondaryText};">The Hobbistas team</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 4px 0;">
+                <p style="margin:0;font-size:12px;line-height:1.6;color:${c.tertiaryText};">
+                  You are receiving this because you have a Hobbistas account. Reply to this email to reach the team.
+                </p>
+                <p style="margin:8px 0 0;font-size:12px;line-height:1.6;">
+                  <a href="https://www.hobbistas-hub.com/" style="color:${c.link};font-weight:600;text-decoration:none;">hobbistas-hub.com</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}

@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Save, Trash2, X } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import { Mail, MoreHorizontal, Pencil, Save, Trash2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { SelectField as Select } from '@/components/ui/select-field';
@@ -30,6 +31,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { selectUser } from '@/store/slices/authSlice';
+import { isOwner } from '@/lib/roles';
+import AdminUserEmailComposer, {
+  type EmailRecipient,
+} from '@/app/components/support/AdminUserEmailComposer.client';
 import type { UserRole } from '@/types/user';
 import {
   ACCOUNT_STATUS_OPTIONS,
@@ -184,6 +196,20 @@ function formatDate(value: string | null, locale: string): string {
   return date.toLocaleString(locale);
 }
 
+/**
+ * Why the row cannot be emailed, or null. A UI hint only: the email route
+ * re-checks everything (and also refuses demo accounts) server-side.
+ */
+function emailBlockedReason(row: UserRow): string | null {
+  if (row.account_status === 'deleted') {
+    return 'Account deleted';
+  }
+  if (row.activity && !row.activity.emailConfirmed) {
+    return 'Email not confirmed';
+  }
+  return null;
+}
+
 export default function AdminUsersManagementTable() {
   const locale = useLocale();
   const [rows, setRows] = useState<UserRow[]>([]);
@@ -198,6 +224,16 @@ export default function AdminUsersManagementTable() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [emailTarget, setEmailTarget] = useState<EmailRecipient | null>(null);
+  // Only hides the action; the email route enforces owner access itself.
+  const canSendEmail = isOwner(useSelector(selectUser));
+
+  const closeEmailComposer = useCallback(() => setEmailTarget(null), []);
+  const handleEmailSent = useCallback((message: string) => {
+    setError(null);
+    setSuccessMessage(message);
+    setEmailTarget(null);
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil((meta.total || 0) / DEFAULT_LIMIT));
 
@@ -596,6 +632,42 @@ export default function AdminUsersManagementTable() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
+                          {canSendEmail ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={`More actions for ${row.username}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-48">
+                                <DropdownMenuItem
+                                  className="cursor-pointer"
+                                  disabled={emailBlockedReason(row) !== null}
+                                  onSelect={() =>
+                                    setEmailTarget({
+                                      id: row.id,
+                                      username: row.username,
+                                      display_name: row.display_name,
+                                      email: row.email,
+                                    })
+                                  }
+                                >
+                                  <Mail />
+                                  Send email
+                                  {emailBlockedReason(row) ? (
+                                    <span className="ml-auto text-xs text-muted-foreground">
+                                      {emailBlockedReason(row)}
+                                    </span>
+                                  ) : null}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -676,6 +748,14 @@ export default function AdminUsersManagementTable() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {canSendEmail ? (
+        <AdminUserEmailComposer
+          recipient={emailTarget}
+          onClose={closeEmailComposer}
+          onSent={handleEmailSent}
+        />
+      ) : null}
     </Card>
   );
 }
