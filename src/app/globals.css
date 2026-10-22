@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Greek text. Plus Jakarta Sans has no Greek glyphs, so Greek fell back to
+ * Arial — which has no 600 weight and jumps to Bold for headings, making
+ * Greek look heavier and narrower than the Latin next to it.
+ *
+ * This face is Manrope's Greek subset (closest match to Jakarta in weight and
+ * width, measured), restricted by unicode-range to Greek code points. It sits
+ * first in the body stack, so Greek characters take it and every other
+ * character skips it and is drawn by Jakarta, keeping Jakarta's own
+ * size-adjusted fallback intact. Self-hosted rather than through next/font so
+ * it behaves the same under Turbopack (dev) and webpack (build).
+ *
+ * Source: Google Fonts, Manrope v20 Greek subset. Licence: public/fonts/Manrope-OFL.txt
+ */
+@font-face {
+  font-family: 'Hobbistas Greek';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/manrope-greek.woff2') format('woff2');
+  unicode-range:
+    U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+
 @layer base {
   :root {
     color-scheme: light;
@@ -212,7 +236,8 @@
     min-height: 100vh;
     background: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-family: var(--font-sans);
+    /* Greek glyphs from 'Hobbistas Greek' (Greek-only face, see top of file), everything else Jakarta */
+    font-family: 'Hobbistas Greek', var(--font-sans), sans-serif;
     font-weight: var(--weight-normal);
     line-height: var(--leading-normal);
     -webkit-tap-highlight-color: transparent;
