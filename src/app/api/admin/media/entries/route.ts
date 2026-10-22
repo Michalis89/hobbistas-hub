@@ -27,10 +27,16 @@ async function fetchDistinctOptions(
     throw error;
   }
 
+  // `column` is a union, so supabase-js infers a union of four differently
+  // shaped row arrays and `.map` ends up with no signature common to all of
+  // them. The rows are only ever read through the dynamic key, so collapse the
+  // shape once here rather than casting inside the callback.
+  const rows = (data ?? []) as Record<string, unknown>[];
+
   return Array.from(
     new Set(
-      (data ?? [])
-        .map(row => (row as Record<string, unknown>)[column])
+      rows
+        .map(row => row[column])
         .filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
     ),
   ).sort((a, b) => a.localeCompare(b));
