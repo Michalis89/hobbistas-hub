@@ -29,4 +29,15 @@ describe('typography constants', () => {
   it('ARTICLE_BADGE is the same value as ARTICLE_META', () => {
     expect(ARTICLE_BADGE).toBe(ARTICLE_META);
   });
+
+  it('ARTICLE_PROSE uses the large and airy reading setting', () => {
+    // 17px on phones, 18px from the sm breakpoint
+    expect(ARTICLE_PROSE).toContain('text-[1.0625rem]');
+    expect(ARTICLE_PROSE).toContain('sm:text-[1.125rem]');
+    expect(ARTICLE_PROSE).toContain('sm:leading-[1.9]');
+    // Paragraphs are separated, and the last one adds no trailing gap
+    expect(ARTICLE_PROSE).toContain('[&_p]:mb-[1.15em]');
+    expect(ARTICLE_PROSE).toContain('[&_p:last-child]:mb-0');
+    expect(ARTICLE_PROSE).toContain('max-w-[70ch]');
+  });
 });
