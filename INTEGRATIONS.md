@@ -134,8 +134,10 @@ providers into one row, filling gaps only:
 **Hardcover terms that shape the code** (`src/lib/books/hardcover.ts`): server-side only;
 a public site may use book data and aggregate counts but not data owned by users
 (libraries, reviews, ratings, lists); covers are user uploads and need a DMCA takedown policy
-to be shown publicly, which this site does not have, so Hardcover covers are **not** used (a
-Hardcover-only book shows Open Library's cover by ISBN). Free plan: 5,000 requests/day,
+to be shown publicly — the site's is at `/copyright` (`src/app/(legal)/copyright`), so Hardcover
+covers (`assets.hardcover.app`) are used. When providers are merged the best cover wins regardless
+of whose data won: Hardcover > Open Library work cover > Google thumbnail > a URL guessed from an
+ISBN. Titles from Hardcover's search index can arrive HTML-escaped and are decoded. Free plan: 5,000 requests/day,
 60/minute. GraphQL errors arrive with HTTP 200 and are turned into a 502 before the cache,
 so they are never cached.
 
@@ -241,6 +243,7 @@ Registered in `next.config.ts` `images.remotePatterns`:
 | `books.google.com` | Google Books |
 | `covers.openlibrary.org` | Open Library covers |
 | `covers.nlg.gr` | National Library of Greece covers |
+| `assets.hardcover.app` | Hardcover covers |
 | `jolfksxuhyktpwncniks.supabase.co` | Supabase Storage |
 | `www.replacesmoke.com` | Vape content |
 | `images.thedirect.com` | Article images |

@@ -18,9 +18,9 @@ import type { BookCandidate } from './types';
  * - A public site may use book data and Hardcover aggregate counts, but not
  *   data owned by users (libraries, reviews, ratings, lists).
  * - Covers are uploaded by Hardcover users; showing them publicly requires a
- *   DMCA takedown policy, which this site does not have yet. So Hardcover
- *   covers are not used: a Hardcover-only book gets an Open Library cover by
- *   ISBN instead, and other providers fill in the rest on add.
+ *   DMCA takedown policy, which the site has at /copyright. They are used
+ *   (assets.hardcover.app, usually far sharper than Google's thumbnails);
+ *   a book without one falls back to Open Library's cover by ISBN.
  * - Free plan: 5,000 requests/day, 60/minute, search times out after 2s.
  *
  * Without HARDCOVER_API_TOKEN every call is a no-op.
@@ -46,6 +46,7 @@ type HardcoverDocument = {
   release_year?: number | null;
   users_count?: number | null;
   compilation?: boolean;
+  image?: { url?: string | null; width?: number | null; height?: number | null } | null;
 };
 
 type HardcoverSearchResponse = {
@@ -69,6 +70,27 @@ export const isHardcoverConfigured = () => getToken() !== null;
 const openLibraryIsbnCover = (isbn: string, size: 'M' | 'L') =>
   `https://covers.openlibrary.org/b/isbn/${isbn}-${size}.jpg?default=false`;
 
+/** Only Hardcover's own asset host is trusted as an image source. */
+const hardcoverImageUrl = (doc: HardcoverDocument) => {
+  const url = doc.image?.url;
+  return url && url.startsWith('https://assets.hardcover.app/') ? url : null;
+};
+
+/** Hardcover's search index returns some text HTML-escaped ("Dungeons &amp; Dragons"). */
+const decodeEntities = (value: string) =>
+  value
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+
+const decodeOrNull = (value: string | null | undefined) => {
+  const decoded = value ? decodeEntities(value).trim() : '';
+  return decoded || null;
+};
+
 const toId = (value: string | number | undefined) => {
   const id = typeof value === 'number' ? value : Number.parseInt(value ?? '', 10);
   return Number.isInteger(id) && id > 0 ? id : null;
@@ -84,6 +106,7 @@ export function mapHardcoverDocument(doc: HardcoverDocument): BookCandidate | nu
     new Set((doc.isbns ?? []).map(toIsbn13).filter((isbn): isbn is string => !!isbn)),
   ).slice(0, 40);
   const isbn13 = pickEditionIsbn(isbns);
+  const cover = hardcoverImageUrl(doc);
 
   return {
     googleBooksId: null,
@@ -93,17 +116,17 @@ export function mapHardcoverDocument(doc: HardcoverDocument): BookCandidate | nu
     sources: ['hardcover'],
     isbn13,
     isbns,
-    title: doc.title,
-    subtitle: doc.subtitle || null,
-    authors: doc.author_names ?? [],
+    title: decodeEntities(doc.title),
+    subtitle: decodeOrNull(doc.subtitle),
+    authors: (doc.author_names ?? []).map(decodeEntities),
     categories: subjectsToGenres(doc.genres),
-    description: doc.description?.trim() || null,
+    description: decodeOrNull(doc.description),
     pageCount: doc.pages ?? null,
     publishedDate: doc.release_year ? String(doc.release_year) : null,
     publisher: null,
     popularity: doc.users_count ?? null,
-    coverLarge: isbn13 ? openLibraryIsbnCover(isbn13, 'L') : null,
-    coverSmall: isbn13 ? openLibraryIsbnCover(isbn13, 'M') : null,
+    coverLarge: cover ?? (isbn13 ? openLibraryIsbnCover(isbn13, 'L') : null),
+    coverSmall: cover ?? (isbn13 ? openLibraryIsbnCover(isbn13, 'M') : null),
   };
 }
 

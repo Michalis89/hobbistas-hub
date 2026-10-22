@@ -38,6 +38,7 @@ const STATIC_PUBLIC_PAGES: MetadataRoute.Sitemap = [
   { url: `${SITE_ORIGIN}/review`, changeFrequency: 'daily', priority: 0.8 },
   { url: `${SITE_ORIGIN}/terms`, changeFrequency: 'yearly', priority: 0.3 },
   { url: `${SITE_ORIGIN}/privacy`, changeFrequency: 'yearly', priority: 0.3 },
+  { url: `${SITE_ORIGIN}/copyright`, changeFrequency: 'yearly', priority: 0.3 },
 ];
 
 function toValidDate(value: string | null): Date | undefined {

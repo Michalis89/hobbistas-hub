@@ -6,6 +6,7 @@ import VersionBadge from '@/utils/components/VersionBadge';
 const LEGAL_LINKS = [
   { label: 'Terms of Service', href: '/terms' },
   { label: 'Privacy Policy', href: '/privacy' },
+  { label: 'Copyright', href: '/copyright' },
 ];
 
 const NAV_LINKS = [

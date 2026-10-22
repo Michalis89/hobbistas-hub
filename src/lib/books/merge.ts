@@ -31,17 +31,33 @@ const sameBook = (a: BookCandidate, b: BookCandidate) => {
 };
 
 /**
- * A cover URL built from an ISBN (NLG, Open Library by ISBN) is only a guess
- * that may 404. A real cover from the other provider beats it; otherwise the
- * base keeps its own.
+ * How good a cover is likely to be, so a merged book shows the best one any
+ * provider has rather than whichever provider's data won:
+ * Hardcover (sharp, usually 300px+) > Open Library work covers > anything
+ * else (Google's thumbnails are ~128px) > a URL guessed from an ISBN, which
+ * may not exist at all.
  */
+const coverQuality = (url: string | null) => {
+  if (!url) {
+    return -1;
+  }
+  // via unknown: the type guard would narrow `url` to never below
+  if (isUnverifiedCover(url as unknown)) {
+    return 0;
+  }
+  if (url.startsWith('https://assets.hardcover.app/')) {
+    return 3;
+  }
+  if (url.startsWith('https://covers.openlibrary.org/b/id/')) {
+    return 2;
+  }
+  return 1;
+};
+
+/** The better of the two covers; on a tie the base keeps its own. */
 const pickCover = (base: BookCandidate, extra: BookCandidate) => {
-  const baseIsGuess = isUnverifiedCover(base.coverLarge);
-  if (
-    !base.coverLarge ||
-    (baseIsGuess && extra.coverLarge && !isUnverifiedCover(extra.coverLarge))
-  ) {
-    return { coverLarge: extra.coverLarge, coverSmall: extra.coverSmall };
+  if (coverQuality(extra.coverLarge) > coverQuality(base.coverLarge)) {
+    return { coverLarge: extra.coverLarge, coverSmall: extra.coverSmall ?? extra.coverLarge };
   }
   return { coverLarge: base.coverLarge, coverSmall: base.coverSmall ?? extra.coverSmall };
 };
