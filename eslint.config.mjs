@@ -24,6 +24,14 @@ const eslintConfig = [
       'no-var': 'warn',
       'object-shorthand': 'warn',
       'prefer-const': 'warn',
+      // React Compiler rules from eslint-plugin-react-hooks 7, which
+      // eslint-config-next 16.4 turns on as errors. They flag existing
+      // patterns (47 places, mostly setState inside useEffect), not breakage:
+      // same phase-1 treatment, warn now and promote once they are fixed.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/error-boundaries': 'warn',
+      'react-hooks/refs': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
     },
   },
   {
