@@ -102,6 +102,12 @@ export type TitlePriority = TitleField[];
 export type ExternalIdConfig = {
   field: 'mal_id' | 'google_books_id' | 'rawg_id' | 'igdb_id' | 'tmdb_id';
   type: 'number' | 'string';
+  /**
+   * Further identifier columns, checked in order after `field` when looking
+   * for an existing row. Books use this: a book may be known only by its
+   * Open Library id or ISBN.
+   */
+  alternateFields?: ('open_library_id' | 'nlg_id' | 'hardcover_id' | 'isbn_13')[];
 };
 
 /**

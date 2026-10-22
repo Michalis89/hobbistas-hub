@@ -232,6 +232,10 @@ export interface MediaItemRow {
   tmdb_id: number | null;
   imdb_id: string | null;
   google_books_id: string | null;
+  open_library_id: string | null;
+  nlg_id: number | null;
+  hardcover_id: number | null;
+  isbn_13: string | null;
   steam_app_id: number | null;
   category: 'anime' | 'manga' | 'movies' | 'tv' | 'books' | 'games';
   source: string | null;
@@ -279,6 +283,10 @@ export interface MediaItemInsert {
   tmdb_id?: number | null;
   imdb_id?: string | null;
   google_books_id?: string | null;
+  open_library_id?: string | null;
+  nlg_id?: number | null;
+  hardcover_id?: number | null;
+  isbn_13?: string | null;
   steam_app_id?: number | null;
   category: 'anime' | 'manga' | 'movies' | 'tv' | 'books' | 'games';
   source?: string | null;

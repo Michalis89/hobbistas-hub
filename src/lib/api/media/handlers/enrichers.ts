@@ -1,7 +1,16 @@
-import type { MediaPayload } from '../types';
+import type { ExternalIdValue, MediaPayload } from '../types';
 import { MEDIA_CATEGORY_CONFIGS } from '../config';
 import { EXTERNAL_API_REVALIDATE_SECONDS } from '@/lib/constants/cache';
 import { cachedExternalFetch } from '@/lib/api-cache/external';
+import { searchGoogleBooks } from '@/lib/books/googleBooks';
+import {
+  fetchOpenLibraryWork,
+  openLibraryCoverUrl,
+  searchOpenLibrary,
+} from '@/lib/books/openLibrary';
+import { fetchNlgRecord, searchNlg } from '@/lib/books/nlg';
+import { coverExists, isUnverifiedCover } from '@/lib/books/covers';
+import { isGreekIsbn, pickEditionIsbn } from '@/lib/books/isbn';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/';
 
@@ -114,9 +123,128 @@ export function mapGamePayload(payload: Record<string, unknown>): Record<string,
   };
 }
 
+const isEmptyValue = (value: unknown) =>
+  value === null ||
+  value === undefined ||
+  value === '' ||
+  (Array.isArray(value) && value.length === 0);
+
+/**
+ * Enriches a new book before it is inserted into media_items, mixing what
+ * each provider is good at into one row:
+ *
+ * 1. NLG catalogue record (Greek books): page count, publisher, subjects and
+ *    ISBN from the full MARC record; the search result only had a summary.
+ *    A Greek-ISBN book from another provider is matched to its record first.
+ *    A cover URL built from an ISBN (NLG, Open Library by ISBN — used for
+ *    Hardcover-only books) is kept only if the image really exists.
+ * 2. Open Library work: description and subjects, which its search endpoint
+ *    does not return.
+ * 3. Google Books by ISBN: description and cover for the same edition, for a
+ *    book that came from another provider. Google volumes are editions, so
+ *    its id is stored too.
+ * 4. Open Library by ISBN: a description, as a last resort. Its work id is
+ *    not stored: an Open Library work groups every edition and language, and
+ *    a Greek edition must not be folded into the English work's row.
+ *
+ * Only fills fields still empty; never overwrites. A provider that fails or
+ * has nothing contributes nothing.
+ */
+export async function enrichBookPayload(
+  _category: string,
+  _externalId: ExternalIdValue,
+  payload: MediaPayload,
+): Promise<Partial<MediaPayload>> {
+  const current: Record<string, unknown> = { ...payload };
+  const result: Record<string, unknown> = {};
+  const has = (field: string) => !isEmptyValue(current[field]);
+  const set = (field: string, value: unknown) => {
+    current[field] = value;
+    result[field] = value;
+  };
+  const fill = (field: string, value: unknown) => {
+    if (!has(field) && !isEmptyValue(value)) {
+      set(field, value);
+    }
+  };
+  const isbn13 = () => (typeof current.isbn_13 === 'string' ? current.isbn_13 : null);
+
+  // 1. NLG record. A Greek book found through Google or Open Library is
+  // looked up in the catalogue by ISBN first.
+  let nlgId = typeof payload.nlg_id === 'number' ? payload.nlg_id : null;
+  const initialIsbn = isbn13();
+  if (!nlgId && initialIsbn && isGreekIsbn(initialIsbn)) {
+    const [entry] = await searchNlg('', { limit: 1, isbn: initialIsbn });
+    if (entry?.nlgId) {
+      nlgId = entry.nlgId;
+      set('nlg_id', entry.nlgId);
+      fill('publisher', entry.publisher);
+      fill('page_count', entry.pageCount);
+    }
+  }
+  if (nlgId) {
+    const record = await fetchNlgRecord(nlgId);
+    if (record) {
+      fill('isbn_13', pickEditionIsbn(record.isbns));
+      fill('page_count', record.pageCount);
+      fill('publisher', record.publisher);
+      fill('description', record.summary);
+      fill('genres', record.genres);
+    }
+  }
+  // Covers built from an ISBN (NLG, Open Library by ISBN) may not exist
+  if (isUnverifiedCover(current.cover_image_large)) {
+    if (!(await coverExists(current.cover_image_large))) {
+      set('cover_image_large', null);
+      set('cover_image_medium', null);
+    }
+  }
+
+  // 2. Open Library work
+  const openLibraryId =
+    typeof payload.open_library_id === 'string' ? payload.open_library_id : null;
+  if (openLibraryId && (!has('description') || !has('genres') || !has('cover_image_large'))) {
+    const work = await fetchOpenLibraryWork(openLibraryId);
+    fill('description', work.description);
+    fill('genres', work.subjects);
+    if (work.coverId) {
+      fill('cover_image_large', openLibraryCoverUrl(work.coverId, 'L'));
+      fill('cover_image_medium', openLibraryCoverUrl(work.coverId, 'M'));
+    }
+  }
+
+  // 3. Google Books, same edition
+  const isbn = isbn13();
+  if (isbn && !has('google_books_id') && (!has('description') || !has('cover_image_large'))) {
+    const [edition] = await searchGoogleBooks('', { limit: 1, isbn });
+    if (edition?.googleBooksId && edition.isbns.includes(isbn)) {
+      fill('google_books_id', edition.googleBooksId);
+      fill('description', edition.description);
+      fill('cover_image_large', edition.coverLarge);
+      fill('cover_image_medium', edition.coverSmall);
+      fill('genres', edition.categories);
+      fill('page_count', edition.pageCount);
+    }
+  }
+
+  // 4. Open Library by ISBN, description only
+  if (isbn && !has('description') && !openLibraryId) {
+    const [work] = await searchOpenLibrary('', { limit: 1, isbn });
+    if (work?.openLibraryId) {
+      const details = await fetchOpenLibraryWork(work.openLibraryId);
+      fill('description', details.description);
+      fill('genres', details.subjects);
+    }
+  }
+
+  return result as Partial<MediaPayload>;
+}
+
 /**
  * Initialize enrichers in category configs
  * Called automatically when this module is imported
  */
-MEDIA_CATEGORY_CONFIGS.movies.enricher = fetchTmdbDetails;
+MEDIA_CATEGORY_CONFIGS.movies.enricher = (category, tmdbId) =>
+  typeof tmdbId === 'number' ? fetchTmdbDetails(category, tmdbId) : Promise.resolve({});
+MEDIA_CATEGORY_CONFIGS.books.enricher = enrichBookPayload;
 MEDIA_CATEGORY_CONFIGS.games.payloadMapper = mapGamePayload;

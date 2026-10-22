@@ -4,6 +4,7 @@ import { memo } from 'react';
 import { CoverThumbImage } from '@/components/ui/cover-image';
 import Link from 'next/link';
 import { Library } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { MediaCategory, SearchResult } from './types';
 
@@ -23,6 +24,22 @@ const toMediaSlug = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .replace(/-+/g, '-');
 
+const PROVIDER_LABELS: Record<string, string> = {
+  google_books: 'Google Books',
+  open_library: 'Open Library',
+  nlg: 'ΕΒΕ',
+  hardcover: 'Hardcover',
+};
+
+/** "DB · Google Books" for our rows, "Google Books + Open Library" for API results. */
+const provenanceLabel = (provenance: NonNullable<SearchResult['provenance']>) => {
+  const providers = provenance.providers.map(provider => PROVIDER_LABELS[provider] ?? provider);
+  if (provenance.origin === 'local') {
+    return providers.length > 0 ? `DB · ${providers.join(' + ')}` : 'DB';
+  }
+  return providers.join(' + ') || 'API';
+};
+
 function MediaSearchResultCard({
   entry,
   onOpenDialog,
@@ -36,11 +53,12 @@ function MediaSearchResultCard({
     }
     onOpenDialog(entry);
   };
+  // toMediaSlug keeps only a-z/0-9, so a Greek title slugs to nothing;
+  // fall back to the external id rather than linking to /media/books/
+  const titleSlug = entry.title?.trim() ? toMediaSlug(entry.title) : '';
   const mediaSlug = Number.isFinite(entry.mediaId)
     ? String(entry.mediaId)
-    : entry.title?.trim()
-      ? toMediaSlug(entry.title)
-      : String(entry.externalId ?? entry.id);
+    : titleSlug || String(entry.externalId ?? entry.id);
 
   return (
     <article
@@ -73,6 +91,15 @@ function MediaSearchResultCard({
         <p className="truncate text-xs text-muted-foreground">
           {entry.subtitle} {entry.year ? `- ${entry.year}` : ''}
         </p>
+        {entry.provenance ? (
+          <Badge
+            variant={entry.provenance.origin === 'local' ? 'secondary' : 'outline'}
+            className="mt-1 px-1.5 py-0 text-[10px] font-medium"
+            data-testid="search-result-provenance"
+          >
+            {provenanceLabel(entry.provenance)}
+          </Badge>
+        ) : null}
       </div>
 
       {isInLibrary ? (
