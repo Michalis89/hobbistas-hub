@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
 
 # The four checks run as separate jobs rather than as steps of one, so wall
 # time is the slowest of them instead of their sum. Each pays its own
