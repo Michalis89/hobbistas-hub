@@ -6,6 +6,7 @@ import { searchHardcover } from '@/lib/books/hardcover';
 import { toHardcoverExternalId, toNlgExternalId } from '@/lib/books/identifiers';
 import { bookIdentityKeys, mergeProviderResults, rankBooksByQuery } from '@/lib/books/merge';
 import { isGreekIsbn, parseIsbnQuery } from '@/lib/books/isbn';
+import { verifyGuessedCovers } from '@/lib/books/coverCheck';
 import type { BookCandidate } from '@/lib/books/types';
 import { provenanceField } from '../../provenance';
 import type { MediaSearchConfig, SearchLocalItem } from '../../handlers/search';
@@ -177,7 +178,8 @@ const isGreekSearch = (search: string, isbn: string | null) =>
  * - Then Google Books, Hardcover (only with a token), Open Library.
  *
  * The merged list is then ranked: the best of each provider first, then by
- * title match and reader count (see rankBooksByQuery).
+ * title match and reader count (see rankBooksByQuery). Covers guessed from an
+ * ISBN are verified before the results leave the server.
  */
 const fetchBooks = async (
   search: string,
@@ -197,12 +199,15 @@ const fetchBooks = async (
     greek ? [nlg, googleBooks, hardcover, openLibrary] : [googleBooks, hardcover, openLibrary],
   );
 
-  if (!isbn) {
-    return rankBooksByQuery(merged, search);
-  }
   // An ISBN query names one edition: that is the ISBN to store, not whichever
   // edition the provider listed first.
-  return merged.map(book => (book.isbns.includes(isbn) ? { ...book, isbn13: isbn } : book));
+  const ordered = isbn
+    ? merged.map(book => (book.isbns.includes(isbn) ? { ...book, isbn13: isbn } : book))
+    : rankBooksByQuery(merged, search);
+
+  // Covers guessed from an ISBN are checked here, so the browser never asks
+  // for one that 404s
+  return verifyGuessedCovers(ordered, limit);
 };
 
 export const booksSearchConfig: MediaSearchConfig<
