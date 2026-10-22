@@ -151,6 +151,14 @@ export const LIMITER_CONFIGS: Record<string, LimiterConfig> = {
     prefix: 'rl:api:strict',
   },
 
+  // Owner -> user emails from the admin users table, keyed by sender. Burst
+  // guard only; the route also enforces daily caps from its audit table.
+  adminEmailSend: {
+    limit: 10,
+    windowSec: 10 * 60, // 10 minutes
+    prefix: 'rl:admin-email:sender',
+  },
+
   // Shadow rerank provider calls. Deliberately its own budget: a burst of dashboard traffic must
   // not be able to spend the rerank allowance, and a rerank must not be able to lock the user out
   // of their own taste profile. Checked only inside shadow execution, never on a user response.

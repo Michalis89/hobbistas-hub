@@ -7,6 +7,13 @@ import { fail, okWithMeta } from '@/lib/api/response';
 import { UnauthorizedError } from '@/lib/api/auth';
 import { ForbiddenError, requireAdminRole } from '@/lib/api/permissions';
 import type { UserRole } from '@/types/user';
+import {
+  deriveUserActivityStatus,
+  latestSignIn,
+  toContentCounts,
+  type UserActivityStatus,
+  type UserContentCounts,
+} from '@/lib/admin/userActivity';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
@@ -41,6 +48,71 @@ async function fetchDistinctStatuses(admin: ReturnType<typeof createSupabaseAdmi
         ),
     ),
   ).sort((a, b) => a.localeCompare(b));
+}
+
+type UserListRow = {
+  id: string;
+  account_status: string | null;
+  last_login: string | null;
+  [key: string]: unknown;
+};
+
+export type UserActivity = {
+  status: UserActivityStatus;
+  emailConfirmed: boolean;
+  lastSignInAt: string | null;
+  content: UserContentCounts;
+};
+
+/**
+ * Sign-in, email confirmation and content counts for one page of users, in
+ * a single call to admin_user_overview (migration rc055). If the function is
+ * missing or fails, the list still loads; rows just carry `activity: null`.
+ */
+async function withActivity(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  rows: UserListRow[],
+): Promise<(UserListRow & { activity: UserActivity | null })[]> {
+  const ids = rows.map(row => row.id).filter(Boolean);
+  if (ids.length === 0) {
+    return [];
+  }
+
+  let overview = new Map<string, Record<string, unknown>>();
+  try {
+    const { data, error } = await admin.rpc('admin_user_overview', { p_user_ids: ids });
+    if (error) {
+      throw error;
+    }
+    overview = new Map(
+      (data ?? []).map(entry => [entry.user_id, entry as unknown as Record<string, unknown>]),
+    );
+  } catch (error) {
+    console.warn('Admin users overview unavailable:', error);
+    return rows.map(row => ({ ...row, activity: null }));
+  }
+
+  return rows.map(row => {
+    const entry = overview.get(row.id);
+    if (!entry) {
+      return { ...row, activity: null };
+    }
+    const emailConfirmedAt = (entry.email_confirmed_at as string | null) ?? null;
+    const lastSignInAt = latestSignIn(row.last_login, entry.last_sign_in_at as string | null);
+    return {
+      ...row,
+      activity: {
+        status: deriveUserActivityStatus({
+          accountStatus: row.account_status,
+          emailConfirmedAt,
+          lastSignInAt,
+        }),
+        emailConfirmed: Boolean(emailConfirmedAt),
+        lastSignInAt,
+        content: toContentCounts(entry),
+      },
+    };
+  });
 }
 
 async function GETHandler(req: Request) {
@@ -95,7 +167,9 @@ async function GETHandler(req: Request) {
       return fail(API_ERRORS.INTERNAL, API_ERRORS.INTERNAL.status);
     }
 
-    return okWithMeta(Array.isArray(data) ? data : [], {
+    const rows = Array.isArray(data) ? (data as UserListRow[]) : [];
+
+    return okWithMeta(await withActivity(admin, rows), {
       total: count ?? 0,
       limit,
       offset,

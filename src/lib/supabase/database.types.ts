@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "13.0.5"
   }
   public: {
     Tables: {
@@ -40,6 +40,69 @@ export type Database = {
           {
             foreignKeyName: "activity_log_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_user_emails: {
+        Row: {
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          id: string
+          idempotency_key: string
+          provider: string
+          provider_message_id: string | null
+          recipient_email: string
+          recipient_user_id: string
+          sender_user_id: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key: string
+          provider?: string
+          provider_message_id?: string | null
+          recipient_email: string
+          recipient_user_id: string
+          sender_user_id?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key?: string
+          provider?: string
+          provider_message_id?: string | null
+          recipient_email?: string
+          recipient_user_id?: string
+          sender_user_id?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_user_emails_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_user_emails_sender_user_id_fkey"
+            columns: ["sender_user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -2712,6 +2775,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_user_overview: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          article_count: number
+          character_sheet_count: number
+          comment_count: number
+          diary_count: number
+          email_confirmed_at: string
+          last_sign_in_at: string
+          library_count: number
+          user_id: string
+        }[]
+      }
       calculate_user_stats: { Args: { p_user_id: string }; Returns: Json }
       category_dashboard_history: {
         Args: { p_category: string; p_since: string; p_user_id: string }
