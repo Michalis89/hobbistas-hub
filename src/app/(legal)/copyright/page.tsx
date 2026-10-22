@@ -14,6 +14,9 @@ export const metadata = buildMetadata({
 
 const linkClass = 'font-medium text-primary underline-offset-2 hover:underline';
 
+/** Change only when the policy text changes. */
+const LAST_UPDATED = '22 October 2026';
+
 export default function CopyrightPage() {
   const breadcrumb = [
     { name: 'Home', url: `${SITE_URL}/` },
@@ -37,7 +40,7 @@ export default function CopyrightPage() {
                   for something to be removed.
                 </>
               }
-              meta={`Last updated: ${new Date().getFullYear()}`}
+              meta={`Last updated: ${LAST_UPDATED}`}
               align="left"
               contentClassName="items-start"
               titleClassName="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl"
@@ -96,10 +99,19 @@ export default function CopyrightPage() {
                   <li>your physical or electronic signature.</li>
                 </ul>
                 <p className="mt-2">
-                  These elements follow the notice requirements of the U.S. Digital Millennium
-                  Copyright Act (17 U.S.C. § 512(c)(3)). Notices from the European Union are equally
-                  welcome under the notice-and-action procedure of the Digital Services Act
-                  (Regulation (EU) 2022/2065, Article 16), and are handled the same way.
+                  This list reflects the elements of a notice under the U.S. Digital Millennium
+                  Copyright Act (17 U.S.C. § 512(c)(3)).
+                </p>
+                <p className="mt-2">
+                  If you are in the European Union, you may instead send a notice under Article 16
+                  of the Digital Services Act (Regulation (EU) 2022/2065) to the same address. Such
+                  a notice should explain why you consider the material illegal, give its exact URL,
+                  include your name and email address, and state that you believe in good faith that
+                  the information and allegations in it are accurate and complete.
+                </p>
+                <p className="mt-2">
+                  The two procedures are not the same: each notice is assessed under the rules that
+                  apply to it, and we will tell you what we decided.
                 </p>
               </section>
 
@@ -114,6 +126,11 @@ export default function CopyrightPage() {
                 <p className="mt-2">
                   If the material was posted by a user, we will let that user know it was removed
                   and why.
+                </p>
+                <p className="mt-2">
+                  This page describes how we handle notices. It is not legal advice, and it does not
+                  by itself decide anyone&apos;s rights or obligations under copyright law, the DMCA
+                  or the Digital Services Act.
                 </p>
               </section>
 

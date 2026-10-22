@@ -10,6 +10,7 @@ import {
 } from '@/lib/books/openLibrary';
 import { fetchNlgRecord, searchNlg } from '@/lib/books/nlg';
 import { coverExists, isUnverifiedCover } from '@/lib/books/covers';
+import { stripBlockedCoverFields } from '@/lib/books/coverBlocklist';
 import { isGreekIsbn, pickEditionIsbn } from '@/lib/books/isbn';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/';
@@ -247,4 +248,5 @@ export async function enrichBookPayload(
 MEDIA_CATEGORY_CONFIGS.movies.enricher = (category, tmdbId) =>
   typeof tmdbId === 'number' ? fetchTmdbDetails(category, tmdbId) : Promise.resolve({});
 MEDIA_CATEGORY_CONFIGS.books.enricher = enrichBookPayload;
+MEDIA_CATEGORY_CONFIGS.books.sanitizePayload = payload => stripBlockedCoverFields(payload);
 MEDIA_CATEGORY_CONFIGS.games.payloadMapper = mapGamePayload;

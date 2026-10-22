@@ -12,10 +12,19 @@ jest.mock('@/utils/seo/StructuredData', () => ({
 jest.mock('@/app/components/layout', () => ({
   __esModule: true,
   PageContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  PageHeader: ({ title, description }: { title: string; description: React.ReactNode }) => (
+  PageHeader: ({
+    title,
+    description,
+    meta,
+  }: {
+    title: string;
+    description: React.ReactNode;
+    meta?: string;
+  }) => (
     <header>
       <h1>{title}</h1>
       <div>{description}</div>
+      <p>{meta}</p>
     </header>
   ),
 }));
@@ -42,7 +51,7 @@ describe('CopyrightPage', () => {
     render(<CopyrightPage />);
 
     expect(screen.getByText(/17 U\.S\.C\. § 512\(c\)\(3\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Digital Services Act/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Digital Services Act/).length).toBeGreaterThan(0);
   });
 
   it('names the catalogues cover images come from', () => {
@@ -51,5 +60,24 @@ describe('CopyrightPage', () => {
     expect(
       screen.getByText(/Google Books, Open Library, the National Library of Greece, Hardcover/),
     ).toBeInTheDocument();
+  });
+
+  it('shows a fixed revision date, not the current year', () => {
+    render(<CopyrightPage />);
+
+    expect(screen.getByText(/22 October 2026/)).toBeInTheDocument();
+  });
+
+  it('keeps the DMCA and DSA procedures apart', () => {
+    render(<CopyrightPage />);
+
+    expect(screen.queryByText(/handled the same way/)).not.toBeInTheDocument();
+    expect(screen.getByText(/The two procedures are not the same/)).toBeInTheDocument();
+  });
+
+  it('does not present itself as legal protection', () => {
+    render(<CopyrightPage />);
+
+    expect(screen.getByText(/It is not legal advice/)).toBeInTheDocument();
   });
 });

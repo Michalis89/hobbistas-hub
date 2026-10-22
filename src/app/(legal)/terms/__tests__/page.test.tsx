@@ -82,6 +82,10 @@ describe('TermsPage', () => {
       'href',
       '/privacy',
     );
+    expect(screen.getByRole('link', { name: 'Copyright & Takedown Policy' })).toHaveAttribute(
+      'href',
+      '/copyright',
+    );
 
     expect(getBreadcrumbStructuredData).toHaveBeenCalledWith([
       { name: 'Home', url: `${SITE_URL}/` },

@@ -133,9 +133,13 @@ providers into one row, filling gaps only:
 
 **Hardcover terms that shape the code** (`src/lib/books/hardcover.ts`): server-side only;
 a public site may use book data and aggregate counts but not data owned by users
-(libraries, reviews, ratings, lists); covers are user uploads and need a DMCA takedown policy
-to be shown publicly — the site's is at `/copyright` (`src/app/(legal)/copyright`), so Hardcover
-covers (`assets.hardcover.app`) are used. When providers are merged the best cover wins regardless
+(libraries, reviews, ratings, lists); covers are user uploads, and the API docs' "Public Data
+Warning" tells sites that show them publicly to "make absolutely sure" they list a DMCA takedown
+policy (a strong recommendation in the docs, not a clause of a signed agreement) — the site's is
+at `/copyright` (`src/app/(legal)/copyright`), so Hardcover covers (`assets.hardcover.app`) are used.
+A cover taken down after a notice goes in `src/lib/books/coverBlocklist.ts` (with the SQL there to
+clear stored rows); it is then filtered from search results, add payloads, enrichment and backfill,
+so a later API fetch cannot bring it back. When providers are merged the best cover wins regardless
 of whose data won: Hardcover > Open Library work cover > Google thumbnail > a URL guessed from an
 ISBN. Titles from Hardcover's search index can arrive HTML-escaped and are decoded. Free plan: 5,000 requests/day,
 60/minute. GraphQL errors arrive with HTTP 200 and are turned into a 502 before the cache,

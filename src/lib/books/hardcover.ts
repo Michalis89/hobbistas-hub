@@ -17,10 +17,12 @@ import type { BookCandidate } from './types';
  * - Server-side only; the token must never reach the browser.
  * - A public site may use book data and Hardcover aggregate counts, but not
  *   data owned by users (libraries, reviews, ratings, lists).
- * - Covers are uploaded by Hardcover users; showing them publicly requires a
- *   DMCA takedown policy, which the site has at /copyright. They are used
+ * - Covers are uploaded by Hardcover users. The API docs' "Public Data
+ *   Warning" tells sites that show them publicly to "make absolutely sure"
+ *   they list a DMCA takedown policy (ours: /copyright). They are used
  *   (assets.hardcover.app, usually far sharper than Google's thumbnails);
- *   a book without one falls back to Open Library's cover by ISBN.
+ *   a book without one falls back to Open Library's cover by ISBN, and a
+ *   cover taken down after a notice is filtered by coverBlocklist.ts.
  * - Free plan: 5,000 requests/day, 60/minute, search times out after 2s.
  *
  * Without HARDCOVER_API_TOKEN every call is a no-op.
