@@ -3,6 +3,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import type { AuthSession } from '@/types/auth';
 import type { User } from '@/types/user';
 import { supabase } from '@/lib/supabase-client';
+import { pickSelfEditableUserFields, type UserSelfUpdate } from '@/lib/users/editableColumns';
 
 const initialState: AuthSession = {
   user: null,
@@ -78,10 +79,13 @@ export const logout = createAsyncThunk('auth/logout', async () => {
 
 export const updateUserProfile = createAsyncThunk(
   'auth/updateProfile',
-  async ({ userId, updates }: { userId: string; updates: Partial<User> }) => {
+  async ({ userId, updates }: { userId: string; updates: UserSelfUpdate }) => {
+    // The browser writes with the user's own JWT, and the database only grants
+    // UPDATE on the self-editable columns. Strip anything else here so a wider
+    // object cannot turn a profile save into a permission error.
     const { data, error } = await supabase
       .from('users')
-      .update(updates as never)
+      .update(pickSelfEditableUserFields(updates) as never)
       .eq('id', userId)
       .select()
       .single();
