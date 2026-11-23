@@ -5,6 +5,8 @@
  * other locale is a row in `article_translations`, so adding one here plus the
  * matching check constraint is the whole change.
  */
+import { SITE_NAME } from '@/config/site';
+
 export const ARTICLE_LOCALES = ['en', 'el'] as const;
 
 export type ArticleLocale = (typeof ARTICLE_LOCALES)[number];
@@ -135,6 +137,11 @@ export function availableLocales(
  * Empty fields fall through to the source rather than rendering blank: a
  * translator who filled in the title and body but left the meta description
  * alone should get the English one, not nothing.
+ *
+ * The `meta_*` fields here are raw per-field fallbacks. Do not build page
+ * metadata from them: a translated title must beat the English meta title.
+ * Use `resolveArticleSeo` for the <title>, description, Open Graph, Twitter
+ * and structured data.
  */
 export function applyArticleTranslation<T extends ArticleTranslationFields>(
   article: T,
@@ -168,6 +175,95 @@ export function applyArticleTranslation<T extends ArticleTranslationFields>(
 }
 
 /** Picks the row for one locale out of a fetched set. */
+/** Where a resolved SEO value came from, for the Studio preview. */
+export type ArticleSeoSource =
+  'translation-meta' | 'translation-content' | 'source-meta' | 'source-content' | 'fallback';
+
+export type ArticleSeoFields = {
+  title: string | null;
+  description: string | null;
+  meta_title: string | null;
+  meta_description: string | null;
+};
+
+export type ResolvedArticleSeo = {
+  title: string;
+  description: string;
+  titleSource: ArticleSeoSource;
+  descriptionSource: ArticleSeoSource;
+};
+
+const filled = (value: string | null | undefined): string | null =>
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+
+/**
+ * The description used when an article has neither a meta description nor a
+ * standfirst in any language: neutral, in the page's language, and specific
+ * to the article.
+ */
+export function articleFallbackDescription(title: string, locale: ArticleLocale): string {
+  const name = title.trim();
+  if (locale === 'el') {
+    return name ? `Διαβάστε «${name}» στο ${SITE_NAME}.` : `Διαβάστε το άρθρο στο ${SITE_NAME}.`;
+  }
+  return name ? `Read “${name}” on ${SITE_NAME}.` : `Read this article on ${SITE_NAME}.`;
+}
+
+/**
+ * The title and description an article page publishes for one language, used
+ * for the HTML <title> and description, Open Graph, Twitter and structured
+ * data alike.
+ *
+ * Content in the page's language always wins over the source language:
+ *   title:       translated meta title → translated title
+ *                → source meta title → source title
+ *   description: translated meta description → translated standfirst
+ *                → source meta description → source standfirst
+ *                → a neutral sentence in the page's language
+ *
+ * For the source language the translation is ignored. Blank and
+ * whitespace-only values count as empty.
+ */
+export function resolveArticleSeo(
+  source: ArticleSeoFields,
+  translation: ArticleSeoFields | null | undefined,
+  locale: ArticleLocale,
+): ResolvedArticleSeo {
+  const tr = locale === SOURCE_ARTICLE_LOCALE ? null : (translation ?? null);
+
+  const pick = (candidates: Array<[ArticleSeoSource, string | null | undefined]>) => {
+    for (const [from, value] of candidates) {
+      const text = filled(value);
+      if (text) {
+        return { value: text, from };
+      }
+    }
+    return null;
+  };
+
+  const title = pick([
+    ['translation-meta', tr?.meta_title],
+    ['translation-content', tr?.title],
+    ['source-meta', source.meta_title],
+    ['source-content', source.title],
+  ]);
+  const description = pick([
+    ['translation-meta', tr?.meta_description],
+    ['translation-content', tr?.description],
+    ['source-meta', source.meta_description],
+    ['source-content', source.description],
+  ]);
+  // The fallback names the article as readers see it in this language.
+  const articleTitle = filled(tr?.title) ?? filled(source.title) ?? '';
+
+  return {
+    title: title?.value ?? '',
+    titleSource: title?.from ?? 'fallback',
+    description: description?.value ?? articleFallbackDescription(articleTitle, locale),
+    descriptionSource: description?.from ?? 'fallback',
+  };
+}
+
 export function findTranslation(
   translations: readonly ArticleTranslationRow[] | null | undefined,
   locale: ArticleLocale,

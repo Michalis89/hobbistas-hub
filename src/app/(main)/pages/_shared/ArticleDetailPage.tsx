@@ -24,6 +24,7 @@ import {
   findTranslation,
   isArticleLocale,
   resolveArticleLocale,
+  resolveArticleSeo,
   ARTICLE_OG_LOCALES,
   type ArticleLocale,
   type ArticleTranslationRow,
@@ -348,19 +349,19 @@ export async function buildArticleDetailMetadata({
     requested: resolvedSearchParams?.lang,
     available: availableLocales(translations),
   });
+  const metadataTranslation = findTranslation(translations, metadataLocale);
   const article = applyArticleTranslation(
     { ...sourceArticle, content_rich: null, content_html: null },
-    findTranslation(translations, metadataLocale),
+    metadataTranslation,
   );
+  // Same resolution as the structured data on the page: content in the
+  // page's language beats the source language's meta fields.
+  const seo = resolveArticleSeo(sourceArticle, metadataTranslation, metadataLocale);
 
   const authorName = article.users?.display_name || article.users?.username || 'Hobbistas';
   const coverImage = article.cover_image ?? undefined;
-  const metaTitle = article.meta_title || article.title;
-  const rawMetaDescription =
-    article.meta_description ||
-    article.description ||
-    'Stay tuned for updates or explore another story while we resolve this.';
-  const metaDescription = truncateForMeta(rawMetaDescription);
+  const metaTitle = seo.title || article.title;
+  const metaDescription = truncateForMeta(seo.description);
   const normalizedSlug = normalizeSlug(article.slug);
   const localeOptions = availableLocales(translations);
   // Each language is its own indexable URL, so the canonical is the URL of
@@ -447,10 +448,9 @@ export default async function ArticleDetailPage({
     acceptLanguage: requestHeaders.get('accept-language'),
     available: localeOptions,
   });
-  const article = applyArticleTranslation(
-    sourceArticle,
-    findTranslation(translations, activeLocale),
-  );
+  const activeTranslation = findTranslation(translations, activeLocale);
+  const article = applyArticleTranslation(sourceArticle, activeTranslation);
+  const seo = resolveArticleSeo(sourceArticle, activeTranslation, activeLocale);
 
   const hasCategory = Boolean(article.category);
   const ARTICLE_HEADER_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
@@ -490,14 +490,15 @@ export default async function ArticleDetailPage({
     { name: categoryLabel, url: `${SITE_URL}${basePath}?category=${article.category}` },
     { name: article.title, url: articleLocaleUrl },
   ];
-  const articleDescription =
-    article.meta_description || article.description || 'Explore this entry on Hobbistas.';
+  // The same title and description the page metadata publishes.
+  const structuredTitle = seo.title || article.title;
+  const articleDescription = truncateForMeta(seo.description);
   const NON_REVIEW_SCHEMA_CATEGORIES: ArticleCategory[] = ['coding'];
   const useReviewSchema =
     article.topic === 'reviews' && !NON_REVIEW_SCHEMA_CATEGORIES.includes(article.category);
   const jsonLd = useReviewSchema
     ? buildReviewJsonLd({
-        title: article.title,
+        title: structuredTitle,
         description: articleDescription,
         url: articleLocaleUrl,
         image: article.cover_image,
@@ -510,7 +511,7 @@ export default async function ArticleDetailPage({
         score: article.score,
       })
     : buildArticleJsonLd({
-        title: article.title,
+        title: structuredTitle,
         description: articleDescription,
         url: articleLocaleUrl,
         image: article.cover_image,

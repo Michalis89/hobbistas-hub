@@ -1,11 +1,13 @@
 import {
   applyArticleTranslation,
+  articleFallbackDescription,
   articleLocaleAlternates,
   articleLocalePath,
   availableLocales,
   findTranslation,
   localeFromAcceptLanguage,
   resolveArticleLocale,
+  resolveArticleSeo,
   toArticleLocale,
   type ArticleTranslationFields,
 } from '@/lib/articles/locales';
@@ -243,5 +245,97 @@ describe('articleLocaleAlternates', () => {
   it('points x-default at the source language', () => {
     const alternates = articleLocaleAlternates('/review', 'a-review', ['en', 'el']);
     expect(alternates?.['x-default']).toBe('/review/a-review');
+  });
+});
+
+describe('resolveArticleSeo', () => {
+  const greek = {
+    title: 'Ο τίτλος',
+    description: 'Η περίληψη',
+    meta_title: 'Ελληνικό meta',
+    meta_description: 'Ελληνική meta περιγραφή',
+  };
+  const blankGreek = {
+    title: 'Ο τίτλος',
+    description: null,
+    meta_title: null,
+    meta_description: null,
+  };
+
+  it('English: meta fields first, then title and standfirst, translation ignored', () => {
+    expect(resolveArticleSeo(source, greek, 'en')).toEqual({
+      title: 'English meta title',
+      description: 'English meta description',
+      titleSource: 'source-meta',
+      descriptionSource: 'source-meta',
+    });
+    expect(
+      resolveArticleSeo({ ...source, meta_title: null, meta_description: '  ' }, null, 'en'),
+    ).toMatchObject({
+      title: 'The English Title',
+      description: 'English standfirst',
+      titleSource: 'source-content',
+      descriptionSource: 'source-content',
+    });
+  });
+
+  it('Greek: Greek meta fields win', () => {
+    expect(resolveArticleSeo(source, greek, 'el')).toEqual({
+      title: 'Ελληνικό meta',
+      description: 'Ελληνική meta περιγραφή',
+      titleSource: 'translation-meta',
+      descriptionSource: 'translation-meta',
+    });
+  });
+
+  it('Greek: the Greek title and standfirst beat the English meta fields', () => {
+    expect(
+      resolveArticleSeo(source, { ...greek, meta_title: '', meta_description: '   ' }, 'el'),
+    ).toEqual({
+      title: 'Ο τίτλος',
+      description: 'Η περίληψη',
+      titleSource: 'translation-content',
+      descriptionSource: 'translation-content',
+    });
+  });
+
+  it('Greek: then the English meta fields, then the English title and standfirst', () => {
+    expect(resolveArticleSeo(source, blankGreek, 'el')).toMatchObject({
+      title: 'Ο τίτλος',
+      description: 'English meta description',
+      descriptionSource: 'source-meta',
+    });
+    expect(
+      resolveArticleSeo({ ...source, meta_description: null }, blankGreek, 'el'),
+    ).toMatchObject({ description: 'English standfirst', descriptionSource: 'source-content' });
+    // A translation without a title is not published, but the resolver still
+    // degrades sensibly for the Studio preview.
+    expect(resolveArticleSeo(source, { ...blankGreek, title: '' }, 'el')).toMatchObject({
+      title: 'English meta title',
+      titleSource: 'source-meta',
+    });
+  });
+
+  it('ends with a neutral sentence in the page language', () => {
+    const bare = { ...source, description: null, meta_description: null };
+    expect(resolveArticleSeo(bare, null, 'en')).toMatchObject({
+      description: 'Read “The English Title” on Hobbistas.',
+      descriptionSource: 'fallback',
+    });
+    expect(resolveArticleSeo(bare, blankGreek, 'el')).toMatchObject({
+      description: 'Διαβάστε «Ο τίτλος» στο Hobbistas.',
+      descriptionSource: 'fallback',
+    });
+  });
+
+  it('trims what it returns', () => {
+    expect(resolveArticleSeo(source, { ...greek, meta_title: '  Spaced  ' }, 'el').title).toBe(
+      'Spaced',
+    );
+  });
+
+  it('never produces the old "resolve this" placeholder', () => {
+    expect(articleFallbackDescription('', 'en')).toBe('Read this article on Hobbistas.');
+    expect(articleFallbackDescription('', 'el')).toBe('Διαβάστε το άρθρο στο Hobbistas.');
   });
 });

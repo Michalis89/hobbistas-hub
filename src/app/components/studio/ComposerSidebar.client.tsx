@@ -21,6 +21,7 @@ import MediaLinkField from './MediaLinkField.client';
 import SeoPreview from './SeoPreview';
 import { slugify } from '@/utils/slugify';
 import { toLocalDateTimeInput } from '@/lib/articles/draft';
+import { resolveArticleSeo } from '@/lib/articles/locales';
 import type { ComposerDraft } from './useArticleDraft';
 
 const SELECT_CLASS =
@@ -333,8 +334,16 @@ export default function ComposerSidebar({
             placeholder={draft.description || 'Defaults to the article description'}
           />
           <SeoPreview
-            title={draft.metaTitle || draft.title}
-            description={draft.metaDescription || draft.description}
+            seo={resolveArticleSeo(
+              {
+                title: draft.title,
+                description: draft.description,
+                meta_title: draft.metaTitle,
+                meta_description: draft.metaDescription,
+              },
+              null,
+              'en',
+            )}
             slug={slugify(draft.title)}
             basePath={draft.type === 'review' ? '/review' : '/articles'}
           />

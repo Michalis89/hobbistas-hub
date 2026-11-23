@@ -327,6 +327,14 @@ export default function ArticleComposer({
           articleId={articleId}
           locale="el"
           mediaCategory={draft.category}
+          source={{
+            title: draft.title,
+            description: draft.description,
+            meta_title: draft.metaTitle,
+            meta_description: draft.metaDescription,
+          }}
+          slug={previewSlug}
+          basePath={basePath}
         />
       </div>
 
