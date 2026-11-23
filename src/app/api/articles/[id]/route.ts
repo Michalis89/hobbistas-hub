@@ -172,10 +172,22 @@ async function PUTHandler(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
+    // The English title may be empty only while the article stays a draft (it
+    // can start in another language); the database enforces the same rule.
+    const nextTitle =
+      title === undefined ? existingArticle.title : typeof title === 'string' ? title.trim() : null;
+    const nextStatus = status ?? existingArticle.status;
+    // Only a change to the title or the status can break the rule; the stored
+    // row already satisfies it.
+    const touchesTitleOrStatus = title !== undefined || status !== undefined;
+    if (touchesTitleOrStatus && nextStatus !== 'draft' && !nextTitle) {
+      return fail({ error: 'An English title is required to publish.' }, 400);
+    }
+
     // Build update object (only include provided fields)
     const updateData: Database['public']['Tables']['articles']['Update'] = {};
     if (title !== undefined) {
-      updateData.title = title;
+      updateData.title = nextTitle || null;
     }
     if (slug !== undefined) {
       updateData.slug = normalizeSlug(slug);

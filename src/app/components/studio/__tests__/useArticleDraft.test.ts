@@ -123,7 +123,7 @@ describe('useArticleDraft', () => {
       '/api/articles',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(onCreated).toHaveBeenCalledWith(42);
+    expect(onCreated).toHaveBeenCalledWith(42, null);
     expect(result.current.articleId).toBe(42);
     expect(result.current.saveState).toBe('saved');
   });
@@ -138,6 +138,66 @@ describe('useArticleDraft', () => {
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.slug).toBe('o-neos-kratos');
+  });
+
+  describe('a draft started in Greek (no English title yet)', () => {
+    const setupGreek = (greekTitle: string, initialId: number | null = null) => {
+      const onCreated = jest.fn();
+      const view = renderHook(() =>
+        useArticleDraft({
+          initial: makeDraft({ title: '' }),
+          initialId,
+          onCreated,
+          getOtherLanguageTitle: () => greekTitle,
+        }),
+      );
+      return { ...view, onCreated };
+    };
+
+    it('creates the article with an empty English title and a slug from the Greek title', async () => {
+      fetchMock.mockResolvedValue(
+        okResponse({ data: { article: { id: 12, slug: 'o-neos-kratos' } } }),
+      );
+      const { result, onCreated } = setupGreek('Ο νέος Kratos');
+
+      let saved = false;
+      await act(async () => {
+        saved = await result.current.save();
+      });
+
+      expect(saved).toBe(true);
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body).toMatchObject({ title: '', slug: 'o-neos-kratos', status: 'draft' });
+      expect(onCreated).toHaveBeenCalledWith(12, 'o-neos-kratos');
+      expect(result.current.getArticleId()).toBe(12);
+    });
+
+    it('does not save when neither language has a title', async () => {
+      const { result } = setupGreek('   ');
+      let saved = true;
+      await act(async () => {
+        saved = await result.current.save();
+      });
+      expect(saved).toBe(false);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('prefers the English title for the slug once there is one', async () => {
+      fetchMock.mockResolvedValue(okResponse({ data: { article: { id: 13 } } }));
+      const onCreated = jest.fn();
+      const { result } = renderHook(() =>
+        useArticleDraft({
+          initial: makeDraft({ title: 'Kratos returns' }),
+          initialId: null,
+          onCreated,
+          getOtherLanguageTitle: () => 'Ο νέος Kratos',
+        }),
+      );
+      await act(async () => {
+        await result.current.save();
+      });
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).slug).toBe('kratos-returns');
+    });
   });
 
   it('updates with PUT once the article exists', async () => {
@@ -312,7 +372,7 @@ describe('useArticleDraft: session re-sync on 401', () => {
     // Same payload both times.
     expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
     expect(result.current.saveState).toBe('saved');
-    expect(onCreated).toHaveBeenCalledWith(42);
+    expect(onCreated).toHaveBeenCalledWith(42, null);
   });
 
   it('existing article: retries the PUT once', async () => {

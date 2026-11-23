@@ -24,7 +24,9 @@ const STATUS_ORDER = ['scheduled', 'draft', 'published', 'archived'];
 
 type StudioRow = {
   id: number;
-  title: string;
+  /** Empty for a draft started in Greek; see displayTitle. */
+  title: string | null;
+  article_translations?: { locale: string; title: string }[] | null;
   slug: string;
   status: string | null;
   topic: string | null;
@@ -58,7 +60,9 @@ export default async function StudioPage() {
 
   let query = supabase
     .from('articles')
-    .select('id, title, slug, status, topic, category, updated_at, published_at, scheduled_for')
+    .select(
+      'id, title, slug, status, topic, category, updated_at, published_at, scheduled_for, article_translations(locale, title)',
+    )
     .order('updated_at', { ascending: false })
     .limit(100);
 
@@ -100,7 +104,9 @@ export default async function StudioPage() {
         }
       />
 
-      <Link href="/studio/series" className="inline-block font-semibold text-primary">Manage article series →</Link>
+      <Link href="/studio/series" className="inline-block font-semibold text-primary">
+        Manage article series →
+      </Link>
 
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-8">
@@ -119,6 +125,12 @@ export default async function StudioPage() {
             <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
               {group.items.map(row => {
                 const isReview = row.topic === 'reviews';
+                // A draft started in Greek has no English title yet.
+                const displayTitle =
+                  row.title ||
+                  row.article_translations?.find(translation => translation.locale === 'el')
+                    ?.title ||
+                  'Untitled draft';
                 const publicHref = `${isReview ? '/review' : '/articles'}/${row.slug}`;
                 const categoryLabel =
                   CATEGORIES[row.category as ArticleCategory]?.label ?? row.category;
@@ -134,7 +146,7 @@ export default async function StudioPage() {
                       href={`/studio/${row.id}`}
                       className="min-w-0 flex-1 truncate text-sm font-medium text-foreground hover:text-primary"
                     >
-                      {row.title || 'Untitled draft'}
+                      {displayTitle}
                     </Link>
 
                     <span
@@ -164,7 +176,7 @@ export default async function StudioPage() {
 
                     <span className="flex items-center gap-1">
                       <Button variant="ghost" size="icon" iconOnly asChild title="Edit">
-                        <Link href={`/studio/${row.id}`} aria-label={`Edit ${row.title}`}>
+                        <Link href={`/studio/${row.id}`} aria-label={`Edit ${displayTitle}`}>
                           <Pencil size={14} />
                         </Link>
                       </Button>
@@ -177,7 +189,7 @@ export default async function StudioPage() {
                       )}
                       <DeleteArticleButton
                         articleId={row.id}
-                        title={row.title}
+                        title={displayTitle}
                         isPublished={row.status === 'published'}
                       />
                     </span>

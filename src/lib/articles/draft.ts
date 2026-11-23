@@ -78,11 +78,26 @@ export function buildArticlePayload(draft: ComposerDraft): ArticlePayload {
   };
 }
 
-/** Minimum a draft needs before it is worth persisting. */
-export function isSaveable(draft: ComposerDraft): boolean {
-  return draft.title.trim().length > 0 && draft.category !== '';
+/**
+ * Minimum a draft needs before it is worth persisting: a category and a title
+ * in at least one language. `otherLanguageTitle` is the title of the version
+ * written outside this (English) row, so a draft can start in Greek.
+ */
+export function isSaveable(draft: ComposerDraft, otherLanguageTitle = ''): boolean {
+  const hasTitle = draft.title.trim().length > 0 || otherLanguageTitle.trim().length > 0;
+  return hasTitle && draft.category !== '';
 }
 
+/**
+ * Whether the article may be published or scheduled. Unchanged from before the
+ * bilingual editor: the English title, a category and a body are required.
+ * The database enforces the title rule as well.
+ */
+export function isPublishable(draft: ComposerDraft): boolean {
+  return (
+    draft.title.trim().length > 0 && draft.category !== '' && Boolean(draft.contentHtml.trim())
+  );
+}
 
 type ArticleRowLike = {
   title?: string | null;

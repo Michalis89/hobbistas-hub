@@ -247,12 +247,19 @@ async function POSTHandler(req: Request) {
       }
     }
 
-    // Validate required fields
-    if (!title || !category) {
-      return fail({ error: 'Title and category are required' }, 400);
+    // The English title lives on this row. A draft may start in another
+    // language and leave it empty (its slug then comes from that language's
+    // title, sent as `slug`); anything scheduled or published needs it, and
+    // the database enforces the same rule.
+    const sourceTitle = typeof title === 'string' ? title.trim() : '';
+    if (!category) {
+      return fail({ error: 'Category is required' }, 400);
+    }
+    if (!sourceTitle && status !== 'draft') {
+      return fail({ error: 'An English title is required to publish.' }, 400);
     }
 
-    const normalizedSlug = await resolveArticleSlug(supabase, { title, slug });
+    const normalizedSlug = await resolveArticleSlug(supabase, { title: sourceTitle, slug });
     if (!normalizedSlug) {
       return fail({ error: 'Could not derive a URL slug from this title.' }, 400);
     }
@@ -261,7 +268,7 @@ async function POSTHandler(req: Request) {
     const { data: article, error: insertError } = await supabase
       .from('articles')
       .insert({
-        title,
+        title: sourceTitle || null,
         slug: normalizedSlug,
         description,
         category,

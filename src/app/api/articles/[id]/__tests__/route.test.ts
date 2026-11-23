@@ -458,7 +458,13 @@ describe('app/api/articles/[id]/route', () => {
   });
 
   it('PUT keeps null score/media and preserves published_at when already published', async () => {
-    const existing = { id: 2, author_id: 'author-1', published_at: '2020-01-01T00:00:00.000Z' };
+    // A published row always has a title (articles_title_required_unless_draft).
+    const existing = {
+      id: 2,
+      author_id: 'author-1',
+      title: 'Existing title',
+      published_at: '2020-01-01T00:00:00.000Z',
+    };
     const s = makeSupabaseMock({
       existingArticleResult: { data: existing, error: null },
       updateResult: { data: { id: 2, title: 'x', slug: 'norm-x' }, error: null },
@@ -475,6 +481,67 @@ describe('app/api/articles/[id]/route', () => {
     expect(response.status).toBe(200);
     expect(s.spies.updates[0]).toMatchObject({ score: null, media_id: null, status: 'published' });
     expect(s.spies.updates[0].published_at).toBeUndefined();
+  });
+
+  describe('PUT and the English title (drafts may start in another language)', () => {
+    async function put(existing: Record<string, unknown>, body: Record<string, unknown>) {
+      const s = makeSupabaseMock({
+        existingArticleResult: { data: { id: 3, author_id: 'author-1', ...existing }, error: null },
+        updateResult: { data: { id: 3, title: null, slug: 'norm-x' }, error: null },
+      });
+      createRouteHandlerClientMock.mockResolvedValue(s.client);
+      const response = await PUT(
+        new Request('https://example.com', { method: 'PUT', body: JSON.stringify(body) }),
+        { params: Promise.resolve({ id: '3' }) },
+      );
+      return { response, updates: s.spies.updates };
+    }
+
+    it('lets a draft clear or keep an empty English title (stored as null)', async () => {
+      const { response, updates } = await put(
+        { title: 'Old', status: 'draft' },
+        { title: '   ', status: 'draft' },
+      );
+      expect(response.status).toBe(200);
+      expect(updates[0]).toMatchObject({ title: null });
+    });
+
+    it('saves other fields of a title-less draft', async () => {
+      const { response, updates } = await put(
+        { title: null, status: 'draft' },
+        { description: 'Περίληψη' },
+      );
+      expect(response.status).toBe(200);
+      expect(updates[0]).not.toHaveProperty('title');
+    });
+
+    it('refuses to publish a title-less draft', async () => {
+      const { response, updates } = await put(
+        { title: null, status: 'draft' },
+        { status: 'published' },
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toBe('An English title is required to publish.');
+      expect(updates).toHaveLength(0);
+    });
+
+    it('refuses to clear the title of a published article', async () => {
+      const { response, updates } = await put(
+        { title: 'Live', status: 'published' },
+        { title: '' },
+      );
+      expect(response.status).toBe(400);
+      expect(updates).toHaveLength(0);
+    });
+
+    it('publishes once the English title is sent with it', async () => {
+      const { response, updates } = await put(
+        { title: null, status: 'draft', published_at: null },
+        { title: ' Now in English ', status: 'published' },
+      );
+      expect(response.status).toBe(200);
+      expect(updates[0]).toMatchObject({ title: 'Now in English', status: 'published' });
+    });
   });
 
   it('DELETE maps unauthorized/internal and handles not-found/forbidden/error/success', async () => {

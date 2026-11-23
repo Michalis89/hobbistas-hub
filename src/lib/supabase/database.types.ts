@@ -803,7 +803,7 @@ export type Database = {
           slug: string
           status: string | null
           tags: string[] | null
-          title: string
+          title: string | null
           topic: string | null
           updated_at: string | null
           views: number | null
@@ -829,7 +829,7 @@ export type Database = {
           slug: string
           status?: string | null
           tags?: string[] | null
-          title: string
+          title?: string | null
           topic?: string | null
           updated_at?: string | null
           views?: number | null
@@ -855,7 +855,7 @@ export type Database = {
           slug?: string
           status?: string | null
           tags?: string[] | null
-          title?: string
+          title?: string | null
           topic?: string | null
           updated_at?: string | null
           views?: number | null

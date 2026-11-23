@@ -1,8 +1,10 @@
 import 'whatwg-fetch';
-import { useEffect } from 'react';
+import { createRef, useEffect, type RefObject } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ArticleTranslationEditor, {
   UNSAVED_TRANSLATION_MESSAGE,
+  type ArticleTranslationEditorHandle,
+  type TranslationPanelState,
 } from '../ArticleTranslationEditor.client';
 
 /**
@@ -73,22 +75,42 @@ function mockFetch(rows: unknown[] = [savedGreek]) {
   return calls;
 }
 
-function renderEditor() {
-  return render(
-    <ArticleTranslationEditor
-      articleId={5}
-      locale="el"
-      mediaCategory="games"
-      source={source}
-      slug="lore"
-      basePath="/articles"
-    />,
-  );
+let handle: RefObject<ArticleTranslationEditorHandle | null>;
+let states: TranslationPanelState[];
+
+function panelProps(articleId: number | null) {
+  return {
+    ref: handle,
+    articleId,
+    locale: 'el' as const,
+    mediaCategory: 'games' as const,
+    source,
+    slug: 'lore',
+    basePath: '/articles',
+    onStateChange: (state: TranslationPanelState) => states.push(state),
+  };
 }
 
+function renderEditor(articleId: number | null = 5) {
+  handle = createRef<ArticleTranslationEditorHandle>();
+  states = [];
+  return render(<ArticleTranslationEditor {...panelProps(articleId)} />);
+}
+
+/** Waits for the panel's fields (after any stored version has loaded). */
 async function open() {
-  fireEvent.click(screen.getByRole('button', { name: /version/ }));
   await screen.findByLabelText('Meta title');
+}
+
+const isDirtyNow = () => handle.current!.isDirty();
+const lastState = () => states[states.length - 1];
+
+async function saveTo(id: number) {
+  let result: unknown;
+  await act(async () => {
+    result = await handle.current!.save(id);
+  });
+  return result;
 }
 
 /** Whether leaving the page right now would be blocked. */
@@ -103,7 +125,9 @@ describe('ArticleTranslationEditor: unsaved changes', () => {
     mockFetch();
     renderEditor();
     await open();
-    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    await waitFor(() => expect(lastState()).toMatchObject({ exists: true }));
+    expect(isDirtyNow()).toBe(false);
+    expect(lastState()).toMatchObject({ title: 'Ελληνικός τίτλος', dirty: false });
     expect(unloadIsBlocked()).toBe(false);
   });
 
@@ -113,13 +137,16 @@ describe('ArticleTranslationEditor: unsaved changes', () => {
     await open();
 
     fireEvent.change(screen.getByLabelText('Meta title'), { target: { value: 'Ελληνικό meta' } });
-    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    await waitFor(() => expect(isDirtyNow()).toBe(true));
+    expect(lastState().dirty).toBe(true);
     expect(unloadIsBlocked()).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: /Save Ελληνικά/ }));
-    await waitFor(() => expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument());
+    expect(await saveTo(5)).toEqual({ ok: true });
+    await waitFor(() => expect(isDirtyNow()).toBe(false));
     expect(unloadIsBlocked()).toBe(false);
+    expect(screen.getByText('Ελληνικά saved')).toBeInTheDocument();
     const put = calls.find(c => c.method === 'PUT')!;
+    expect(put.url).toBe('/api/articles/5/translations');
     expect(put.body).toMatchObject({
       locale: 'el',
       title: 'Ελληνικός τίτλος',
@@ -134,20 +161,21 @@ describe('ArticleTranslationEditor: unsaved changes', () => {
     const body = screen.getByLabelText('Body');
     fireEvent.keyDown(body, { key: 'a' });
     fireEvent.change(body, { target: { value: '<p>Νέο σώμα</p>' } });
-    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    await waitFor(() => expect(isDirtyNow()).toBe(true));
   });
 
-  it('keeps unsaved edits when the section is collapsed and reopened, without refetching', async () => {
+  it('keeps unsaved edits while hidden behind another language tab, without refetching', async () => {
     const calls = mockFetch();
-    renderEditor();
+    const view = renderEditor();
     await open();
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Αλλαγμένος' } });
 
-    const toggle = screen.getByRole('button', { name: /version/ });
-    fireEvent.click(toggle);
-    fireEvent.click(toggle);
+    view.rerender(<ArticleTranslationEditor {...panelProps(5)} active={false} />);
+    expect(view.container.querySelector('section[lang="el"]')).toHaveAttribute('hidden');
+    view.rerender(<ArticleTranslationEditor {...panelProps(5)} active />);
 
     expect(screen.getByLabelText('Title')).toHaveValue('Αλλαγμένος');
+    expect(isDirtyNow()).toBe(true);
     expect(calls.filter(c => c.method === 'GET')).toHaveLength(1);
   });
 
@@ -187,11 +215,76 @@ describe('ArticleTranslationEditor: unsaved changes', () => {
       renderEditor();
       await open();
       const confirm = jest.spyOn(window, 'confirm');
-      act(() => {
-        fireEvent.click(link);
-      });
+      fireEvent.click(link);
       expect(confirm).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('ArticleTranslationEditor: before the article exists (Greek-first drafts)', () => {
+  it('is editable immediately and does not try to load anything', async () => {
+    const calls = mockFetch();
+    renderEditor(null);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Ο πρώτος μου τίτλος' } });
+    await waitFor(() =>
+      expect(lastState()).toMatchObject({
+        title: 'Ο πρώτος μου τίτλος',
+        dirty: true,
+        exists: false,
+      }),
+    );
+    expect(handle.current!.getTitle()).toBe('Ο πρώτος μου τίτλος');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('keeps what is being typed when the article gets its id (no reload over it)', async () => {
+    const calls = mockFetch([]);
+    const view = renderEditor(null);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Τίτλος' } });
+
+    view.rerender(<ArticleTranslationEditor {...panelProps(42)} />);
+
+    expect(screen.getByLabelText('Title')).toHaveValue('Τίτλος');
+    expect(calls.filter(c => c.method === 'GET')).toHaveLength(0);
+  });
+
+  it('saves to the article id it is given', async () => {
+    const calls = mockFetch([]);
+    renderEditor(null);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Τίτλος' } });
+
+    expect(await saveTo(42)).toEqual({ ok: true });
+
+    const put = calls.find(c => c.method === 'PUT')!;
+    expect(put.url).toBe('/api/articles/42/translations');
+    expect(put.body).toMatchObject({ locale: 'el', title: 'Τίτλος' });
+    await waitFor(() => expect(lastState()).toMatchObject({ dirty: false, exists: true }));
+  });
+
+  it('refuses to save without a Greek title, says why, and sends nothing', async () => {
+    const calls = mockFetch([]);
+    renderEditor(null);
+    fireEvent.change(screen.getByLabelText('Meta title'), { target: { value: 'meta' } });
+
+    expect(await saveTo(42)).toEqual({
+      ok: false,
+      error: expect.stringContaining('needs a title'),
+    });
+    expect(calls).toHaveLength(0);
+    expect(screen.getByText(/needs a title before it can be saved/)).toBeInTheDocument();
+    expect(isDirtyNow()).toBe(true);
+  });
+
+  it('reports a server failure and keeps the changes', async () => {
+    renderEditor(null);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Τίτλος' } });
+    global.fetch = jest.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ error: 'Access forbidden' }), { status: 403 })),
+    ) as unknown as typeof fetch;
+
+    expect(await saveTo(42)).toEqual({ ok: false, error: 'Access forbidden' });
+    expect(isDirtyNow()).toBe(true);
+    expect(screen.getByLabelText('Title')).toHaveValue('Τίτλος');
   });
 });
 

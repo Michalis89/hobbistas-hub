@@ -339,3 +339,22 @@ describe('resolveArticleSeo', () => {
     expect(articleFallbackDescription('', 'el')).toBe('Διαβάστε το άρθρο στο Hobbistas.');
   });
 });
+
+describe('availableLocales and resolveArticleLocale for a draft started in Greek', () => {
+  const greekOnly = availableLocales([{ locale: 'el', title: 'Ο τίτλος' }], false);
+
+  it('leaves out the source language while its title is empty', () => {
+    expect(greekOnly).toEqual(['el']);
+    expect(availableLocales([], false)).toEqual([]);
+  });
+
+  it('resolves to the language that exists instead of the empty source', () => {
+    expect(resolveArticleLocale({ requested: 'en', available: greekOnly })).toBe('el');
+    expect(resolveArticleLocale({ userPreference: 'en', available: greekOnly })).toBe('el');
+    expect(resolveArticleLocale({ requested: 'el', available: greekOnly })).toBe('el');
+  });
+
+  it('still prefers the source language whenever it is available', () => {
+    expect(resolveArticleLocale({ requested: 'klingon', available: ['en', 'el'] })).toBe('en');
+  });
+});

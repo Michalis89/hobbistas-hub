@@ -349,7 +349,7 @@ export async function buildArticleDetailMetadata({
   const translations = await fetchArticleTranslations(sourceArticle.id);
   const metadataLocale = resolveArticleLocale({
     requested: resolvedSearchParams?.lang,
-    available: availableLocales(translations),
+    available: availableLocales(translations, Boolean(sourceArticle.title?.trim())),
   });
   const metadataTranslation = findTranslation(translations, metadataLocale);
   const article = applyArticleTranslation(
@@ -365,7 +365,7 @@ export async function buildArticleDetailMetadata({
   const metaTitle = seo.title || article.title;
   const metaDescription = truncateForMeta(seo.description);
   const normalizedSlug = normalizeSlug(article.slug);
-  const localeOptions = availableLocales(translations);
+  const localeOptions = availableLocales(translations, Boolean(sourceArticle.title?.trim()));
   // Each language is its own indexable URL, so the canonical is the URL of
   // the language actually being rendered. Pointing a translation at the bare
   // English path told Google it was a duplicate of the English article and
@@ -439,7 +439,7 @@ export default async function ArticleDetailPage({
   // title, the metadata, the table of contents and the structured data all
   // describe the same version the reader is looking at.
   const translations = await fetchArticleTranslations(sourceArticle.id);
-  const localeOptions = availableLocales(translations);
+  const localeOptions = availableLocales(translations, Boolean(sourceArticle.title?.trim()));
   const [readerLocale, requestHeaders] = await Promise.all([
     fetchReaderLocale(currentUserId),
     headers(),

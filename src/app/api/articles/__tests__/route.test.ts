@@ -513,6 +513,91 @@ describe('app/api/articles/route POST', () => {
     expect(s.spies.insert).not.toHaveBeenCalled();
   });
 
+  describe('a draft started in another language (no English title yet)', () => {
+    it('creates the draft with a null title and the slug it was sent', async () => {
+      const s = makePostSupabase({
+        insertData: { id: 92, title: null, slug: 'o-titlos', status: 'draft' },
+      });
+      createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+      const response = await POST(
+        new Request('https://example.com/api/articles', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: '  ',
+            slug: 'o-titlos',
+            category: 'games',
+            content_html: '<p>Σώμα</p>',
+            status: 'draft',
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(s.spies.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ title: null, slug: 'o-titlos', author_id: 'author-1' }),
+      );
+    });
+
+    it('defaults to a draft when no status is sent', async () => {
+      const s = makePostSupabase({ insertData: { id: 93, title: null, slug: 'o-titlos' } });
+      createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+      const response = await POST(
+        new Request('https://example.com/api/articles', {
+          method: 'POST',
+          body: JSON.stringify({ slug: 'o-titlos', category: 'games', content_html: '' }),
+        }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(s.spies.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ title: null, status: 'draft' }),
+      );
+    });
+
+    it.each(['published', 'scheduled', 'review'])(
+      'refuses to create a %s article without an English title',
+      async status => {
+        const s = makePostSupabase();
+        createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+        const response = await POST(
+          new Request('https://example.com/api/articles', {
+            method: 'POST',
+            body: JSON.stringify({
+              title: '',
+              slug: 'o-titlos',
+              category: 'games',
+              content_html: '<p>x</p>',
+              status,
+              scheduled_for: new Date(Date.now() + 86_400_000).toISOString(),
+            }),
+          }),
+        );
+
+        expect(response.status).toBe(400);
+        expect((await response.json()).error).toBe('An English title is required to publish.');
+        expect(s.spies.insert).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still requires a category', async () => {
+      const s = makePostSupabase();
+      createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+      const response = await POST(
+        new Request('https://example.com/api/articles', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'T', content_html: '', status: 'draft' }),
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(s.spies.insert).not.toHaveBeenCalled();
+    });
+  });
+
   it('maps unauthorized/forbidden and unexpected errors', async () => {
     requireAuthorRoleMock.mockRejectedValueOnce(new UnauthorizedError());
     const r1 = await POST(

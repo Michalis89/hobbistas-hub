@@ -15,6 +15,7 @@ export {
   AUTOSAVE_DELAY_MS,
   buildArticlePayload,
   emptyDraft,
+  isPublishable,
   isSaveable,
   type ComposerDraft,
   type SaveState,
@@ -56,10 +57,21 @@ type UseArticleDraftOptions = {
   initial: ComposerDraft;
   initialId: number | null;
   /** Called after the first autosave creates the article, to swap the URL. */
-  onCreated?: (id: number) => void;
+  onCreated?: (id: number, slug: string | null) => void;
+  /**
+   * Title of the version written in the other language (Greek). A draft with
+   * no English title can still be saved when this is set; the slug is then
+   * derived from it.
+   */
+  getOtherLanguageTitle?: () => string;
 };
 
-export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDraftOptions) {
+export function useArticleDraft({
+  initial,
+  initialId,
+  onCreated,
+  getOtherLanguageTitle,
+}: UseArticleDraftOptions) {
   const [draft, setDraft] = useState<ComposerDraft>(initial);
   const [articleId, setArticleId] = useState<number | null>(initialId);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -90,7 +102,8 @@ export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDra
     async (options: { status?: ArticleStatus } = {}): Promise<boolean> => {
       const current = draftRef.current;
 
-      if (!isSaveable(current) || inFlightRef.current) {
+      const otherTitle = getOtherLanguageTitle?.() ?? '';
+      if (!isSaveable(current, otherTitle) || inFlightRef.current) {
         return false;
       }
 
@@ -117,7 +130,9 @@ export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDra
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   ...payload,
-                  slug: slugify(current.title),
+                  // The English title when there is one, otherwise the other
+                  // language's: the slug is fixed at creation either way.
+                  slug: slugify(current.title.trim() || otherTitle),
                   status: options.status ?? 'draft',
                 }),
               }),
@@ -130,11 +145,13 @@ export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDra
 
         if (!id) {
           const body = await response.json().catch(() => null);
-          const createdId = body?.data?.article?.id ?? body?.article?.id ?? null;
+          const created = body?.data?.article ?? body?.article ?? null;
+          const createdId = created?.id ?? null;
           if (typeof createdId === 'number') {
             setArticleId(createdId);
             articleIdRef.current = createdId;
-            onCreated?.(createdId);
+            // The server picks the final slug (it may add a suffix).
+            onCreated?.(createdId, typeof created?.slug === 'string' ? created.slug : null);
           }
         }
 
@@ -154,13 +171,13 @@ export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDra
         inFlightRef.current = false;
       }
     },
-    [onCreated],
+    [onCreated, getOtherLanguageTitle],
   );
 
   // Debounced autosave. Long-form writing is the reason the composer is a page
   // and not a modal; losing an hour of work to a stray click is not acceptable.
   useEffect(() => {
-    if (!isDirtyRef.current || !isSaveable(draft)) {
+    if (!isDirtyRef.current || !isSaveable(draft, getOtherLanguageTitle?.() ?? '')) {
       return undefined;
     }
 
@@ -169,7 +186,7 @@ export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDra
     }, AUTOSAVE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [draft, save]);
+  }, [draft, save, getOtherLanguageTitle]);
 
   return {
     draft,
@@ -181,5 +198,7 @@ export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDra
     error,
     clearError: useCallback(() => setError(null), []),
     hasUnsavedChanges: () => isDirtyRef.current,
+    /** The saved article's id, current even right after a save created it. */
+    getArticleId: useCallback(() => articleIdRef.current, []),
   };
 }
