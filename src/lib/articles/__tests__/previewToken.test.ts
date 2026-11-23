@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 import {
+  articlePreviewPath,
   createPreviewToken,
   previewTokenArticleId,
   verifyPreviewToken,
@@ -69,5 +70,44 @@ describe('preview tokens', () => {
     expect(previewTokenArticleId('abc.1.2')).toBeNull();
     expect(previewTokenArticleId('0.1.2')).toBeNull();
     expect(previewTokenArticleId(null)).toBeNull();
+  });
+});
+
+describe('articlePreviewPath', () => {
+  it('links an unpublished article with a token valid for it', () => {
+    const path = articlePreviewPath({ id: 9, slug: 'lore', topic: 'articles', status: 'draft' })!;
+    expect(path).toMatch(/^\/articles\/lore\?preview=/);
+    expect(verifyPreviewToken(new URL(path, 'https://x').searchParams.get('preview'), 9)).toBe(
+      true,
+    );
+  });
+
+  it('uses the review path for reviews', () => {
+    expect(
+      articlePreviewPath({ id: 9, slug: 'kratos', topic: 'reviews', status: 'scheduled' }),
+    ).toMatch(/^\/review\/kratos\?preview=/);
+  });
+
+  it('gives no private link for a published article', () => {
+    expect(
+      articlePreviewPath({ id: 9, slug: 'lore', topic: 'articles', status: 'published' }),
+    ).toBeNull();
+  });
+
+  it('returns null instead of throwing when previews are not configured', () => {
+    const secret = process.env.ARTICLE_PREVIEW_SECRET;
+    const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.ARTICLE_PREVIEW_SECRET;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    try {
+      expect(
+        articlePreviewPath({ id: 9, slug: 'lore', topic: 'articles', status: 'draft' }),
+      ).toBeNull();
+    } finally {
+      process.env.ARTICLE_PREVIEW_SECRET = secret;
+      if (service !== undefined) {
+        process.env.SUPABASE_SERVICE_ROLE_KEY = service;
+      }
+    }
   });
 });

@@ -276,6 +276,11 @@ const ArticleTranslationEditor = forwardRef<
           // The baseline is what was sent, so edits made while saving stay dirty.
           setSaved(submitted);
           setSavedBodyHtml(submitted.contentHtml);
+          // Callers may ask again before the next render (Publish right after
+          // the draft step), so the answer is updated now, not by the effect.
+          isDirtyRef.current =
+            textFieldsDiffer(draftRef.current, submitted) ||
+            draftRef.current.contentHtml !== submitted.contentHtml;
           setExists(true);
           setSavedAt(Date.now());
           return { ok: true };
@@ -454,8 +459,8 @@ const ArticleTranslationEditor = forwardRef<
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Saved together with the article by Save draft and Publish. Empty meta fields use this
-            version&apos;s title and standfirst first, then the English ones.
+            Not autosaved: this version is saved only by Save draft and Publish. Empty meta fields
+            use this version&apos;s title and standfirst first, then the English ones.
           </p>
         </>
       )}

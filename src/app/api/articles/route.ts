@@ -14,6 +14,7 @@ import { requireAuthorRole, ForbiddenError } from '@/lib/api/permissions';
 import { fail, ok, okWithMeta } from '@/lib/api/response';
 import { CACHE_CONFIG, CACHE_TAGS, revalidateCache } from '@/lib/cache/tags';
 import { collectArticleMediaLinks, syncArticleMediaLinks } from '@/lib/articles/mediaLinks';
+import { articlePreviewPath } from '@/lib/articles/previewToken';
 
 /**
  * Resolves the slug an article should be stored under.
@@ -326,7 +327,16 @@ async function POSTHandler(req: Request) {
     // Revalidate article caches
     revalidateCache.article(article.id);
 
-    return ok({ message: 'Article created successfully', article }, { status: 201 });
+    // The creator owns the new article, so the private preview link (the same
+    // one the editor page gives them) can be returned right away.
+    return ok(
+      {
+        message: 'Article created successfully',
+        article,
+        preview_path: articlePreviewPath(article),
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error('Error creating article:', error);
     if (error instanceof UnauthorizedError) {

@@ -25,7 +25,13 @@ import ArticleTranslationEditor, {
   type ArticleTranslationEditorHandle,
   type TranslationPanelState,
 } from './ArticleTranslationEditor.client';
-import { isPublishable, isSaveable, useArticleDraft, type ComposerDraft } from './useArticleDraft';
+import {
+  isPublishable,
+  isSaveable,
+  useArticleDraft,
+  type ComposerDraft,
+  type CreatedArticle,
+} from './useArticleDraft';
 import { saveArticleLanguages } from '@/lib/articles/saveArticleLanguages';
 
 const RichTextEditor = dynamic(() => import('@/app/components/editor/RichTextEditor.client'), {
@@ -73,15 +79,31 @@ function SaveIndicator({ state, savedAt }: { state: string; savedAt: number | nu
   return null;
 }
 
+/**
+ * Autosave only covers the English row. While the Greek version has changes,
+ * say so next to the save state, so "Saved" is never read as "everything".
+ */
+function GreekPendingNotice({ englishSaved }: { englishSaved: boolean }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-warning" role="status">
+      <CircleAlert size={13} />
+      {englishSaved
+        ? 'English saved. Ελληνικά not saved yet: autosave covers English only. Press Save draft.'
+        : 'Ελληνικά not saved yet: autosave covers English only. Press Save draft.'}
+    </span>
+  );
+}
+
 export default function ArticleComposer({
   initialDraft,
   initialId,
   initialSlug,
-  previewPath,
+  previewPath: initialPreviewPath,
   canWriteArticles,
   canWriteReviews,
 }: ArticleComposerProps) {
   const [slug, setSlug] = useState(initialSlug);
+  const [previewPath, setPreviewPath] = useState(initialPreviewPath);
   const [language, setLanguage] = useState<'en' | 'el'>('en');
   const translationRef = useRef<ArticleTranslationEditorHandle>(null);
   const [greek, setGreek] = useState<TranslationPanelState>({
@@ -92,10 +114,14 @@ export default function ArticleComposer({
   const [languageError, setLanguageError] = useState<string | null>(null);
   const [isSavingAll, setIsSavingAll] = useState(false);
 
-  const handleCreated = useCallback((id: number, createdSlug: string | null) => {
+  const handleCreated = useCallback((id: number, created: CreatedArticle) => {
     // The slug is fixed at creation; the previews and links use the stored one.
-    if (createdSlug) {
-      setSlug(createdSlug);
+    if (created.slug) {
+      setSlug(created.slug);
+    }
+    // The private preview link, available right away rather than after a reload.
+    if (created.previewPath) {
+      setPreviewPath(created.previewPath);
     }
     // Swap the URL so a reload or a shared link lands on the saved draft.
     // replaceState rather than a navigation: /studio/new and /studio/[id] are
@@ -116,6 +142,7 @@ export default function ArticleComposer({
     clearError,
     hasUnsavedChanges,
     getArticleId,
+    whenIdle,
   } = useArticleDraft({
     initial: initialDraft,
     initialId,
@@ -167,12 +194,18 @@ export default function ArticleComposer({
   const scheduledAt = draft.scheduledFor ? new Date(draft.scheduledFor) : null;
   const wantsSchedule = !isPublished && scheduledAt !== null;
 
+  /** An explicit save waits for an autosave in flight instead of being skipped. */
+  const saveAfterIdle = async (options?: Parameters<typeof save>[0]) => {
+    await whenIdle();
+    return save(options);
+  };
+
   /** Save draft: the article row and, when it has changes, the Greek version. */
   const handleSaveDraft = async () => {
     setIsSavingAll(true);
     setLanguageError(null);
     const result = await saveArticleLanguages({
-      saveArticle: () => save(),
+      saveArticle: () => saveAfterIdle(),
       getArticleId,
       translation: translationRef.current,
     });
@@ -188,7 +221,7 @@ export default function ArticleComposer({
     // Greek version is stored before anything goes live.
     if (getArticleId() === null && translation?.isDirty()) {
       const draftResult = await saveArticleLanguages({
-        saveArticle: () => save(),
+        saveArticle: () => saveAfterIdle(),
         getArticleId,
         translation,
       });
@@ -199,7 +232,7 @@ export default function ArticleComposer({
       }
     }
     const result = await saveArticleLanguages({
-      saveArticle: () => save({ status: wantsSchedule ? 'scheduled' : 'published' }),
+      saveArticle: () => saveAfterIdle({ status: wantsSchedule ? 'scheduled' : 'published' }),
       getArticleId,
       translation,
       publishing: true,
@@ -272,6 +305,9 @@ export default function ArticleComposer({
               </Link>
             </Button>
             <SaveIndicator state={saveState} savedAt={savedAt} />
+            {greek.dirty ? (
+              <GreekPendingNotice englishSaved={saveState === 'saved' && savedAt !== null} />
+            ) : null}
             {draft.status === 'scheduled' && scheduledAt && (
               <span className="flex items-center gap-1.5 text-xs text-primary">
                 <CalendarClock size={13} />
@@ -307,7 +343,7 @@ export default function ArticleComposer({
             <Button
               variant="secondary"
               size="sm"
-              disabled={!canSaveDraft || saveState === 'saving' || isSavingAll}
+              disabled={!canSaveDraft || saveState === 'saving' || isSavingAll || isPublishing}
               onClick={() => void handleSaveDraft()}
             >
               Save draft
@@ -315,7 +351,7 @@ export default function ArticleComposer({
             <Button
               variant="primary"
               size="sm"
-              disabled={!canPublish || isPublishing}
+              disabled={!canPublish || isPublishing || isSavingAll}
               onClick={() => void handlePublish()}
             >
               {wantsSchedule ? <CalendarClock size={16} /> : <Send size={16} />}
@@ -459,13 +495,12 @@ export default function ArticleComposer({
         </div>
       </div>
 
-      {articleId === null && (
-        <p className="mt-6 text-xs text-muted-foreground">
-          Start in English or Ελληνικά. Save draft stores every language that has a title; English
-          changes are also saved automatically once there is an English title and a category.
-          Publishing needs the English version.
-        </p>
-      )}
+      <p className="mt-6 text-xs text-muted-foreground">
+        {articleId === null ? 'Start in English or Ελληνικά. ' : null}
+        Autosave covers the English version only (once it has a title and a category). The Ελληνικά
+        version is saved only when you press Save draft or Publish. Publishing needs the English
+        version.
+      </p>
     </div>
   );
 }

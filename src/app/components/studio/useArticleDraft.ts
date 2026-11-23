@@ -53,11 +53,14 @@ export async function fetchWithSessionResync(send: () => Promise<Response>): Pro
   return send();
 }
 
+/** What the server settled when the first save created the article. */
+export type CreatedArticle = { slug: string | null; previewPath: string | null };
+
 type UseArticleDraftOptions = {
   initial: ComposerDraft;
   initialId: number | null;
   /** Called after the first autosave creates the article, to swap the URL. */
-  onCreated?: (id: number, slug: string | null) => void;
+  onCreated?: (id: number, created: CreatedArticle) => void;
   /**
    * Title of the version written in the other language (Greek). A draft with
    * no English title can still be saved when this is set; the slug is then
@@ -80,6 +83,8 @@ export function useArticleDraft({
 
   const isDirtyRef = useRef(false);
   const inFlightRef = useRef(false);
+  // Settles when the save in flight (if any) has finished, either way.
+  const idleRef = useRef<Promise<void>>(Promise.resolve());
   const draftRef = useRef(draft);
   const articleIdRef = useRef(articleId);
 
@@ -108,6 +113,10 @@ export function useArticleDraft({
       }
 
       inFlightRef.current = true;
+      let markIdle: () => void = () => {};
+      idleRef.current = new Promise<void>(resolve => {
+        markIdle = resolve;
+      });
       setSaveState('saving');
       setError(null);
 
@@ -150,8 +159,13 @@ export function useArticleDraft({
           if (typeof createdId === 'number') {
             setArticleId(createdId);
             articleIdRef.current = createdId;
-            // The server picks the final slug (it may add a suffix).
-            onCreated?.(createdId, typeof created?.slug === 'string' ? created.slug : null);
+            // The server picks the final slug (it may add a suffix) and signs
+            // the private preview link.
+            const previewPath = body?.data?.preview_path ?? body?.preview_path;
+            onCreated?.(createdId, {
+              slug: typeof created?.slug === 'string' ? created.slug : null,
+              previewPath: typeof previewPath === 'string' ? previewPath : null,
+            });
           }
         }
 
@@ -169,6 +183,7 @@ export function useArticleDraft({
         return false;
       } finally {
         inFlightRef.current = false;
+        markIdle();
       }
     },
     [onCreated, getOtherLanguageTitle],
@@ -200,5 +215,11 @@ export function useArticleDraft({
     hasUnsavedChanges: () => isDirtyRef.current,
     /** The saved article's id, current even right after a save created it. */
     getArticleId: useCallback(() => articleIdRef.current, []),
+    /**
+     * Resolves once no save is in flight. `save` skips while one is running
+     * (right for autosave); an explicit Save draft or Publish waits here first,
+     * so it is never silently dropped and never creates the article twice.
+     */
+    whenIdle: useCallback(() => idleRef.current, []),
   };
 }

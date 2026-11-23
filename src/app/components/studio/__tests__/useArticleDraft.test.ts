@@ -123,7 +123,7 @@ describe('useArticleDraft', () => {
       '/api/articles',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(onCreated).toHaveBeenCalledWith(42, null);
+    expect(onCreated).toHaveBeenCalledWith(42, { slug: null, previewPath: null });
     expect(result.current.articleId).toBe(42);
     expect(result.current.saveState).toBe('saved');
   });
@@ -168,7 +168,7 @@ describe('useArticleDraft', () => {
       expect(saved).toBe(true);
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
       expect(body).toMatchObject({ title: '', slug: 'o-neos-kratos', status: 'draft' });
-      expect(onCreated).toHaveBeenCalledWith(12, 'o-neos-kratos');
+      expect(onCreated).toHaveBeenCalledWith(12, { slug: 'o-neos-kratos', previewPath: null });
       expect(result.current.getArticleId()).toBe(12);
     });
 
@@ -372,7 +372,7 @@ describe('useArticleDraft: session re-sync on 401', () => {
     // Same payload both times.
     expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
     expect(result.current.saveState).toBe('saved');
-    expect(onCreated).toHaveBeenCalledWith(42, null);
+    expect(onCreated).toHaveBeenCalledWith(42, { slug: null, previewPath: null });
   });
 
   it('existing article: retries the PUT once', async () => {
