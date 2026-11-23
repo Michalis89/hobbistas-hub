@@ -34,7 +34,7 @@ function createSupabaseForArticles(
   );
 
   return {
-    client: { from },
+    client: { from, rpc: jest.fn().mockResolvedValue({ data: [], error: null }) },
     spies: { from, select, eq, or, translationsSelect },
   };
 }

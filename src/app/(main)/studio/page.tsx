@@ -100,6 +100,8 @@ export default async function StudioPage() {
         }
       />
 
+      <Link href="/studio/series" className="inline-block font-semibold text-primary">Manage article series →</Link>
+
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-8">
           <EmptyState

@@ -29,6 +29,8 @@ import {
   type ArticleTranslationRow,
 } from '@/lib/articles/locales';
 import ArticleLanguageSwitcher from '@/app/components/article/ArticleLanguageSwitcher';
+import ArticleSeriesNavigation from '@/components/article/ArticleSeriesNavigation';
+import { getPublicSeries } from '@/lib/articles/series';
 import {
   ArticleBodySection,
   ArticleHeroSection,
@@ -473,6 +475,7 @@ export default async function ArticleDetailPage({
   const richDoc = parseArticleDoc(article.content_rich);
   const tocEntries = richDoc ? tocFromDoc(richDoc) : tocFromHtml(contentWithHeadingIds);
   const relatedArticles = await fetchRelatedArticles(article);
+  const series = await getPublicSeries({ articleId: article.id });
   const relatedContentLabel = article.topic === 'reviews' ? 'reviews' : 'articles';
   const categoryLabel = CATEGORY_LABELS[article.category] ?? article.category;
   const uiBreadcrumbs = [
@@ -579,6 +582,7 @@ export default async function ArticleDetailPage({
               contentWithHeadingIds={contentWithHeadingIds}
               contentRich={article.content_rich}
             />
+            {series && <ArticleSeriesNavigation series={series} articleId={article.id} locale={activeLocale} />}
             <RelatedArticlesSection
               relatedArticles={relatedArticles}
               relatedContentLabel={relatedContentLabel}

@@ -3,6 +3,8 @@ import { unstable_cache } from 'next/cache';
 import { SITE_URL } from '@/config/site';
 import { CACHE_TAGS } from '@/lib/cache/tags';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SeriesDatabase } from '@/lib/articles/seriesDatabase';
 import { normalizeSlug } from '@/utils/slugify';
 import {
   articleLocalePath,
@@ -176,5 +178,23 @@ export const getPublishedArticleSitemapEntries = unstable_cache(
 );
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  return [...STATIC_PUBLIC_PAGES, ...(await getPublishedArticleSitemapEntries())];
+  const entries = await getPublishedArticleSitemapEntries();
+  // The database applies the same eligibility predicate to every series,
+  // without exposing membership rows or relying on a truncated article list.
+  const db = createSupabaseAdminClient() as unknown as SupabaseClient<SeriesDatabase>;
+  const { data: series, error } = await db.rpc('public_series_sitemap');
+  if (error) {
+    console.error('Failed to build series sitemap', error.message);
+  }
+  const seriesEntries: MetadataRoute.Sitemap = (
+    (series ?? []) as Array<{ slug: string; updated_at: string | null; has_greek: boolean }>
+  ).map(row => {
+    const url = `${SITE_ORIGIN}/series/${row.slug}`;
+    return {
+      url,
+      lastModified: toValidDate(row.updated_at),
+      ...(row.has_greek ? { alternates: { languages: { en: url, el: `${url}?lang=el` } } } : {}),
+    };
+  });
+  return [...STATIC_PUBLIC_PAGES, ...entries, ...seriesEntries];
 }
