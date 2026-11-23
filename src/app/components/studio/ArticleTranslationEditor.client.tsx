@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { JSONContent } from '@tiptap/core';
 import { Check, ChevronDown, Languages, Loader2, Trash2 } from 'lucide-react';
@@ -8,8 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ErrorAlert } from '@/components/ui/alert';
-import { ARTICLE_LOCALE_LABELS, type ArticleLocale } from '@/lib/articles/locales';
+import {
+  ARTICLE_LOCALE_LABELS,
+  resolveArticleSeo,
+  type ArticleLocale,
+  type ArticleSeoFields,
+} from '@/lib/articles/locales';
 import type { ArticleCategory } from '@/types/database';
+import SeoPreview from './SeoPreview';
 
 const RichTextEditor = dynamic(() => import('@/app/components/editor/RichTextEditor.client'), {
   ssr: false,
@@ -36,25 +42,52 @@ const EMPTY_DRAFT: TranslationDraft = {
   metaDescription: '',
 };
 
+export const UNSAVED_TRANSLATION_MESSAGE =
+  'The Greek translation has unsaved changes. Leave without saving them?';
+
 type ArticleTranslationEditorProps = {
   readonly articleId: number | null;
   readonly locale: ArticleLocale;
   readonly mediaCategory: ArticleCategory | '';
+  /** The source-language fields the translation's metadata falls back to. */
+  readonly source: ArticleSeoFields;
+  readonly slug: string;
+  readonly basePath: string;
 };
+
+/** Whether the text fields differ from what was last loaded or saved. */
+const textFieldsDiffer = (a: TranslationDraft, b: TranslationDraft) =>
+  a.title !== b.title ||
+  a.description !== b.description ||
+  a.metaTitle !== b.metaTitle ||
+  a.metaDescription !== b.metaDescription;
 
 /**
  * Writes the non-source version of an article.
  *
  * Collapsed by default and mounted only once opened: it carries a second
- * TipTap instance, and most editing sessions never touch a translation.
+ * TipTap instance, and most editing sessions never touch a translation. Once
+ * opened it stays mounted (just hidden when collapsed), so collapsing never
+ * throws away unsaved work. Saving stays explicit.
  */
 export default function ArticleTranslationEditor({
   articleId,
   locale,
   mediaCategory,
+  source,
+  slug,
+  basePath,
 }: ArticleTranslationEditorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
   const [draft, setDraft] = useState<TranslationDraft>(EMPTY_DRAFT);
+  // What the server has: the baseline for "unsaved changes".
+  const [saved, setSaved] = useState<TranslationDraft>(EMPTY_DRAFT);
+  // The body as the editor renders the saved HTML. TipTap normalises HTML on
+  // load and reports that as an update, which is not a change by the author.
+  const [savedBodyHtml, setSavedBodyHtml] = useState('');
+  const editorTouchedRef = useRef(false);
+  const loadedKeyRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -64,6 +97,13 @@ export default function ArticleTranslationEditor({
   // captured once and swapped by remounting rather than by feeding it props.
   const [editorKey, setEditorKey] = useState(0);
   const [editorContent, setEditorContent] = useState('');
+
+  const isDirty = textFieldsDiffer(draft, saved) || draft.contentHtml !== savedBodyHtml;
+  // Read by the load effect, which must not overwrite unsaved edits.
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
 
   const load = useCallback(async () => {
     if (articleId === null) {
@@ -89,23 +129,24 @@ export default function ArticleTranslationEditor({
       }>;
       const row = rows.find(item => item.locale === locale);
 
-      if (row) {
-        setDraft({
-          title: row.title,
-          description: row.description ?? '',
-          contentHtml: row.content_html ?? '',
-          contentRich: row.content_rich,
-          metaTitle: row.meta_title ?? '',
-          metaDescription: row.meta_description ?? '',
-        });
-        setEditorContent(row.content_html ?? '');
-        setExists(true);
-      } else {
-        setDraft(EMPTY_DRAFT);
-        setEditorContent('');
-        setExists(false);
-      }
+      const next: TranslationDraft = row
+        ? {
+            title: row.title,
+            description: row.description ?? '',
+            contentHtml: row.content_html ?? '',
+            contentRich: row.content_rich,
+            metaTitle: row.meta_title ?? '',
+            metaDescription: row.meta_description ?? '',
+          }
+        : EMPTY_DRAFT;
+      setDraft(next);
+      setSaved(next);
+      setSavedBodyHtml(next.contentHtml);
+      editorTouchedRef.current = false;
+      setEditorContent(next.contentHtml);
+      setExists(Boolean(row));
       setEditorKey(current => current + 1);
+      loadedKeyRef.current = `${articleId}:${locale}`;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load translations.');
     } finally {
@@ -113,11 +154,66 @@ export default function ArticleTranslationEditor({
     }
   }, [articleId, locale]);
 
+  // Load once per article and language. Reopening the section must not
+  // replace unsaved edits with the server copy.
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && loadedKeyRef.current !== `${articleId}:${locale}` && !isDirtyRef.current) {
       void load();
     }
-  }, [isOpen, load]);
+  }, [isOpen, load, articleId, locale]);
+
+  // Warn before the page unloads, and before in-app links navigate away,
+  // while there are unsaved translation changes.
+  useEffect(() => {
+    if (!isDirty) {
+      return undefined;
+    }
+    let leaving = false;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!leaving) {
+        event.preventDefault();
+      }
+    };
+    const onLinkClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) {
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      const anchor = (event.target as Element | null)?.closest?.('a[href]');
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+      if (anchor.target && anchor.target !== '_self') {
+        return;
+      }
+      if (anchor.hasAttribute('download')) {
+        return;
+      }
+      const url = new URL(anchor.href, window.location.href);
+      const samePage =
+        url.origin === window.location.origin &&
+        url.pathname === window.location.pathname &&
+        url.search === window.location.search;
+      if (samePage) {
+        return;
+      }
+      if (window.confirm(UNSAVED_TRANSLATION_MESSAGE)) {
+        // The author chose to leave: do not ask again on unload.
+        leaving = true;
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onLinkClick, true);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onLinkClick, true);
+    };
+  }, [isDirty]);
 
   const save = async () => {
     if (articleId === null) {
@@ -125,24 +221,28 @@ export default function ArticleTranslationEditor({
     }
     setIsSaving(true);
     setError(null);
+    const submitted = draft;
     try {
       const response = await fetch(`/api/articles/${articleId}/translations`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           locale,
-          title: draft.title,
-          description: draft.description,
-          content_html: draft.contentHtml,
-          content_rich: draft.contentRich,
-          meta_title: draft.metaTitle,
-          meta_description: draft.metaDescription,
+          title: submitted.title,
+          description: submitted.description,
+          content_html: submitted.contentHtml,
+          content_rich: submitted.contentRich,
+          meta_title: submitted.metaTitle,
+          meta_description: submitted.metaDescription,
         }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.error || 'Could not save the translation.');
       }
+      // The baseline is what was sent, so edits made while saving stay dirty.
+      setSaved(submitted);
+      setSavedBodyHtml(submitted.contentHtml);
       setExists(true);
       setSavedAt(Date.now());
     } catch (saveError) {
@@ -168,6 +268,9 @@ export default function ArticleTranslationEditor({
         throw new Error(body?.error || 'Could not remove the translation.');
       }
       setDraft(EMPTY_DRAFT);
+      setSaved(EMPTY_DRAFT);
+      setSavedBodyHtml('');
+      editorTouchedRef.current = false;
       setEditorContent('');
       setEditorKey(current => current + 1);
       setExists(false);
@@ -184,6 +287,18 @@ export default function ArticleTranslationEditor({
   const update = (partial: Partial<TranslationDraft>) =>
     setDraft(current => ({ ...current, ...partial }));
 
+  const updateBody = (partial: Partial<TranslationDraft>) => {
+    update(partial);
+    // Until the author interacts with the editor, its updates are TipTap
+    // normalising the loaded document, not edits.
+    if (!editorTouchedRef.current && partial.contentHtml !== undefined) {
+      setSavedBodyHtml(partial.contentHtml);
+    }
+  };
+  const markEditorTouched = () => {
+    editorTouchedRef.current = true;
+  };
+
   if (articleId === null) {
     return (
       <section className="rounded-2xl border border-dashed border-border p-6">
@@ -198,11 +313,25 @@ export default function ArticleTranslationEditor({
     );
   }
 
+  const seo = resolveArticleSeo(
+    source,
+    {
+      title: draft.title,
+      description: draft.description,
+      meta_title: draft.metaTitle,
+      meta_description: draft.metaDescription,
+    },
+    locale,
+  );
+
   return (
     <section className="rounded-2xl border border-border bg-card">
       <button
         type="button"
-        onClick={() => setIsOpen(open => !open)}
+        onClick={() => {
+          setIsOpen(open => !open);
+          setHasOpened(true);
+        }}
         aria-expanded={isOpen}
         className="hover:bg-surface-hover flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left transition-colors"
       >
@@ -217,6 +346,11 @@ export default function ArticleTranslationEditor({
               : 'Not written yet - readers only see the source language.'}
           </span>
         </span>
+        {isDirty ? (
+          <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-warning">
+            Unsaved changes
+          </span>
+        ) : null}
         {exists ? (
           <span className="rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-success">
             Live
@@ -228,8 +362,8 @@ export default function ArticleTranslationEditor({
         />
       </button>
 
-      {isOpen ? (
-        <div className="space-y-4 border-t border-border p-5">
+      {hasOpened ? (
+        <div className="space-y-4 border-t border-border p-5" hidden={!isOpen}>
           {error ? <ErrorAlert message={error} /> : null}
 
           {isLoading ? (
@@ -263,32 +397,47 @@ export default function ArticleTranslationEditor({
                 />
               </div>
 
-              <RichTextEditor
-                key={editorKey}
-                label="Body"
-                value={editorContent}
-                placeholder={`Write the ${ARTICLE_LOCALE_LABELS[locale]} version...`}
-                mediaCategory={mediaCategory}
-                onChange={html => update({ contentHtml: html })}
-                onChangeJson={json => update({ contentRich: json })}
-              />
+              <div
+                onKeyDownCapture={markEditorTouched}
+                onPointerDownCapture={markEditorTouched}
+                onPasteCapture={markEditorTouched}
+                onDropCapture={markEditorTouched}
+              >
+                <RichTextEditor
+                  key={editorKey}
+                  label="Body"
+                  value={editorContent}
+                  placeholder={`Write the ${ARTICLE_LOCALE_LABELS[locale]} version...`}
+                  mediaCategory={mediaCategory}
+                  onChange={html => updateBody({ contentHtml: html })}
+                  onChangeJson={json => updateBody({ contentRich: json })}
+                />
+              </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <Input
                   label="Meta title"
                   value={draft.metaTitle}
                   onChange={event => update({ metaTitle: event.target.value })}
-                  placeholder="Falls back to the source language"
+                  placeholder="Defaults to the title above"
                   lang={locale}
                 />
                 <Input
                   label="Meta description"
                   value={draft.metaDescription}
                   onChange={event => update({ metaDescription: event.target.value })}
-                  placeholder="Falls back to the source language"
+                  placeholder="Defaults to the standfirst above"
                   lang={locale}
                 />
               </div>
+
+              <SeoPreview seo={seo} slug={slug} basePath={basePath} locale={locale} />
+              {draft.title.trim() === '' ? (
+                <p className="text-xs text-muted-foreground">
+                  Until it has a title, this version is not published and its URL shows the source
+                  language.
+                </p>
+              ) : null}
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -302,7 +451,7 @@ export default function ArticleTranslationEditor({
                   Save {ARTICLE_LOCALE_LABELS[locale]}
                 </Button>
 
-                {savedAt ? (
+                {savedAt && !isDirty ? (
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Check size={13} className="text-success" />
                     Saved
@@ -325,8 +474,8 @@ export default function ArticleTranslationEditor({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Empty fields fall back to the source language, so a translated title and body are
-                enough. The switcher appears on the article once this has a title.
+                Empty fields fall back in this order: the meta fields use this version&apos;s title
+                and standfirst first, then the source language. Changes go live when you save.
               </p>
             </>
           )}
