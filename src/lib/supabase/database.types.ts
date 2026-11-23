@@ -2898,6 +2898,7 @@ export type Database = {
         }[]
       }
       calculate_user_stats: { Args: { p_user_id: string }; Returns: Json }
+      can_manage_all_articles: { Args: never; Returns: boolean }
       category_dashboard_history: {
         Args: { p_category: string; p_since: string; p_user_id: string }
         Returns: {
