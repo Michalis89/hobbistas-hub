@@ -2,9 +2,11 @@ import { withApiRoute } from '@/lib/observability/withApiRoute';
 import {
   editorContext,
   errorResponse,
+  isValidCoverUrl,
   managedSeries,
   parseId,
   privateResponse,
+  seriesWriteStatus,
 } from '@/lib/articles/seriesEditor';
 import { ok, fail } from '@/lib/api/response';
 import { revalidateCache } from '@/lib/cache/tags';
@@ -14,7 +16,7 @@ type Context = { params: Promise<{ id: string }> };
 async function access(context: Context) {
   const id = parseId((await context.params).id);
   const editor = await editorContext();
-  const series = id ? await managedSeries(editor.db, id, editor.userId, editor.elevated) : null;
+  const series = id ? await managedSeries(editor.db, id, editor.user, editor.userId) : null;
   return { ...editor, id, series };
 }
 async function get(_request: Request, context: Context) {
@@ -53,7 +55,7 @@ async function put(request: Request, context: Context) {
     const body = await request.json().catch(() => null);
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
     const description = typeof body?.description === 'string' ? body.description.trim() : null;
-    const cover = typeof body?.cover_image === 'string' ? body.cover_image.trim() : null;
+    const cover = typeof body?.cover_image === 'string' ? body.cover_image.trim() || null : null;
     if (
       !title ||
       title.length > 200 ||
@@ -61,7 +63,7 @@ async function put(request: Request, context: Context) {
       (description && description.length > 2000) ||
       !validatePlainText(title, 'Title').isValid ||
       !validatePlainText(description, 'Description').isValid ||
-      (cover && !/^https?:\/\//i.test(cover))
+      !isValidCoverUrl(cover)
     ) {
       return privateResponse(fail({ error: 'Invalid series fields' }, 400));
     }
@@ -70,7 +72,7 @@ async function put(request: Request, context: Context) {
       .update({
         title,
         description,
-        cover_image: cover || null,
+        cover_image: cover,
         status: body.status,
         updated_at: new Date().toISOString(),
       })
@@ -78,7 +80,8 @@ async function put(request: Request, context: Context) {
       .select()
       .single();
     if (error) {
-      return privateResponse(fail({ error: 'Unable to update series' }, 403));
+      const status = seriesWriteStatus(error.code);
+      return privateResponse(fail({ error: 'Unable to update series' }, status));
     }
     revalidateCache.article();
     return privateResponse(ok(data));
@@ -94,7 +97,9 @@ async function del(_request: Request, context: Context) {
     }
     const { error } = await db.from('article_series').delete().eq('id', id);
     if (error) {
-      return privateResponse(fail({ error: 'Unable to delete series' }, 403));
+      return privateResponse(
+        fail({ error: 'Unable to delete series' }, seriesWriteStatus(error.code)),
+      );
     }
     revalidateCache.article();
     return privateResponse(ok({ deleted: true }));

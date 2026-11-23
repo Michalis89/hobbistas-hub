@@ -9,6 +9,8 @@ export type SeriesEditorArticle = {
   status: string;
   author_id: string | null;
   assignedElsewhere: boolean;
+  /** Another author's chapter that this editor may not remove or reorder. */
+  locked: boolean;
 };
 export type SeriesEditorInitial = {
   id: number;
@@ -129,9 +131,16 @@ export default function SeriesEditor({
       setBusy(false);
     }
   }
+  const isLocked = (id: number) => byId.get(id)?.locked ?? false;
+  // Swapping two locked chapters would change their relative order, which only
+  // editors who manage all series may do. Moving an own chapter past one is fine.
+  const canSwap = (index: number, target: number) =>
+    target >= 0 &&
+    target < chapters.length &&
+    !(isLocked(chapters[index]) && isLocked(chapters[target]));
   function move(index: number, delta: number) {
     const target = index + delta;
-    if (target < 0 || target >= chapters.length) {
+    if (!canSwap(index, target)) {
       return;
     }
     const next = [...chapters];
@@ -180,6 +189,8 @@ export default function SeriesEditor({
             value={cover}
             onChange={e => setCover(e.target.value)}
             type="url"
+            pattern="https://.*"
+            placeholder="https://…"
           />
         </label>
         <label>
@@ -242,11 +253,16 @@ export default function SeriesEditor({
                 >
                   <span className="flex-1">
                     {index + 1}. {article?.title ?? 'Article unavailable'}{' '}
-                    {article && <span className="text-muted-foreground">({article.status})</span>}
+                    {article && (
+                      <span className="text-muted-foreground">
+                        ({article.status}
+                        {article.locked ? ', by another author' : ''})
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
-                    disabled={index === 0}
+                    disabled={!canSwap(index, index - 1)}
                     onClick={() => move(index, -1)}
                     aria-label={`Move chapter ${index + 1} up`}
                   >
@@ -254,7 +270,7 @@ export default function SeriesEditor({
                   </button>
                   <button
                     type="button"
-                    disabled={index === chapters.length - 1}
+                    disabled={!canSwap(index, index + 1)}
                     onClick={() => move(index, 1)}
                     aria-label={`Move chapter ${index + 1} down`}
                   >
@@ -262,6 +278,13 @@ export default function SeriesEditor({
                   </button>
                   <button
                     type="button"
+                    disabled={isLocked(id)}
+                    aria-label={`Remove chapter ${index + 1}`}
+                    title={
+                      isLocked(id)
+                        ? "Only admins and moderators can remove another author's chapter"
+                        : undefined
+                    }
                     onClick={() => setChapters(chapters.filter(value => value !== id))}
                   >
                     Remove
@@ -279,6 +302,7 @@ export default function SeriesEditor({
               .filter(
                 article =>
                   !chapters.includes(article.id) &&
+                  !article.locked &&
                   article.title.toLowerCase().includes(search.toLowerCase()),
               )
               .map(article => (

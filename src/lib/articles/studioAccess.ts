@@ -45,7 +45,7 @@ export async function requireStudioAccess(): Promise<StudioAccess> {
   const canWriteArticles = hasAnyRole(carrier, ['admin', 'owner', 'author']);
   const canWriteReviews = hasAnyRole(carrier, ['admin', 'owner', 'reviewer']);
 
-  if (!canWriteArticles && !canWriteReviews && !isAdminOrModerator(carrier)) {
+  if (!canWriteArticles && !canWriteReviews) {
     redirect('/dashboard');
   }
 

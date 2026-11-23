@@ -1,20 +1,22 @@
 import Link from 'next/link';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SeriesDatabase } from '@/lib/articles/seriesDatabase';
-import { requireStudioAccess } from '@/lib/articles/studioAccess';
+import { requireSeriesStudioAccess } from '@/lib/articles/seriesStudioAccess';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { PageContainer } from '@/app/components/layout';
 
 export const dynamic = 'force-dynamic';
 export default async function SeriesStudioPage() {
-  const access = await requireStudioAccess();
+  const access = await requireSeriesStudioAccess();
   const db = (await createRouteHandlerClient()) as unknown as SupabaseClient<SeriesDatabase>;
+  // RLS returns exactly the series this user may manage; the owner filter only
+  // keeps an editor's list focused on their own work.
   let query = db
     .from('article_series')
     .select('id,title,status,owner_id')
     .order('updated_at', { ascending: false })
     .limit(100);
-  if (!access.canManageAllContent) {
+  if (!access.canManageAll) {
     query = query.eq('owner_id', access.session.user.id);
   }
   const { data: series } = await query;
@@ -26,7 +28,7 @@ export default async function SeriesStudioPage() {
     <PageContainer size="lg" className="space-y-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Article series</h1>
-        {(access.canWriteArticles || access.canWriteReviews) && (
+        {access.canCreate && (
           <Link className="text-primary" href="/studio/series/new">
             Create series
           </Link>

@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SeriesDatabase } from './seriesDatabase';
 import getSupabaseServer from '@/lib/supabase-server';
@@ -23,8 +24,25 @@ export type PublicSeries = {
   chapters: PublicChapter[];
 };
 
+// One lookup per request. generateMetadata and the page both ask for the same
+// series, so the cache is keyed by primitives, not by the key object.
+const publicSeriesBySlug = cache((slug: string) => loadPublicSeries({ slug }));
+const publicSeriesByArticle = cache((articleId: number) => loadPublicSeries({ articleId }));
+
+/**
+ * The public view of a series: only when the series is published and has at
+ * least one published chapter, and only its published chapters, numbered
+ * consecutively. Draft chapters' ids, titles, positions and counts never leave
+ * this function.
+ */
+export function getPublicSeries(
+  key: { slug: string } | { articleId: number },
+): Promise<PublicSeries | null> {
+  return 'slug' in key ? publicSeriesBySlug(key.slug) : publicSeriesByArticle(key.articleId);
+}
+
 /** The service-role client bypasses RLS: all public reads below filter visibility explicitly. */
-export async function getPublicSeries(
+async function loadPublicSeries(
   key: { slug: string } | { articleId: number },
 ): Promise<PublicSeries | null> {
   const db = getSupabaseServer() as unknown as SupabaseClient<SeriesDatabase>;

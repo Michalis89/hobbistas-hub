@@ -5,15 +5,24 @@ import {
   managedSeries,
   parseId,
   privateResponse,
+  seriesWriteStatus,
 } from '@/lib/articles/seriesEditor';
 import { ok, fail } from '@/lib/api/response';
 import { revalidateCache } from '@/lib/cache/tags';
 
+const MESSAGES: Record<number, string> = {
+  400: 'Invalid chapter list',
+  403: 'You can only add, remove or reorder your own articles in this series.',
+  404: 'Series not found',
+  409: 'This series changed, or a chapter belongs to another series. Reload and try again.',
+  500: 'Unable to save chapters',
+};
+
 async function put(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const id = parseId((await params).id);
-    const { db, userId, elevated } = await editorContext();
-    if (!id || !(await managedSeries(db, id, userId, elevated))) {
+    const { db, user, userId } = await editorContext();
+    if (!id || !(await managedSeries(db, id, user, userId))) {
       return privateResponse(fail({ error: 'Series not found' }, 404));
     }
     const body = await request.json().catch(() => null);
@@ -33,22 +42,8 @@ async function put(request: Request, { params }: { params: Promise<{ id: string 
       p_article_ids: body.article_ids,
     });
     if (error) {
-      const status = ['40001', '23505'].includes(error.code)
-        ? 409
-        : error.code === '42501'
-          ? 403
-          : 400;
-      return privateResponse(
-        fail(
-          {
-            error:
-              status === 409
-                ? 'Series changed or a chapter belongs to another series. Reload and try again.'
-                : 'Unable to save chapters',
-          },
-          status,
-        ),
-      );
+      const status = seriesWriteStatus(error.code);
+      return privateResponse(fail({ error: MESSAGES[status] }, status));
     }
     revalidateCache.article();
     return privateResponse(ok({ version: data }));
