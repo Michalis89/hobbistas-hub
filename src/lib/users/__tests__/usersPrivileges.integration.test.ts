@@ -431,6 +431,39 @@ describeDb('public.users privileged columns (local database)', () => {
         });
       });
 
+      // Mirrors POST /api/auth/login: anon key + the session's access token, so
+      // PostgREST runs as `authenticated` with sub = the signed-in user.
+      it('login route sequence: read own profile, then record last_login', async () => {
+        await session('authenticated', ID.bob, async ({ attempt }) => {
+          const profile = await attempt('select * from public.users where id = $1', [ID.bob]);
+          expect(profile.ok && profile.result.rows[0].account_status).toBe('active');
+          const before = profile.ok ? profile.result.rows[0].last_login : undefined;
+          expect(await attempt('select public.update_user_last_login($1)', [ID.bob])).toMatchObject(
+            { ok: true },
+          );
+          const after = (await userRow(ID.bob)).last_login;
+          expect(after).not.toBeNull();
+          expect(after).not.toEqual(before);
+        });
+      });
+
+      // No caller does this; documented so a future server-side caller does not
+      // assume it works. auth.uid() is NULL without a user JWT, so it is a no-op.
+      it('is a silent no-op for the service role (no user JWT), and anon is refused', async () => {
+        await session('service_role', null, async ({ attempt }) => {
+          const before = (await userRow(ID.alice)).last_login;
+          expect(
+            await attempt('select public.update_user_last_login($1)', [ID.alice]),
+          ).toMatchObject({ ok: true });
+          expect((await userRow(ID.alice)).last_login).toEqual(before);
+        });
+        await session('anon', null, async ({ attempt }) => {
+          expect(
+            await attempt('select public.update_user_last_login($1)', [ID.alice]),
+          ).toMatchObject({ ok: false, code: '42501' });
+        });
+      });
+
       it('can still delete its own account row', async () => {
         await session('authenticated', ID.alice, async ({ attempt }) => {
           const res = await attempt('delete from public.users where id = $1', [ID.alice]);
