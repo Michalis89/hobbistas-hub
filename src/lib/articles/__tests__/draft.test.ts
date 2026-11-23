@@ -4,6 +4,8 @@ import {
   fromLocalDateTimeInput,
   toLocalDateTimeInput,
   buildArticlePayload,
+  isPublishable,
+  isSaveable,
 } from '@/lib/articles/draft';
 
 describe('datetime-local conversion', () => {
@@ -63,5 +65,29 @@ describe('draftFromRow', () => {
   it('maps a review row to the review content type', () => {
     expect(draftFromRow({ topic: 'reviews', score: 8 }).type).toBe('review');
     expect(draftFromRow({ topic: 'reviews', score: 8 }).score).toBe('8');
+  });
+});
+
+describe('isSaveable and isPublishable (bilingual drafts)', () => {
+  const games = { ...emptyDraft(), category: 'games' as const };
+
+  it('saves a draft with a title in either language', () => {
+    expect(isSaveable({ ...games, title: 'English' })).toBe(true);
+    expect(isSaveable(games, 'Ελληνικός τίτλος')).toBe(true);
+  });
+
+  it('does not save without any title or without a category', () => {
+    expect(isSaveable(games)).toBe(false);
+    expect(isSaveable({ ...games, title: '   ' }, '  ')).toBe(false);
+    expect(isSaveable({ ...emptyDraft(), title: 'English' })).toBe(false);
+    expect(isSaveable(emptyDraft(), 'Ελληνικά')).toBe(false);
+  });
+
+  it('publishes only with the English title, a category and a body', () => {
+    const complete = { ...games, title: 'English', contentHtml: '<p>Body</p>' };
+    expect(isPublishable(complete)).toBe(true);
+    expect(isPublishable({ ...complete, title: ' ' })).toBe(false);
+    expect(isPublishable({ ...complete, category: '' as const })).toBe(false);
+    expect(isPublishable({ ...complete, contentHtml: '  ' })).toBe(false);
   });
 });

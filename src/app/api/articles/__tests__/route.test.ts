@@ -79,6 +79,7 @@ import { API_ERRORS } from '@/lib/api/errors';
 import { UnauthorizedError } from '@/lib/api/auth';
 import { ForbiddenError } from '@/lib/api/permissions';
 import { GET, POST } from '@/app/api/articles/route';
+import { verifyPreviewToken } from '@/lib/articles/previewToken';
 
 function makeGetSupabase(sessionUserId: string | null = 'u1') {
   return {
@@ -511,6 +512,132 @@ describe('app/api/articles/route POST', () => {
 
     expect(response.status).toBe(400);
     expect(s.spies.insert).not.toHaveBeenCalled();
+  });
+
+  describe('a draft started in another language (no English title yet)', () => {
+    it('creates the draft with a null title and the slug it was sent', async () => {
+      const s = makePostSupabase({
+        insertData: { id: 92, title: null, slug: 'o-titlos', status: 'draft' },
+      });
+      createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+      const response = await POST(
+        new Request('https://example.com/api/articles', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: '  ',
+            slug: 'o-titlos',
+            category: 'games',
+            content_html: '<p>Σώμα</p>',
+            status: 'draft',
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(s.spies.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ title: null, slug: 'o-titlos', author_id: 'author-1' }),
+      );
+    });
+
+    it('returns the private preview link for a new draft, and none once published', async () => {
+      const secret = process.env.ARTICLE_PREVIEW_SECRET;
+      process.env.ARTICLE_PREVIEW_SECRET = 'test-secret';
+      try {
+        const draft = makePostSupabase({
+          insertData: { id: 94, title: null, slug: 'o-titlos', topic: 'articles', status: 'draft' },
+        });
+        createRouteHandlerClientMock.mockResolvedValueOnce(draft.client);
+        const created = await POST(
+          new Request('https://example.com/api/articles', {
+            method: 'POST',
+            body: JSON.stringify({ slug: 'o-titlos', category: 'games', content_html: '' }),
+          }),
+        );
+        const path = (await created.json()).data.preview_path as string;
+        expect(path).toMatch(/^\/articles\/o-titlos\?preview=94\./);
+        expect(
+          verifyPreviewToken(new URL(path, 'https://x').searchParams.get('preview'), 94),
+        ).toBe(true);
+
+        const live = makePostSupabase({
+          insertData: { id: 95, title: 'T', slug: 't', topic: 'articles', status: 'published' },
+        });
+        createRouteHandlerClientMock.mockResolvedValueOnce(live.client);
+        const published = await POST(
+          new Request('https://example.com/api/articles', {
+            method: 'POST',
+            body: JSON.stringify({
+              title: 'T',
+              category: 'games',
+              content_html: '<p>x</p>',
+              status: 'published',
+            }),
+          }),
+        );
+        expect((await published.json()).data.preview_path).toBeNull();
+      } finally {
+        process.env.ARTICLE_PREVIEW_SECRET = secret;
+      }
+    });
+
+    it('defaults to a draft when no status is sent', async () => {
+      const s = makePostSupabase({ insertData: { id: 93, title: null, slug: 'o-titlos' } });
+      createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+      const response = await POST(
+        new Request('https://example.com/api/articles', {
+          method: 'POST',
+          body: JSON.stringify({ slug: 'o-titlos', category: 'games', content_html: '' }),
+        }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(s.spies.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ title: null, status: 'draft' }),
+      );
+    });
+
+    it.each(['published', 'scheduled', 'review'])(
+      'refuses to create a %s article without an English title',
+      async status => {
+        const s = makePostSupabase();
+        createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+        const response = await POST(
+          new Request('https://example.com/api/articles', {
+            method: 'POST',
+            body: JSON.stringify({
+              title: '',
+              slug: 'o-titlos',
+              category: 'games',
+              content_html: '<p>x</p>',
+              status,
+              scheduled_for: new Date(Date.now() + 86_400_000).toISOString(),
+            }),
+          }),
+        );
+
+        expect(response.status).toBe(400);
+        expect((await response.json()).error).toBe('An English title is required to publish.');
+        expect(s.spies.insert).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still requires a category', async () => {
+      const s = makePostSupabase();
+      createRouteHandlerClientMock.mockResolvedValueOnce(s.client);
+
+      const response = await POST(
+        new Request('https://example.com/api/articles', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'T', content_html: '', status: 'draft' }),
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(s.spies.insert).not.toHaveBeenCalled();
+    });
   });
 
   it('maps unauthorized/forbidden and unexpected errors', async () => {

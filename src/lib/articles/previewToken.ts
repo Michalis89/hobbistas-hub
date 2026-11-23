@@ -75,3 +75,27 @@ export function previewTokenArticleId(token: string | undefined | null): number 
   const id = Number(token.split('.')[0]);
   return Number.isInteger(id) && id > 0 ? id : null;
 }
+
+/**
+ * The private link that reveals an unpublished article to whoever holds it,
+ * or null for a published article (it has a public URL) or when previews are
+ * not configured. Only ever handed to someone who may edit the article.
+ */
+export function articlePreviewPath(article: {
+  id: number;
+  slug: string;
+  topic: string | null;
+  status: string | null;
+}): string | null {
+  if (article.status === 'published') {
+    return null;
+  }
+  try {
+    const base = article.topic === 'reviews' ? '/review' : '/articles';
+    return `${base}/${article.slug}?preview=${createPreviewToken(article.id)}`;
+  } catch {
+    // A missing signing secret must not break saving; the link appears once
+    // previews are configured.
+    return null;
+  }
+}

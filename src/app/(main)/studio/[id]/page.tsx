@@ -4,7 +4,7 @@ import { requireStudioAccess } from '@/lib/articles/studioAccess';
 import { PageContainer } from '@/app/components/layout';
 import ArticleComposer from '@/app/components/studio/ArticleComposer.client';
 import { draftFromRow } from '@/lib/articles/draft';
-import { createPreviewToken } from '@/lib/articles/previewToken';
+import { articlePreviewPath } from '@/lib/articles/previewToken';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,11 +37,7 @@ export default async function EditArticlePage({ params }: { params: Promise<{ id
 
   // Only unpublished work needs a private link; a published article has a
   // public URL already.
-  const previewPath =
-    article.status === 'published'
-      ? null
-      : `${article.topic === 'reviews' ? '/review' : '/articles'}/${article.slug}` +
-        `?preview=${createPreviewToken(article.id)}`;
+  const previewPath = articlePreviewPath(article);
 
   return (
     <PageContainer size="xl">

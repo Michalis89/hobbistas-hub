@@ -14,6 +14,7 @@ import { requireAuthorRole, ForbiddenError } from '@/lib/api/permissions';
 import { fail, ok, okWithMeta } from '@/lib/api/response';
 import { CACHE_CONFIG, CACHE_TAGS, revalidateCache } from '@/lib/cache/tags';
 import { collectArticleMediaLinks, syncArticleMediaLinks } from '@/lib/articles/mediaLinks';
+import { articlePreviewPath } from '@/lib/articles/previewToken';
 
 /**
  * Resolves the slug an article should be stored under.
@@ -247,12 +248,19 @@ async function POSTHandler(req: Request) {
       }
     }
 
-    // Validate required fields
-    if (!title || !category) {
-      return fail({ error: 'Title and category are required' }, 400);
+    // The English title lives on this row. A draft may start in another
+    // language and leave it empty (its slug then comes from that language's
+    // title, sent as `slug`); anything scheduled or published needs it, and
+    // the database enforces the same rule.
+    const sourceTitle = typeof title === 'string' ? title.trim() : '';
+    if (!category) {
+      return fail({ error: 'Category is required' }, 400);
+    }
+    if (!sourceTitle && status !== 'draft') {
+      return fail({ error: 'An English title is required to publish.' }, 400);
     }
 
-    const normalizedSlug = await resolveArticleSlug(supabase, { title, slug });
+    const normalizedSlug = await resolveArticleSlug(supabase, { title: sourceTitle, slug });
     if (!normalizedSlug) {
       return fail({ error: 'Could not derive a URL slug from this title.' }, 400);
     }
@@ -261,7 +269,7 @@ async function POSTHandler(req: Request) {
     const { data: article, error: insertError } = await supabase
       .from('articles')
       .insert({
-        title,
+        title: sourceTitle || null,
         slug: normalizedSlug,
         description,
         category,
@@ -319,7 +327,16 @@ async function POSTHandler(req: Request) {
     // Revalidate article caches
     revalidateCache.article(article.id);
 
-    return ok({ message: 'Article created successfully', article }, { status: 201 });
+    // The creator owns the new article, so the private preview link (the same
+    // one the editor page gives them) can be returned right away.
+    return ok(
+      {
+        message: 'Article created successfully',
+        article,
+        preview_path: articlePreviewPath(article),
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error('Error creating article:', error);
     if (error instanceof UnauthorizedError) {

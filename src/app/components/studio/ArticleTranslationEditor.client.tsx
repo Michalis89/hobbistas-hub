@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { JSONContent } from '@tiptap/core';
-import { Check, ChevronDown, Languages, Loader2, Trash2 } from 'lucide-react';
+import { Check, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -45,7 +45,25 @@ const EMPTY_DRAFT: TranslationDraft = {
 export const UNSAVED_TRANSLATION_MESSAGE =
   'The Greek translation has unsaved changes. Leave without saving them?';
 
+export type TranslationSaveResult = { ok: true } | { ok: false; error: string };
+
+/** What the composer's single Save Draft / Publish needs from this panel. */
+export type ArticleTranslationEditorHandle = {
+  /** The title typed in this language (may be unsaved). */
+  getTitle: () => string;
+  /** Whether there is anything here the server does not have yet. */
+  isDirty: () => boolean;
+  /**
+   * Saves this language for the given article. Resolves without throwing; a
+   * failure leaves the changes in place, so the author can simply save again.
+   */
+  save: (articleId: number) => Promise<TranslationSaveResult>;
+};
+
+export type TranslationPanelState = { title: string; dirty: boolean; exists: boolean };
+
 type ArticleTranslationEditorProps = {
+  /** The article id, or null while the article has not been saved yet. */
   readonly articleId: number | null;
   readonly locale: ArticleLocale;
   readonly mediaCategory: ArticleCategory | '';
@@ -53,6 +71,9 @@ type ArticleTranslationEditorProps = {
   readonly source: ArticleSeoFields;
   readonly slug: string;
   readonly basePath: string;
+  /** False while another language's tab is showing; the panel stays mounted. */
+  readonly active?: boolean;
+  readonly onStateChange?: (state: TranslationPanelState) => void;
 };
 
 /** Whether the text fields differ from what was last loaded or saved. */
@@ -63,23 +84,22 @@ const textFieldsDiffer = (a: TranslationDraft, b: TranslationDraft) =>
   a.metaDescription !== b.metaDescription;
 
 /**
- * Writes the non-source version of an article.
+ * The Greek version of an article, shown as a language tab of the composer.
  *
- * Collapsed by default and mounted only once opened: it carries a second
- * TipTap instance, and most editing sessions never touch a translation. Once
- * opened it stays mounted (just hidden when collapsed), so collapsing never
- * throws away unsaved work. Saving stays explicit.
+ * Editable from the start, before the article has been saved: the composer's
+ * single Save Draft saves it right after the article row exists. It stays
+ * mounted while another tab is showing, so switching languages never loses
+ * unsaved work. A version already on the server is loaded once, for an article
+ * that existed when the composer opened; an article created during this
+ * session has nothing to load, and reloading would wipe what is being typed.
  */
-export default function ArticleTranslationEditor({
-  articleId,
-  locale,
-  mediaCategory,
-  source,
-  slug,
-  basePath,
-}: ArticleTranslationEditorProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [hasOpened, setHasOpened] = useState(false);
+const ArticleTranslationEditor = forwardRef<
+  ArticleTranslationEditorHandle,
+  ArticleTranslationEditorProps
+>(function ArticleTranslationEditor(
+  { articleId, locale, mediaCategory, source, slug, basePath, active = true, onStateChange },
+  ref,
+) {
   const [draft, setDraft] = useState<TranslationDraft>(EMPTY_DRAFT);
   // What the server has: the baseline for "unsaved changes".
   const [saved, setSaved] = useState<TranslationDraft>(EMPTY_DRAFT);
@@ -87,9 +107,16 @@ export default function ArticleTranslationEditor({
   // load and reports that as an update, which is not a change by the author.
   const [savedBodyHtml, setSavedBodyHtml] = useState('');
   const editorTouchedRef = useRef(false);
-  const loadedKeyRef = useRef<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // Only an article that already existed when the composer opened has a
+  // stored version to load.
+  const [loadArticleId] = useState(articleId);
+  const [isLoading, setIsLoading] = useState(loadArticleId !== null);
+  const [isRemoving, setIsRemoving] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Saving and removing exclude each other: an upsert that lands after the
+  // DELETE would bring back the version the author just removed. A ref, so
+  // the check holds before React re-renders.
+  const busyRef = useRef<'saving' | 'removing' | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [exists, setExists] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,68 +126,73 @@ export default function ArticleTranslationEditor({
   const [editorContent, setEditorContent] = useState('');
 
   const isDirty = textFieldsDiffer(draft, saved) || draft.contentHtml !== savedBodyHtml;
-  // Read by the load effect, which must not overwrite unsaved edits.
+
+  // The handle is called from event handlers after render, so these refs are
+  // read only then.
+  const draftRef = useRef(draft);
   const isDirtyRef = useRef(isDirty);
   useEffect(() => {
+    draftRef.current = draft;
     isDirtyRef.current = isDirty;
-  }, [isDirty]);
+  }, [draft, isDirty]);
 
-  const load = useCallback(async () => {
-    if (articleId === null) {
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/articles/${articleId}/translations`);
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.error || 'Could not load translations.');
-      }
-      const body = await response.json();
-      const rows = (body?.data?.translations ?? []) as Array<{
-        locale: string;
-        title: string;
-        description: string | null;
-        content_html: string | null;
-        content_rich: JSONContent | null;
-        meta_title: string | null;
-        meta_description: string | null;
-      }>;
-      const row = rows.find(item => item.locale === locale);
-
-      const next: TranslationDraft = row
-        ? {
-            title: row.title,
-            description: row.description ?? '',
-            contentHtml: row.content_html ?? '',
-            contentRich: row.content_rich,
-            metaTitle: row.meta_title ?? '',
-            metaDescription: row.meta_description ?? '',
-          }
-        : EMPTY_DRAFT;
-      setDraft(next);
-      setSaved(next);
-      setSavedBodyHtml(next.contentHtml);
-      editorTouchedRef.current = false;
-      setEditorContent(next.contentHtml);
-      setExists(Boolean(row));
-      setEditorKey(current => current + 1);
-      loadedKeyRef.current = `${articleId}:${locale}`;
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load translations.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [articleId, locale]);
-
-  // Load once per article and language. Reopening the section must not
-  // replace unsaved edits with the server copy.
   useEffect(() => {
-    if (isOpen && loadedKeyRef.current !== `${articleId}:${locale}` && !isDirtyRef.current) {
-      void load();
+    onStateChange?.({ title: draft.title, dirty: isDirty, exists });
+  }, [draft.title, isDirty, exists, onStateChange]);
+
+  const load = useCallback(
+    async (id: number) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/articles/${id}/translations`);
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(body?.error || 'Could not load translations.');
+        }
+        const body = await response.json();
+        const rows = (body?.data?.translations ?? []) as Array<{
+          locale: string;
+          title: string;
+          description: string | null;
+          content_html: string | null;
+          content_rich: JSONContent | null;
+          meta_title: string | null;
+          meta_description: string | null;
+        }>;
+        const row = rows.find(item => item.locale === locale);
+
+        const next: TranslationDraft = row
+          ? {
+              title: row.title,
+              description: row.description ?? '',
+              contentHtml: row.content_html ?? '',
+              contentRich: row.content_rich,
+              metaTitle: row.meta_title ?? '',
+              metaDescription: row.meta_description ?? '',
+            }
+          : EMPTY_DRAFT;
+        setDraft(next);
+        setSaved(next);
+        setSavedBodyHtml(next.contentHtml);
+        editorTouchedRef.current = false;
+        setEditorContent(next.contentHtml);
+        setExists(Boolean(row));
+        setEditorKey(current => current + 1);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Could not load translations.');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [locale],
+  );
+
+  useEffect(() => {
+    if (loadArticleId !== null) {
+      void load(loadArticleId);
     }
-  }, [isOpen, load, articleId, locale]);
+  }, [loadArticleId, load]);
 
   // Warn before the page unloads, and before in-app links navigate away,
   // while there are unsaved translation changes.
@@ -215,48 +247,75 @@ export default function ArticleTranslationEditor({
     };
   }, [isDirty]);
 
-  const save = async () => {
-    if (articleId === null) {
-      return;
-    }
-    setIsSaving(true);
-    setError(null);
-    const submitted = draft;
-    try {
-      const response = await fetch(`/api/articles/${articleId}/translations`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          locale,
-          title: submitted.title,
-          description: submitted.description,
-          content_html: submitted.contentHtml,
-          content_rich: submitted.contentRich,
-          meta_title: submitted.metaTitle,
-          meta_description: submitted.metaDescription,
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.error || 'Could not save the translation.');
-      }
-      // The baseline is what was sent, so edits made while saving stay dirty.
-      setSaved(submitted);
-      setSavedBodyHtml(submitted.contentHtml);
-      setExists(true);
-      setSavedAt(Date.now());
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save the translation.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  useImperativeHandle(
+    ref,
+    () => ({
+      getTitle: () => draftRef.current.title,
+      isDirty: () => isDirtyRef.current,
+      save: async (id: number): Promise<TranslationSaveResult> => {
+        const submitted = draftRef.current;
+        if (submitted.title.trim() === '') {
+          const message = `The ${ARTICLE_LOCALE_LABELS[locale]} version needs a title before it can be saved.`;
+          setError(message);
+          return { ok: false, error: message };
+        }
+        if (busyRef.current === 'removing') {
+          const message = `The ${ARTICLE_LOCALE_LABELS[locale]} version is being removed. Save again once that has finished.`;
+          setError(message);
+          return { ok: false, error: message };
+        }
+        busyRef.current = 'saving';
+        setIsSaving(true);
+        setError(null);
+        try {
+          const response = await fetch(`/api/articles/${id}/translations`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              locale,
+              title: submitted.title,
+              description: submitted.description,
+              content_html: submitted.contentHtml,
+              content_rich: submitted.contentRich,
+              meta_title: submitted.metaTitle,
+              meta_description: submitted.metaDescription,
+            }),
+          });
+          if (!response.ok) {
+            const body = await response.json().catch(() => null);
+            throw new Error(body?.error || 'Could not save the translation.');
+          }
+          // The baseline is what was sent, so edits made while saving stay dirty.
+          setSaved(submitted);
+          setSavedBodyHtml(submitted.contentHtml);
+          // Callers may ask again before the next render (Publish right after
+          // the draft step), so the answer is updated now, not by the effect.
+          isDirtyRef.current =
+            textFieldsDiffer(draftRef.current, submitted) ||
+            draftRef.current.contentHtml !== submitted.contentHtml;
+          setExists(true);
+          setSavedAt(Date.now());
+          return { ok: true };
+        } catch (saveError) {
+          const message =
+            saveError instanceof Error ? saveError.message : 'Could not save the translation.';
+          setError(message);
+          return { ok: false, error: message };
+        } finally {
+          busyRef.current = null;
+          setIsSaving(false);
+        }
+      },
+    }),
+    [locale],
+  );
 
   const remove = async () => {
-    if (articleId === null) {
+    if (articleId === null || busyRef.current !== null) {
       return;
     }
-    setIsSaving(true);
+    busyRef.current = 'removing';
+    setIsRemoving(true);
     setError(null);
     try {
       const response = await fetch(
@@ -267,6 +326,10 @@ export default function ArticleTranslationEditor({
         const body = await response.json().catch(() => null);
         throw new Error(body?.error || 'Could not remove the translation.');
       }
+      // Updated now as well, so a save that asks before the next render does
+      // not send the removed version back.
+      draftRef.current = EMPTY_DRAFT;
+      isDirtyRef.current = false;
       setDraft(EMPTY_DRAFT);
       setSaved(EMPTY_DRAFT);
       setSavedBodyHtml('');
@@ -280,7 +343,8 @@ export default function ArticleTranslationEditor({
         removeError instanceof Error ? removeError.message : 'Could not remove the translation.',
       );
     } finally {
-      setIsSaving(false);
+      busyRef.current = null;
+      setIsRemoving(false);
     }
   };
 
@@ -299,20 +363,6 @@ export default function ArticleTranslationEditor({
     editorTouchedRef.current = true;
   };
 
-  if (articleId === null) {
-    return (
-      <section className="rounded-2xl border border-dashed border-border p-6">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Languages size={16} />
-          {ARTICLE_LOCALE_LABELS[locale]} version
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Save the article first - a translation needs something to attach to.
-        </p>
-      </section>
-    );
-  }
-
   const seo = resolveArticleSeo(
     source,
     {
@@ -325,162 +375,118 @@ export default function ArticleTranslationEditor({
   );
 
   return (
-    <section className="rounded-2xl border border-border bg-card">
-      <button
-        type="button"
-        onClick={() => {
-          setIsOpen(open => !open);
-          setHasOpened(true);
-        }}
-        aria-expanded={isOpen}
-        className="hover:bg-surface-hover flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left transition-colors"
-      >
-        <Languages size={16} className="shrink-0 text-muted-foreground" />
-        <span className="flex-1">
-          <span className="block text-sm font-semibold text-foreground">
-            {ARTICLE_LOCALE_LABELS[locale]} version
-          </span>
-          <span className="block text-xs text-muted-foreground">
-            {exists
-              ? 'Readers can switch to this version.'
-              : 'Not written yet - readers only see the source language.'}
-          </span>
-        </span>
-        {isDirty ? (
-          <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-warning">
-            Unsaved changes
-          </span>
-        ) : null}
-        {exists ? (
-          <span className="rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-success">
-            Live
-          </span>
-        ) : null}
-        <ChevronDown
-          size={16}
-          className={`shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`}
-        />
-      </button>
+    <section
+      className="space-y-4"
+      hidden={!active}
+      lang={locale}
+      aria-label={`${ARTICLE_LOCALE_LABELS[locale]} version`}
+    >
+      {error ? <ErrorAlert message={error} /> : null}
 
-      {hasOpened ? (
-        <div className="space-y-4 border-t border-border p-5" hidden={!isOpen}>
-          {error ? <ErrorAlert message={error} /> : null}
-
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 size={14} className="animate-spin" />
-              Loading...
-            </div>
-          ) : (
-            <>
-              <Input
-                label="Title"
-                value={draft.title}
-                onChange={event => update({ title: event.target.value })}
-                placeholder={`Title in ${ARTICLE_LOCALE_LABELS[locale]}`}
-                lang={locale}
-                spellCheck
-              />
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground" htmlFor="translation-desc">
-                  Standfirst
-                </label>
-                <Textarea
-                  id="translation-desc"
-                  value={draft.description}
-                  onChange={event => update({ description: event.target.value })}
-                  placeholder="Shown in cards and search results"
-                  lang={locale}
-                  spellCheck
-                  rows={2}
-                />
-              </div>
-
-              <div
-                onKeyDownCapture={markEditorTouched}
-                onPointerDownCapture={markEditorTouched}
-                onPasteCapture={markEditorTouched}
-                onDropCapture={markEditorTouched}
-              >
-                <RichTextEditor
-                  key={editorKey}
-                  label="Body"
-                  value={editorContent}
-                  placeholder={`Write the ${ARTICLE_LOCALE_LABELS[locale]} version...`}
-                  mediaCategory={mediaCategory}
-                  onChange={html => updateBody({ contentHtml: html })}
-                  onChangeJson={json => updateBody({ contentRich: json })}
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input
-                  label="Meta title"
-                  value={draft.metaTitle}
-                  onChange={event => update({ metaTitle: event.target.value })}
-                  placeholder="Defaults to the title above"
-                  lang={locale}
-                />
-                <Input
-                  label="Meta description"
-                  value={draft.metaDescription}
-                  onChange={event => update({ metaDescription: event.target.value })}
-                  placeholder="Defaults to the standfirst above"
-                  lang={locale}
-                />
-              </div>
-
-              <SeoPreview seo={seo} slug={slug} basePath={basePath} locale={locale} />
-              {draft.title.trim() === '' ? (
-                <p className="text-xs text-muted-foreground">
-                  Until it has a title, this version is not published and its URL shows the source
-                  language.
-                </p>
-              ) : null}
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  disabled={isSaving || draft.title.trim() === ''}
-                  onClick={() => void save()}
-                >
-                  {isSaving ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Save {ARTICLE_LOCALE_LABELS[locale]}
-                </Button>
-
-                {savedAt && !isDirty ? (
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Check size={13} className="text-success" />
-                    Saved
-                  </span>
-                ) : null}
-
-                {exists ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={isSaving}
-                    onClick={() => void remove()}
-                    className="ml-auto text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 size={14} />
-                    Remove
-                  </Button>
-                ) : null}
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Empty fields fall back in this order: the meta fields use this version&apos;s title
-                and standfirst first, then the source language. Changes go live when you save.
-              </p>
-            </>
-          )}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 size={14} className="animate-spin" />
+          Loading...
         </div>
-      ) : null}
+      ) : (
+        <>
+          <Input
+            label="Title"
+            value={draft.title}
+            onChange={event => update({ title: event.target.value })}
+            placeholder={`Title in ${ARTICLE_LOCALE_LABELS[locale]}`}
+            lang={locale}
+            spellCheck
+          />
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground" htmlFor="translation-desc">
+              Standfirst
+            </label>
+            <Textarea
+              id="translation-desc"
+              value={draft.description}
+              onChange={event => update({ description: event.target.value })}
+              placeholder="Shown in cards and search results"
+              lang={locale}
+              spellCheck
+              rows={2}
+            />
+          </div>
+
+          <div
+            onKeyDownCapture={markEditorTouched}
+            onPointerDownCapture={markEditorTouched}
+            onPasteCapture={markEditorTouched}
+            onDropCapture={markEditorTouched}
+          >
+            <RichTextEditor
+              key={editorKey}
+              label="Body"
+              value={editorContent}
+              placeholder={`Write the ${ARTICLE_LOCALE_LABELS[locale]} version...`}
+              mediaCategory={mediaCategory}
+              onChange={html => updateBody({ contentHtml: html })}
+              onChangeJson={json => updateBody({ contentRich: json })}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input
+              label="Meta title"
+              value={draft.metaTitle}
+              onChange={event => update({ metaTitle: event.target.value })}
+              placeholder="Defaults to the title above"
+              lang={locale}
+            />
+            <Input
+              label="Meta description"
+              value={draft.metaDescription}
+              onChange={event => update({ metaDescription: event.target.value })}
+              placeholder="Defaults to the standfirst above"
+              lang={locale}
+            />
+          </div>
+
+          <SeoPreview seo={seo} slug={slug} basePath={basePath} locale={locale} />
+          {draft.title.trim() === '' ? (
+            <p className="text-xs text-muted-foreground">
+              Until it has a title, this version is not saved or published and its URL shows the
+              source language.
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {savedAt && !isDirty ? (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Check size={13} className="text-success" />
+                {ARTICLE_LOCALE_LABELS[locale]} saved
+              </span>
+            ) : null}
+
+            {exists ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isRemoving || isSaving}
+                onClick={() => void remove()}
+                className="ml-auto text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 size={14} />
+                Remove {ARTICLE_LOCALE_LABELS[locale]} version
+              </Button>
+            ) : null}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Not autosaved: this version is saved only by Save draft and Publish. Empty meta fields
+            use this version&apos;s title and standfirst first, then the English ones.
+          </p>
+        </>
+      )}
     </section>
   );
-}
+});
+
+export default ArticleTranslationEditor;

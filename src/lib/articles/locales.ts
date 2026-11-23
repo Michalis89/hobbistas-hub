@@ -92,7 +92,12 @@ export function resolveArticleLocale({
   if (!available || available.length === 0) {
     return SOURCE_ARTICLE_LOCALE;
   }
-  return available.includes(preferred) ? preferred : SOURCE_ARTICLE_LOCALE;
+  if (available.includes(preferred)) {
+    return preferred;
+  }
+  // The source language when it is there; otherwise (a draft with no English
+  // title yet) the language that is.
+  return available.includes(SOURCE_ARTICLE_LOCALE) ? SOURCE_ARTICLE_LOCALE : available[0];
 }
 
 /** The translatable half of an article. */
@@ -121,8 +126,13 @@ export type ArticleTranslationRow = ArticleTranslationFields & {
  */
 export function availableLocales(
   translations: readonly Pick<ArticleTranslationRow, 'locale' | 'title'>[] | null | undefined,
+  /**
+   * False only for a draft started in another language, whose source (English)
+   * title is still empty. Published articles always have one.
+   */
+  sourceHasTitle = true,
 ): ArticleLocale[] {
-  const found = new Set<ArticleLocale>([SOURCE_ARTICLE_LOCALE]);
+  const found = new Set<ArticleLocale>(sourceHasTitle ? [SOURCE_ARTICLE_LOCALE] : []);
   for (const row of translations ?? []) {
     if (isArticleLocale(row.locale) && row.title.trim() !== '') {
       found.add(row.locale);

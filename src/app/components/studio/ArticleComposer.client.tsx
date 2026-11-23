@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
@@ -22,8 +21,18 @@ import type { ContentPublishedEventDetail } from '@/app/constants/contentEvents'
 import { slugify } from '@/utils/slugify';
 import ComposerSidebar from './ComposerSidebar.client';
 import RevisionHistory, { type RestoredRevision } from './RevisionHistory.client';
-import ArticleTranslationEditor from './ArticleTranslationEditor.client';
-import { isSaveable, useArticleDraft, type ComposerDraft } from './useArticleDraft';
+import ArticleTranslationEditor, {
+  type ArticleTranslationEditorHandle,
+  type TranslationPanelState,
+} from './ArticleTranslationEditor.client';
+import {
+  isPublishable,
+  isSaveable,
+  useArticleDraft,
+  type ComposerDraft,
+  type CreatedArticle,
+} from './useArticleDraft';
+import { saveArticleLanguages } from '@/lib/articles/saveArticleLanguages';
 
 const RichTextEditor = dynamic(() => import('@/app/components/editor/RichTextEditor.client'), {
   ssr: false,
@@ -70,24 +79,57 @@ function SaveIndicator({ state, savedAt }: { state: string; savedAt: number | nu
   return null;
 }
 
+/**
+ * Autosave only covers the English row. While the Greek version has changes,
+ * say so next to the save state, so "Saved" is never read as "everything".
+ */
+function GreekPendingNotice({ englishSaved }: { englishSaved: boolean }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-warning" role="status">
+      <CircleAlert size={13} />
+      {englishSaved
+        ? 'English saved. Ελληνικά not saved yet: autosave covers English only. Press Save draft.'
+        : 'Ελληνικά not saved yet: autosave covers English only. Press Save draft.'}
+    </span>
+  );
+}
+
 export default function ArticleComposer({
   initialDraft,
   initialId,
   initialSlug,
-  previewPath,
+  previewPath: initialPreviewPath,
   canWriteArticles,
   canWriteReviews,
 }: ArticleComposerProps) {
-  const router = useRouter();
   const [slug, setSlug] = useState(initialSlug);
+  const [previewPath, setPreviewPath] = useState(initialPreviewPath);
+  const [language, setLanguage] = useState<'en' | 'el'>('en');
+  const translationRef = useRef<ArticleTranslationEditorHandle>(null);
+  const [greek, setGreek] = useState<TranslationPanelState>({
+    title: '',
+    dirty: false,
+    exists: false,
+  });
+  const [languageError, setLanguageError] = useState<string | null>(null);
+  const [isSavingAll, setIsSavingAll] = useState(false);
 
-  const handleCreated = useCallback(
-    (id: number) => {
-      // Swap the URL so a reload or a shared link lands on the saved draft.
-      router.replace(`/studio/${id}`);
-    },
-    [router],
-  );
+  const handleCreated = useCallback((id: number, created: CreatedArticle) => {
+    // The slug is fixed at creation; the previews and links use the stored one.
+    if (created.slug) {
+      setSlug(created.slug);
+    }
+    // The private preview link, available right away rather than after a reload.
+    if (created.previewPath) {
+      setPreviewPath(created.previewPath);
+    }
+    // Swap the URL so a reload or a shared link lands on the saved draft.
+    // replaceState rather than a navigation: /studio/new and /studio/[id] are
+    // different routes, and remounting would drop unsaved work in the other
+    // language tab.
+    window.history.replaceState(null, '', `/studio/${id}`);
+  }, []);
+  const getOtherLanguageTitle = useCallback(() => translationRef.current?.getTitle() ?? '', []);
 
   const {
     draft,
@@ -99,7 +141,14 @@ export default function ArticleComposer({
     error,
     clearError,
     hasUnsavedChanges,
-  } = useArticleDraft({ initial: initialDraft, initialId, onCreated: handleCreated });
+    getArticleId,
+    whenIdle,
+  } = useArticleDraft({
+    initial: initialDraft,
+    initialId,
+    onCreated: handleCreated,
+    getOtherLanguageTitle,
+  });
 
   // The editor is uncontrolled after mount; feeding it the live value back
   // would fight the cursor position, so the initial HTML is captured once.
@@ -133,7 +182,9 @@ export default function ArticleComposer({
   }, [hasUnsavedChanges]);
 
   const basePath = draft.type === 'review' ? '/review' : '/articles';
-  const previewSlug = slug ?? slugify(draft.title);
+  // Before the first save, what the slug will be: from the English title, or
+  // the Greek one for a draft started in Greek.
+  const previewSlug = slug ?? slugify(draft.title.trim() || greek.title);
   const isPublished = draft.status === 'published';
 
   // A chosen date turns the primary action from "publish" into "schedule".
@@ -143,10 +194,52 @@ export default function ArticleComposer({
   const scheduledAt = draft.scheduledFor ? new Date(draft.scheduledFor) : null;
   const wantsSchedule = !isPublished && scheduledAt !== null;
 
+  /** An explicit save waits for an autosave in flight instead of being skipped. */
+  const saveAfterIdle = async (options?: Parameters<typeof save>[0]) => {
+    await whenIdle();
+    return save(options);
+  };
+
+  /** Save draft: the article row and, when it has changes, the Greek version. */
+  const handleSaveDraft = async () => {
+    setIsSavingAll(true);
+    setLanguageError(null);
+    const result = await saveArticleLanguages({
+      saveArticle: () => saveAfterIdle(),
+      getArticleId,
+      translation: translationRef.current,
+    });
+    setLanguageError(result.error);
+    setIsSavingAll(false);
+  };
+
   const handlePublish = async () => {
     setIsPublishing(true);
-    const succeeded = await save({ status: wantsSchedule ? 'scheduled' : 'published' });
+    setLanguageError(null);
+    const translation = translationRef.current;
+    // A brand-new article with Greek changes is first saved as a draft, so the
+    // Greek version is stored before anything goes live.
+    if (getArticleId() === null && translation?.isDirty()) {
+      const draftResult = await saveArticleLanguages({
+        saveArticle: () => saveAfterIdle(),
+        getArticleId,
+        translation,
+      });
+      if (!draftResult.articleSaved || draftResult.error) {
+        setLanguageError(draftResult.error);
+        setIsPublishing(false);
+        return;
+      }
+    }
+    const result = await saveArticleLanguages({
+      saveArticle: () => saveAfterIdle({ status: wantsSchedule ? 'scheduled' : 'published' }),
+      getArticleId,
+      translation,
+      publishing: true,
+    });
+    setLanguageError(result.error);
     setIsPublishing(false);
+    const succeeded = result.articleSaved;
 
     if (!succeeded) {
       // `save` surfaced the reason in the error banner already.
@@ -177,7 +270,10 @@ export default function ArticleComposer({
     });
   };
 
-  const canPublish = isSaveable(draft) && Boolean(draft.contentHtml.trim());
+  // Unchanged rule: the English title, a category and a body.
+  const canPublish = isPublishable(draft);
+  // A draft needs a category and a title in at least one language.
+  const canSaveDraft = isSaveable(draft, greek.title);
 
   const handleRestore = useCallback(
     (revision: RestoredRevision) => {
@@ -209,6 +305,9 @@ export default function ArticleComposer({
               </Link>
             </Button>
             <SaveIndicator state={saveState} savedAt={savedAt} />
+            {greek.dirty ? (
+              <GreekPendingNotice englishSaved={saveState === 'saved' && savedAt !== null} />
+            ) : null}
             {draft.status === 'scheduled' && scheduledAt && (
               <span className="flex items-center gap-1.5 text-xs text-primary">
                 <CalendarClock size={13} />
@@ -244,15 +343,15 @@ export default function ArticleComposer({
             <Button
               variant="secondary"
               size="sm"
-              disabled={!isSaveable(draft) || saveState === 'saving'}
-              onClick={() => void save()}
+              disabled={!canSaveDraft || saveState === 'saving' || isSavingAll || isPublishing}
+              onClick={() => void handleSaveDraft()}
             >
               Save draft
             </Button>
             <Button
               variant="primary"
               size="sm"
-              disabled={!canPublish || isPublishing}
+              disabled={!canPublish || isPublishing || isSavingAll}
               onClick={() => void handlePublish()}
             >
               {wantsSchedule ? <CalendarClock size={16} /> : <Send size={16} />}
@@ -267,44 +366,122 @@ export default function ArticleComposer({
           <ErrorAlert message={error} onRetry={clearError} retryLabel="Dismiss" />
         </div>
       )}
+      {languageError && (
+        <div className="mb-6">
+          <ErrorAlert
+            message={languageError}
+            onRetry={() => setLanguageError(null)}
+            retryLabel="Dismiss"
+          />
+        </div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-4">
-          {/*
+          <div
+            role="tablist"
+            aria-label="Article language"
+            className="inline-flex rounded-xl border border-border bg-card p-1"
+          >
+            {(
+              [
+                { id: 'en', label: 'English', unsaved: false },
+                { id: 'el', label: 'Ελληνικά', unsaved: greek.dirty },
+              ] as const
+            ).map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`composer-tab-${tab.id}`}
+                aria-selected={language === tab.id}
+                aria-controls={`composer-panel-${tab.id}`}
+                onClick={() => setLanguage(tab.id)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                  language === tab.id
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {tab.label}
+                {tab.unsaved ? (
+                  <span className="size-1.5 rounded-full bg-warning" aria-label="unsaved changes" />
+                ) : null}
+              </button>
+            ))}
+          </div>
+
+          <div
+            role="tabpanel"
+            id="composer-panel-en"
+            aria-labelledby="composer-tab-en"
+            hidden={language !== 'en'}
+            lang="en"
+            className="space-y-4"
+          >
+            {/*
             Deliberately not the shared Input/Textarea primitives: those are form
             controls and bring a border, a focus ring and a min-height. Here the
             title and standfirst should read as the article itself, so they are
             plain elements carrying the reading typography.
           */}
-          <div className="focus-within:bg-surface-hover/30 hover:bg-surface-hover/25 -mx-3 rounded-xl px-3 py-2 transition-colors">
-            <input
-              value={draft.title}
-              onChange={event => update({ title: event.target.value })}
-              placeholder="Title"
-              aria-label="Article title"
-              className="w-full border-0 bg-transparent p-0 text-[clamp(1.9rem,1.2rem+2.2vw,3.25rem)] font-semibold leading-[1.12] tracking-[-0.024em] text-foreground/95 outline-none placeholder:text-muted-foreground/40 focus:outline-none focus:ring-0"
-            />
+            <div className="focus-within:bg-surface-hover/30 hover:bg-surface-hover/25 -mx-3 rounded-xl px-3 py-2 transition-colors">
+              <input
+                value={draft.title}
+                onChange={event => update({ title: event.target.value })}
+                placeholder="Title"
+                aria-label="Article title"
+                className="w-full border-0 bg-transparent p-0 text-[clamp(1.9rem,1.2rem+2.2vw,3.25rem)] font-semibold leading-[1.12] tracking-[-0.024em] text-foreground/95 outline-none placeholder:text-muted-foreground/40 focus:outline-none focus:ring-0"
+              />
 
-            <textarea
-              value={draft.description}
-              onChange={event => update({ description: event.target.value })}
-              placeholder="Add a short standfirst - shown in cards and search results"
-              aria-label="Article description"
-              rows={2}
-              className="mt-3 w-full resize-none border-0 bg-transparent p-0 text-[1.06rem] leading-8 text-foreground/70 outline-none placeholder:text-muted-foreground/40 focus:outline-none focus:ring-0"
+              <textarea
+                value={draft.description}
+                onChange={event => update({ description: event.target.value })}
+                placeholder="Add a short standfirst - shown in cards and search results"
+                aria-label="Article description"
+                rows={2}
+                className="mt-3 w-full resize-none border-0 bg-transparent p-0 text-[1.06rem] leading-8 text-foreground/70 outline-none placeholder:text-muted-foreground/40 focus:outline-none focus:ring-0"
+              />
+            </div>
+
+            <RichTextEditor
+              key={editorKey}
+              value={editorContent}
+              placeholder="Tell the story, or press / to insert a block..."
+              mediaCategory={draft.category}
+              onChange={html => {
+                latestHtmlRef.current = html;
+              }}
+              onChangeJson={json =>
+                update({ contentHtml: latestHtmlRef.current, contentRich: json })
+              }
             />
           </div>
 
-          <RichTextEditor
-            key={editorKey}
-            value={editorContent}
-            placeholder="Tell the story, or press / to insert a block..."
-            mediaCategory={draft.category}
-            onChange={html => {
-              latestHtmlRef.current = html;
-            }}
-            onChangeJson={json => update({ contentHtml: latestHtmlRef.current, contentRich: json })}
-          />
+          <div
+            role="tabpanel"
+            id="composer-panel-el"
+            aria-labelledby="composer-tab-el"
+            hidden={language !== 'el'}
+          >
+            {/* Mounted from the start and only hidden, so switching tabs keeps unsaved work. */}
+            <ArticleTranslationEditor
+              ref={translationRef}
+              articleId={articleId}
+              locale="el"
+              mediaCategory={draft.category}
+              source={{
+                title: draft.title,
+                description: draft.description,
+                meta_title: draft.metaTitle,
+                meta_description: draft.metaDescription,
+              }}
+              slug={previewSlug}
+              basePath={basePath}
+              active={language === 'el'}
+              onStateChange={setGreek}
+            />
+          </div>
         </div>
 
         <div className="space-y-6">
@@ -318,31 +495,12 @@ export default function ArticleComposer({
         </div>
       </div>
 
-      {/*
-        Full width rather than in the sidebar: it hosts a second rich text
-        editor, which needs the same room as the one above it.
-      */}
-      <div className="mt-8">
-        <ArticleTranslationEditor
-          articleId={articleId}
-          locale="el"
-          mediaCategory={draft.category}
-          source={{
-            title: draft.title,
-            description: draft.description,
-            meta_title: draft.metaTitle,
-            meta_description: draft.metaDescription,
-          }}
-          slug={previewSlug}
-          basePath={basePath}
-        />
-      </div>
-
-      {articleId === null && (
-        <p className="mt-6 text-xs text-muted-foreground">
-          A draft is saved automatically once this has a title and a category.
-        </p>
-      )}
+      <p className="mt-6 text-xs text-muted-foreground">
+        {articleId === null ? 'Start in English or Ελληνικά. ' : null}
+        Autosave covers the English version only (once it has a title and a category). The Ελληνικά
+        version is saved only when you press Save draft or Publish. Publishing needs the English
+        version.
+      </p>
     </div>
   );
 }

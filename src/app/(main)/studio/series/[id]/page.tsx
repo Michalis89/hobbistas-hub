@@ -70,7 +70,7 @@ export default async function EditSeriesPage({ params }: { params: Promise<{ id:
   const assigned = new Map((assignments ?? []).map(row => [row.article_id, row.series_id]));
   const articles: SeriesEditorArticle[] = allRows.map(row => ({
     id: row.id,
-    title: row.title,
+    title: row.title || 'Untitled draft',
     status: row.status ?? 'draft',
     author_id: row.author_id,
     assignedElsewhere: assigned.has(row.id) && assigned.get(row.id) !== id,

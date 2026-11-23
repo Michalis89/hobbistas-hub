@@ -41,38 +41,40 @@ jest.mock('@/lib/routes/authRoutes', () => ({
   shouldRedirectToLogin: jest.fn(() => false),
 }));
 
-describe('AuthInit syncCookies inflight dedupe', () => {
+describe('AuthInit syncCookies re-export', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     global.fetch = mockFetch as unknown as typeof fetch;
   });
 
-  it('coalesces concurrent calls and clears inflight for sequential calls', async () => {
-    const delayedOkResponse = new Promise<{ ok: boolean; status: number }>(resolve => {
-      setTimeout(() => resolve({ ok: true, status: 200 }), 10);
-    });
-    mockFetch.mockReturnValue(delayedOkResponse);
+  // The behaviour itself is covered in src/lib/auth/__tests__/syncCookies.test.ts.
+  it('is the shared latest-tokens-win implementation', async () => {
+    const fromAuthInit = (await import('@/app/components/AuthInit')).syncCookies;
+    const fromLib = (await import('@/lib/auth/syncCookies')).syncCookies;
+    expect(fromAuthInit).toBe(fromLib);
+  });
+
+  it('writes newer tokens that arrive during an in-flight sync instead of dropping them', async () => {
+    let release: (value: { ok: boolean; status: number }) => void = () => {};
+    mockFetch
+      .mockReturnValueOnce(new Promise(resolve => (release = resolve)))
+      .mockResolvedValueOnce({ ok: true, status: 200 });
 
     const { syncCookies } = await import('@/app/components/AuthInit');
-    const session = { access_token: 'token-a', refresh_token: 'refresh-a', expires_in: 3600 };
-
-    const first = syncCookies(session);
+    const first = syncCookies({
+      access_token: 'token-a',
+      refresh_token: 'refresh-a',
+      expires_in: 3600,
+    });
     const second = syncCookies({
       access_token: 'token-b',
       refresh_token: 'refresh-b',
       expires_in: 3600,
     });
+    release({ ok: true, status: 200 });
 
-    const [resultA, resultB] = await Promise.all([first, second]);
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(resultA).toBe(true);
-    expect(resultB).toBe(resultA);
-
-    mockFetch.mockResolvedValueOnce({ ok: true, status: 200 });
-    const third = await syncCookies(session);
-
-    expect(third).toBe(true);
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
     expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(mockFetch.mock.calls[1][1].body).access_token).toBe('token-b');
   });
 });

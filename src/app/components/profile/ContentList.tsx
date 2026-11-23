@@ -158,7 +158,9 @@ export function ContentList() {
                   <TopicIcon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-medium text-foreground">{article.title}</h3>
+                  <h3 className="truncate text-sm font-medium text-foreground">
+                    {article.title || 'Untitled draft'}
+                  </h3>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <Badge variant="secondary" className={`border ${STATUS_BADGE[article.status]}`}>
                       {article.status}
