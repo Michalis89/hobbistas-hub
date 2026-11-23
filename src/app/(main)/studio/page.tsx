@@ -55,7 +55,7 @@ function ScheduledLabel({ scheduledFor, isOverdue }: { scheduledFor: string; isO
 }
 
 export default async function StudioPage() {
-  const { session, canManageAllContent } = await requireStudioAccess();
+  const { session, canManageAllContent, canCreate } = await requireStudioAccess();
   const supabase = await createRouteHandlerClient();
 
   let query = supabase
@@ -95,12 +95,14 @@ export default async function StudioPage() {
         eyebrow="Write"
         align="left"
         actions={
-          <Button asChild>
-            <Link href="/studio/new">
-              <Plus size={16} />
-              New
-            </Link>
-          </Button>
+          canCreate ? (
+            <Button asChild>
+              <Link href="/studio/new">
+                <Plus size={16} />
+                New
+              </Link>
+            </Button>
+          ) : undefined
         }
       />
 

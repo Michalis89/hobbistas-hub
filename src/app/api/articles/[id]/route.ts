@@ -13,7 +13,7 @@ import { fail, ok } from '@/lib/api/response';
 import { revalidateCache } from '@/lib/cache/tags';
 import { collectArticleMediaLinks, syncArticleMediaLinks } from '@/lib/articles/mediaLinks';
 import { snapshotArticleRevision } from '@/lib/articles/revisions';
-import { hasAnyRole } from '@/lib/roles';
+import { canManageAllArticles } from '@/lib/roles';
 import { getUserFullInfo } from '@/lib/services/userService';
 
 // GET - Fetch single article by ID or slug
@@ -88,13 +88,13 @@ async function PUTHandler(req: Request, { params }: { params: Promise<{ id: stri
       return fail({ error: 'Article not found' }, 404);
     }
 
-    // Check permission (author or admin)
+    // The author, or a role that manages every article (admin, owner, moderator).
     const userData = await getUserFullInfo(supabase, session.user.id);
 
     const isAuthor = existingArticle.author_id === session.user.id;
-    const isAdmin = hasAnyRole(userData, ['admin', 'owner', 'reviewer']);
+    const canManageAll = canManageAllArticles(userData);
 
-    if (!isAuthor && !isAdmin) {
+    if (!isAuthor && !canManageAll) {
       return fail({ error: 'Access forbidden' }, 403);
     }
 
@@ -322,13 +322,13 @@ async function DELETEHandler(_req: Request, { params }: { params: Promise<{ id: 
       return fail({ error: 'Article not found' }, 404);
     }
 
-    // Check permission (author or admin)
+    // The author, or a role that manages every article (admin, owner, moderator).
     const userData = await getUserFullInfo(supabase, session.user.id);
 
     const isAuthor = existingArticle.author_id === session.user.id;
-    const isAdmin = hasAnyRole(userData, ['admin', 'owner', 'reviewer']);
+    const canManageAll = canManageAllArticles(userData);
 
-    if (!isAuthor && !isAdmin) {
+    if (!isAuthor && !canManageAll) {
       return fail({ error: 'Access forbidden' }, 403);
     }
 

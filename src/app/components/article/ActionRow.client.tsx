@@ -6,7 +6,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ClipboardCopy, Heart, Pencil, Share2, Trash2 } from 'lucide-react';
 import type { ArticleRow } from '@/types/database';
-import { selectCanEditArticles, selectIsAuthorOf } from '@/store/slices/authSlice';
+import {
+  selectCanEditArticles,
+  selectCanManageAllArticles,
+  selectIsAuthorOf,
+} from '@/store/slices/authSlice';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -26,14 +30,17 @@ const ACTION_BUTTON_BASE =
 
 export default function ActionRow({ article, className }: ActionRowProps) {
   const router = useRouter();
-  const canEditRaw = useSelector(selectCanEditArticles);
+  const canWriteRaw = useSelector(selectCanEditArticles);
+  const canManageAllRaw = useSelector(selectCanManageAllArticles);
   const isAuthorRaw = useSelector(selectIsAuthorOf(article.author_id));
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
-  const canEdit = mounted && canEditRaw;
   const isAuthor = mounted && isAuthorRaw;
+  // The same rule as the API: the author (while they still hold a writing
+  // role), or a role that manages every article. Anyone else got a 403.
+  const canEdit = mounted && ((canWriteRaw && isAuthorRaw) || canManageAllRaw);
   const [likeState, setLikeState] = useState<LikeState>({
     liked: false,
     count: article.likes || 0,

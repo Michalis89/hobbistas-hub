@@ -46,4 +46,12 @@ export const isAdminLike = (user: RoleCarrier): boolean => hasAnyRole(user, ['ad
 export const isAdminOrModerator = (user: RoleCarrier): boolean =>
   hasAnyRole(user, ['admin', 'owner', 'moderator']);
 
+/**
+ * May read and edit every article and review, drafts included, not just their
+ * own. The database enforces the same rule as `public.can_manage_all_articles()`
+ * (supabase/migrations/20261123_rc060_staff_article_access.sql), so the two
+ * must change together.
+ */
+export const canManageAllArticles = (user: RoleCarrier): boolean => isAdminOrModerator(user);
+
 export const isOwner = (user: RoleCarrier): boolean => hasAnyRole(user, ['owner']);
