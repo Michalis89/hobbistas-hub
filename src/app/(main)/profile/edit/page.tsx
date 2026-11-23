@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { selectUser, updateUserProfile, logout, fetchSession } from '@/store/slices/authSlice';
 import type { AppDispatch } from '@/store/store';
 import type { ProfileVisibility, User } from '@/types/user';
+import type { UserSelfUpdate } from '@/lib/users/editableColumns';
 import { supabase } from '@/lib/supabase-client';
 import { useUserSettings } from '@/lib/settings/useUserSettings';
 import { isDemoUserId } from '@/lib/demo';
@@ -447,9 +448,9 @@ export default function EditProfilePage() {
       const emptyToNull = (val: string | null | undefined): string | null =>
         val && val.trim() !== '' ? val.trim() : null;
 
-      // Only update fields that belong to public.users.
+      // Only the self-editable public.users columns (see USER_SELF_EDITABLE_COLUMNS).
       // Category/game fields now live in user_category_profiles and are sent below.
-      const userUpdates: Partial<User> = {
+      const userUpdates: UserSelfUpdate = {
         full_name: emptyToNull(rest.full_name),
         date_of_birth: emptyToNull(rest.date_of_birth),
         country: emptyToNull(rest.country),

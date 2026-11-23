@@ -262,6 +262,34 @@ describe('authSlice', () => {
     expect(store.getState().auth.error).toBe('update fail');
   });
 
+  it('updateUserProfile sends only the self-editable columns', async () => {
+    const store = makeStore();
+    const single = jest.fn().mockResolvedValue({ data: user, error: null });
+    const select = jest.fn().mockReturnValue({ single });
+    const eq = jest.fn().mockReturnValue({ select });
+    const update = jest.fn().mockReturnValue({ eq });
+    (supabase.from as jest.Mock).mockReturnValue({ update });
+
+    // A payload widened at runtime (e.g. spread from a full user object) must
+    // not carry server-owned columns to the database.
+    const widened = {
+      bio: 'x',
+      location_city: 'Athens',
+      roles: ['owner'],
+      account_status: 'active',
+      is_demo: false,
+      email: 'attacker@example.com',
+      email_verified: true,
+      username: 'renamed',
+      last_login: '2026-01-01T00:00:00Z',
+    } as unknown as Parameters<typeof updateUserProfile>[0]['updates'];
+
+    await store.dispatch(updateUserProfile({ userId: 'u1', updates: widened }));
+
+    expect(update).toHaveBeenCalledWith({ bio: 'x', location_city: 'Athens' });
+    expect(eq).toHaveBeenCalledWith('id', 'u1');
+  });
+
   it('uses fallback reducer messages when rejected action has no message', () => {
     let state = authReducer(undefined, { type: '@@INIT' });
 

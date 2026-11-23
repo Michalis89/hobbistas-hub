@@ -7,6 +7,7 @@ import { withApiRoute } from '@/lib/observability/withApiRoute';
  */
 
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { validateEmail, validatePassword } from '@/utils/validation/auth';
 import type { Database } from '@/lib/supabase/database.types';
 import { API_ERRORS } from '@/lib/api/errors';
@@ -143,7 +144,10 @@ async function POSTHandler(req: Request) {
     let resolvedUserProfile = userProfile;
     if (!resolvedUserProfile) {
       const generatedUsername = fallbackUsername(email, authData.user.id);
-      const { data: createdProfile, error: createProfileError } = await authedSupabase
+      // Service role: signed-in users may not INSERT into public.users or write
+      // email/username themselves. The id comes from the verified sign-in above,
+      // never from the request body.
+      const { data: createdProfile, error: createProfileError } = await createSupabaseAdminClient()
         .from('users')
         .upsert(
           {

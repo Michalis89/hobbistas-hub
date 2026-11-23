@@ -23,6 +23,19 @@ jest.mock('@/lib/supabase-route-handler', () => ({
   createRouteHandlerClient: (...args: unknown[]) => createRouteHandlerClientMock(...args),
 }));
 
+// The fallback profile insert goes through the service role. createAuthedClient
+// below points this at its own upsert spy, so a test sees the write wherever it
+// lands, while the user-token client deliberately has no upsert at all.
+let adminUsersUpsert: jest.Mock = jest.fn();
+const createSupabaseAdminClientMock = jest.fn(() => ({
+  from: (table: string) => (table === 'users' ? { upsert: adminUsersUpsert } : {}),
+}));
+
+jest.mock('@/lib/supabase/admin', () => ({
+  __esModule: true,
+  createSupabaseAdminClient: () => createSupabaseAdminClientMock(),
+}));
+
 jest.mock('@/utils/validation/auth', () => ({
   __esModule: true,
   validateEmail: (...args: unknown[]) => validateEmailMock(...args),
@@ -146,6 +159,7 @@ function createAuthedClient(opts?: {
   });
   const upsertSelect = jest.fn().mockReturnValue({ single: upsertSingle });
   const upsert = jest.fn().mockReturnValue({ select: upsertSelect });
+  adminUsersUpsert = upsert;
 
   const categoryMaybeSingle = jest.fn().mockResolvedValue({
     data: hasCategoryData
@@ -158,9 +172,9 @@ function createAuthedClient(opts?: {
 
   const from = jest.fn().mockImplementation((table: string) => {
     if (table === 'users') {
+      // No upsert: the user's own JWT must never write public.users here.
       return {
         select: profileSelect,
-        upsert,
       };
     }
     if (table === 'user_category_profiles') {
@@ -189,6 +203,10 @@ describe('app/api/auth/login/route', () => {
     rateLimitHeadersMock.mockReset();
     verifyCaptchaTokenMock.mockReset();
     setAuthCookiesMock.mockReset();
+    createSupabaseAdminClientMock.mockReset();
+    createSupabaseAdminClientMock.mockImplementation(() => ({
+      from: (table: string) => (table === 'users' ? { upsert: adminUsersUpsert } : {}),
+    }));
 
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -469,9 +487,29 @@ describe('app/api/auth/login/route', () => {
     const body = await res.json();
     expect(body.data.redirectUrl).toBe('/onboarding');
     expect(setAuthCookiesMock).not.toHaveBeenCalled();
+    expect(createSupabaseAdminClientMock).toHaveBeenCalledTimes(1);
     expect(authedClient.spies.upsert).toHaveBeenCalled();
     const upsertArg = authedClient.spies.upsert.mock.calls[0]?.[0];
     expect(upsertArg.username.startsWith('user_')).toBe(true);
+    // The id comes from the verified sign-in, and no privileged column is sent.
+    expect(upsertArg.id).toBe('id-1234567890');
+    expect(Object.keys(upsertArg).sort()).toEqual(
+      ['display_name', 'email', 'full_name', 'id', 'username'].sort(),
+    );
+  });
+
+  it('does not use the service role when the profile already exists', async () => {
+    const loginClient = createLoginClient();
+    const authedClient = createAuthedClient({ categoryProfiles: { games: {} } });
+    createRouteHandlerClientMock
+      .mockResolvedValueOnce(loginClient)
+      .mockResolvedValueOnce(authedClient);
+
+    const res = await POST(makeRequest({ identifier: 'user@example.com', password: 'secret' }));
+
+    expect(res.status).toBe(200);
+    expect(createSupabaseAdminClientMock).not.toHaveBeenCalled();
+    expect(authedClient.spies.upsert).not.toHaveBeenCalled();
   });
 
   it('initializes profile using identifier email when auth user email is missing', async () => {
