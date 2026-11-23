@@ -29,6 +29,16 @@ describe('self-editable public.users columns', () => {
     expect([...grantedColumns(sql)].sort()).toEqual([...USER_SELF_EDITABLE_COLUMNS].sort());
   });
 
+  it('uses the same list in the post-REVOKE effective-privilege check', () => {
+    const match = sql.match(/editable\s+constant\s+text\[\]\s*:=\s*array\[([^\]]*)\]/i);
+    expect(match).not.toBeNull();
+    const columns = match![1]
+      .split(',')
+      .map(column => column.trim().replace(/^'|'$/g, ''))
+      .filter(Boolean);
+    expect([...columns].sort()).toEqual([...USER_SELF_EDITABLE_COLUMNS].sort());
+  });
+
   it('never includes a privileged column', () => {
     const privileged = [
       'id',

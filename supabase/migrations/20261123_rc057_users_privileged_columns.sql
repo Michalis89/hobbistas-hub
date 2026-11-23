@@ -61,8 +61,10 @@ begin
 end $$;
 
 -- 1. Privileges ------------------------------------------------------------
--- Revoking the table-level privilege also removes any column-level UPDATE
--- grants, so the GRANT below is the complete list.
+-- A table-level REVOKE also removes column-level grants, but only those made
+-- by the role running it (postgres, the owner). A grant made by any other
+-- grantor survives, so step 1b re-checks the effective result and aborts if
+-- anything is left.
 revoke insert, update on table public.users from anon, authenticated;
 
 grant update (
@@ -78,6 +80,47 @@ grant update (
   privacy_settings,
   social_links
 ) on table public.users to authenticated;
+
+-- 1b. Verify the EFFECTIVE privileges -------------------------------------
+-- has_table_privilege / has_column_privilege count every grantor, PUBLIC and
+-- role membership, so this catches grants the REVOKE above could not remove
+-- (another grantor, a grant to PUBLIC, an inherited role). Fail closed: any
+-- leftover aborts the whole migration and nothing is changed.
+do $$
+declare
+  editable constant text[] := array[
+    'full_name', 'display_name', 'bio', 'avatar_url', 'date_of_birth', 'country',
+    'timezone', 'language_preference', 'location_city', 'privacy_settings', 'social_links'
+  ];
+  leftover text;
+begin
+  select string_agg(format('%s %s on %s', r.role, r.priv, r.target), ', ' order by 1)
+    into leftover
+  from (
+    -- No INSERT/UPDATE at table level for either API role.
+    select api.role, p.priv, 'table' as target
+    from unnest(array['anon', 'authenticated']) api(role),
+         unnest(array['INSERT', 'UPDATE']) p(priv)
+    where has_table_privilege(api.role, 'public.users', p.priv)
+    union all
+    -- No INSERT on any column, and UPDATE only on the editable columns and
+    -- only for authenticated.
+    select api.role, p.priv, att.attname::text
+    from pg_attribute att,
+         unnest(array['anon', 'authenticated']) api(role),
+         unnest(array['INSERT', 'UPDATE']) p(priv)
+    where att.attrelid = 'public.users'::regclass
+      and att.attnum > 0
+      and not att.attisdropped
+      and has_column_privilege(api.role, 'public.users', att.attname, p.priv)
+      and not (api.role = 'authenticated' and p.priv = 'UPDATE' and att.attname = any (editable))
+  ) r;
+
+  if leftover is not null then
+    raise exception 'users_privileged_columns: privileges still present after REVOKE: %', leftover
+      using hint = 'Revoke them as their original grantor (see the grantor column in aclexplode(relacl) / aclexplode(attacl)), then re-run.';
+  end if;
+end $$;
 
 -- 2. Defence in depth ------------------------------------------------------
 -- SECURITY INVOKER on purpose: current_user is then the API role for PostgREST

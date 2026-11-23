@@ -217,11 +217,71 @@ describeDb('public.users privileged columns (local database)', () => {
         `);
       }
     });
+
+    // A table-level REVOKE run as postgres only removes grants postgres made.
+    it('aborts when a column grant from another grantor would survive the REVOKE', async () => {
+      await db.query(`
+        create role hob_third_grantor nologin;
+        grant hob_third_grantor to postgres;
+        grant update (roles) on public.users to hob_third_grantor with grant option;
+        set role hob_third_grantor;
+        grant update (roles) on public.users to authenticated;
+        reset role;
+      `);
+      try {
+        await expect(db.query(MIGRATION)).rejects.toThrow(
+          /privileges still present after REVOKE: .*authenticated UPDATE on roles/,
+        );
+        await db.query('rollback');
+        const { rows } = await db.query(`
+          select has_table_privilege('authenticated', 'public.users', 'UPDATE') as table_update,
+                 exists (select 1 from pg_trigger
+                         where tgrelid = 'public.users'::regclass
+                           and tgname = 'users_guard_privileged_columns') as guard_installed`);
+        expect(rows[0]).toEqual({ table_update: true, guard_installed: false });
+      } finally {
+        await db.query(`
+          set role hob_third_grantor;
+          revoke update (roles) on public.users from authenticated;
+          reset role;
+          revoke update (roles) on public.users from hob_third_grantor cascade;
+          revoke hob_third_grantor from postgres;
+          drop role hob_third_grantor;
+        `);
+      }
+    });
+
+    it('aborts when PUBLIC holds a privileged column grant', async () => {
+      await db.query('grant update (account_status) on public.users to public');
+      try {
+        await expect(db.query(MIGRATION)).rejects.toThrow(
+          /privileges still present after REVOKE: .*UPDATE on account_status/,
+        );
+        await db.query('rollback');
+      } finally {
+        await db.query('revoke update (account_status) on public.users from public');
+      }
+    });
   });
 
   describe('after the migration', () => {
     beforeAll(async () => {
+      // Independent column-level grants made by the owner, as a manual GRANT in
+      // the SQL editor would leave them. The migration must remove them.
+      await db.query(`
+        grant update (roles, email, account_status) on public.users to authenticated;
+        grant insert (id, email, username, roles) on public.users to anon;
+      `);
       await db.query(MIGRATION);
+    });
+
+    it('removed the independent column-level grants that existed before', async () => {
+      const { rows } = await db.query(`
+        select has_column_privilege('authenticated', 'public.users', 'roles', 'UPDATE') as roles,
+               has_column_privilege('authenticated', 'public.users', 'email', 'UPDATE') as email,
+               has_column_privilege('authenticated', 'public.users', 'account_status', 'UPDATE') as status,
+               has_column_privilege('anon', 'public.users', 'roles', 'INSERT') as anon_insert`);
+      expect(rows[0]).toEqual({ roles: false, email: false, status: false, anon_insert: false });
     });
 
     describe('catalog', () => {
