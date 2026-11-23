@@ -47,6 +47,10 @@ const withPWA = withPWAInit({
         handler: 'NetworkOnly',
       },
       {
+        urlPattern: /\/api\/series(?:\/|$|\?)/i,
+        handler: 'NetworkOnly',
+      },
+      {
         urlPattern: /\/api\/(articles|public)\//i,
         handler: 'StaleWhileRevalidate',
         options: {

@@ -11,6 +11,10 @@ import { buildArticleJsonLd, buildReviewJsonLd } from '@/lib/seo/jsonld';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { getUserSettings } from '@/lib/settings';
 
+jest.mock('@/lib/articles/series', () => ({
+  getPublicSeries: jest.fn().mockResolvedValue(null),
+}));
+
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ href, children }: { href: string; children: ReactNode }) => (
