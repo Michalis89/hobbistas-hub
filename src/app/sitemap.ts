@@ -3,8 +3,6 @@ import { unstable_cache } from 'next/cache';
 import { SITE_URL } from '@/config/site';
 import { CACHE_TAGS } from '@/lib/cache/tags';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SeriesDatabase } from '@/lib/articles/seriesDatabase';
 import { normalizeSlug } from '@/utils/slugify';
 import {
   articleLocalePath,
@@ -181,7 +179,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries = await getPublishedArticleSitemapEntries();
   // The database applies the same eligibility predicate to every series,
   // without exposing membership rows or relying on a truncated article list.
-  const db = createSupabaseAdminClient() as unknown as SupabaseClient<SeriesDatabase>;
+  const db = createSupabaseAdminClient();
   const { data: series, error } = await db.rpc('public_series_sitemap');
   if (error) {
     console.error('Failed to build series sitemap', error.message);

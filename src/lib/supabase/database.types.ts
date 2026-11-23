@@ -580,6 +580,115 @@ export type Database = {
           },
         ]
       }
+      article_series: {
+        Row: {
+          cover_image: string | null
+          created_at: string
+          description: string | null
+          id: number
+          owner_id: string | null
+          slug: string
+          status: string
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          cover_image?: string | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          owner_id?: string | null
+          slug: string
+          status?: string
+          title: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          cover_image?: string | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          owner_id?: string | null
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_series_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_series_chapters: {
+        Row: {
+          article_id: number
+          position: number
+          series_id: number
+        }
+        Insert: {
+          article_id: number
+          position: number
+          series_id: number
+        }
+        Update: {
+          article_id?: number
+          position?: number
+          series_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_series_chapters_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: true
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_series_chapters_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "article_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_series_translations: {
+        Row: {
+          description: string | null
+          locale: string
+          series_id: number
+          title: string
+        }
+        Insert: {
+          description?: string | null
+          locale: string
+          series_id: number
+          title: string
+        }
+        Update: {
+          description?: string | null
+          locale?: string
+          series_id?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_series_translations_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "article_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       article_translations: {
         Row: {
           article_id: number
@@ -2809,12 +2918,32 @@ export type Database = {
         Args: { p_ticket_id: string }
         Returns: boolean
       }
+      public_series_sitemap: {
+        Args: never
+        Returns: {
+          has_greek: boolean
+          slug: string
+          updated_at: string
+        }[]
+      }
       publish_due_articles: { Args: never; Returns: number }
       purge_old_dnd_deletes: { Args: never; Returns: undefined }
       reorder_pins: {
         Args: { p_category: string; p_order: Json; p_user_id: string }
         Returns: undefined
       }
+      replace_series_chapters: {
+        Args: {
+          p_article_ids: number[]
+          p_series_id: number
+          p_version: number
+        }
+        Returns: number
+      }
+      series_can_create: { Args: never; Returns: boolean }
+      series_can_manage: { Args: { p_series_id: number }; Returns: boolean }
+      series_can_manage_all: { Args: never; Returns: boolean }
+      series_is_public: { Args: { p_series_id: number }; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       update_user_last_login: { Args: { user_id: string }; Returns: undefined }

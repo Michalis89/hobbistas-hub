@@ -1,6 +1,4 @@
 import Link from 'next/link';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SeriesDatabase } from '@/lib/articles/seriesDatabase';
 import { requireSeriesStudioAccess } from '@/lib/articles/seriesStudioAccess';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { PageContainer } from '@/app/components/layout';
@@ -8,7 +6,7 @@ import { PageContainer } from '@/app/components/layout';
 export const dynamic = 'force-dynamic';
 export default async function SeriesStudioPage() {
   const access = await requireSeriesStudioAccess();
-  const db = (await createRouteHandlerClient()) as unknown as SupabaseClient<SeriesDatabase>;
+  const db = await createRouteHandlerClient();
   // RLS returns exactly the series this user may manage; the owner filter only
   // keeps an editor's list focused on their own work.
   let query = db
