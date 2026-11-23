@@ -36,10 +36,16 @@ const failure = (status: number, message: string): ArticleImageUploadResult => (
  *
  * `pathPrefix` separates cover art from images embedded in article bodies so
  * the two can be listed, audited or garbage-collected independently.
+ *
+ * `allowedRoles` defaults to the article editorial roles. Series covers pass
+ * the Series Management roles, which also include moderators.
  */
 export async function uploadArticleImage(
   request: Request,
-  { pathPrefix }: { pathPrefix: string },
+  {
+    pathPrefix,
+    allowedRoles = ALLOWED_ROLES,
+  }: { pathPrefix: string; allowedRoles?: readonly string[] },
 ): Promise<ArticleImageUploadResult> {
   try {
     const supabase = await createRouteHandlerClient();
@@ -72,7 +78,7 @@ export async function uploadArticleImage(
     }
 
     const userRoles = Array.isArray(user.roles) ? user.roles : [];
-    if (!userRoles.some(role => ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number]))) {
+    if (!userRoles.some(role => allowedRoles.includes(role))) {
       return failure(403, 'You do not have permission for this action.');
     }
 

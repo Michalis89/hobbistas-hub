@@ -1,5 +1,6 @@
 const COVER_API_PATH = '/api/uploads/article-cover';
 const BODY_API_PATH = '/api/uploads/article-image';
+const SERIES_COVER_API_PATH = '/api/uploads/series-cover';
 
 async function postImage(apiPath: string, file: File): Promise<string> {
   const formData = new FormData();
@@ -25,6 +26,11 @@ async function postImage(apiPath: string, file: File): Promise<string> {
 /** Cover art shown in cards, hero sections and Open Graph previews. */
 export function uploadArticleCoverImage(file: File): Promise<string> {
   return postImage(COVER_API_PATH, file);
+}
+
+/** Cover art for an article series (landing page and Open Graph). */
+export function uploadSeriesCoverImage(file: File): Promise<string> {
+  return postImage(SERIES_COVER_API_PATH, file);
 }
 
 /** Images embedded in the article body via the editor. */

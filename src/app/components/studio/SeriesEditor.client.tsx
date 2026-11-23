@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import SeriesCoverField from './SeriesCoverField.client';
 
 export type SeriesEditorArticle = {
   id: number;
@@ -48,6 +49,7 @@ export default function SeriesEditor({
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [createdId, setCreatedId] = useState<number | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const byId = new Map(articles.map(article => [article.id, article]));
   async function send(url: string, method: string, body?: object) {
     const response = await fetch(url, {
@@ -65,13 +67,15 @@ export default function SeriesEditor({
     setBusy(true);
     setMessage('');
     try {
-      const payload = { title, slug, description, cover_image: cover, status };
+      const payload = { title, slug, description, cover_image: cover.trim(), status };
       const data = await send(
         initial ? `/api/series/${initial.id}` : '/api/series',
         initial ? 'PUT' : 'POST',
         payload,
       );
       const id = initial?.id ?? data.id;
+      // Show what was actually stored, so the form matches a reload.
+      setCover(data?.cover_image ?? '');
       if (!initial) {
         setCreatedId(id);
       }
@@ -182,17 +186,12 @@ export default function SeriesEditor({
             maxLength={2000}
           />
         </label>
-        <label>
-          Cover image URL
-          <input
-            className={field}
-            value={cover}
-            onChange={e => setCover(e.target.value)}
-            type="url"
-            pattern="https://.*"
-            placeholder="https://…"
-          />
-        </label>
+        <SeriesCoverField
+          value={cover}
+          onChange={setCover}
+          onUploadingChange={setUploadingCover}
+          disabled={busy}
+        />
         <label>
           Greek title
           <input
@@ -226,7 +225,7 @@ export default function SeriesEditor({
         )}
         <button
           className="w-fit rounded-md bg-primary px-4 py-2 text-primary-foreground"
-          disabled={busy || (!initial && createdId !== null)}
+          disabled={busy || uploadingCover || (!initial && createdId !== null)}
           onClick={() => void save()}
         >
           {initial ? 'Save metadata' : 'Create draft'}
@@ -238,7 +237,13 @@ export default function SeriesEditor({
         </p>
       )}
       {!initial && createdId !== null && (
-        <p>The draft was created. <Link className="text-primary" href={`/studio/series/${createdId}`}>Open it to finish editing</Link>.</p>
+        <p>
+          The draft was created.{' '}
+          <Link className="text-primary" href={`/studio/series/${createdId}`}>
+            Open it to finish editing
+          </Link>
+          .
+        </p>
       )}
       {initial && (
         <section className="space-y-4 rounded-xl border border-border bg-card p-5">

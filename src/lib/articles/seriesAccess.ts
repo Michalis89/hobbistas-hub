@@ -22,6 +22,12 @@ export const SERIES_EDITOR_ROLES = [
   'owner',
 ] as const satisfies readonly UserRole[];
 
+/** Everyone who may open Series Management (and upload series covers). */
+export const SERIES_STUDIO_ROLES = [
+  ...SERIES_EDITOR_ROLES,
+  'moderator',
+] as const satisfies readonly UserRole[];
+
 type RoleCarrier = { roles?: string[] | null } | null | undefined;
 
 /** May create a series (and then manage the ones they own). */
