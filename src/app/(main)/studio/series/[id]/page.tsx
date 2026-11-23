@@ -1,6 +1,4 @@
 import { notFound } from 'next/navigation';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SeriesDatabase } from '@/lib/articles/seriesDatabase';
 import { requireSeriesStudioAccess } from '@/lib/articles/seriesStudioAccess';
 import { canManageSeries } from '@/lib/articles/seriesAccess';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
@@ -19,7 +17,7 @@ export default async function EditSeriesPage({ params }: { params: Promise<{ id:
   }
   const access = await requireSeriesStudioAccess();
   const userId = access.session.user.id;
-  const db = (await createRouteHandlerClient()) as unknown as SupabaseClient<SeriesDatabase>;
+  const db = await createRouteHandlerClient();
   const { data: series } = await db.from('article_series').select('*').eq('id', id).maybeSingle();
   if (!series || !canManageSeries({ roles: access.roles }, userId, series)) {
     notFound();
@@ -51,7 +49,7 @@ export default async function EditSeriesPage({ params }: { params: Promise<{ id:
   }
   const { data: rows } = await query;
 
-  const admin = getSupabaseServer() as unknown as SupabaseClient<SeriesDatabase>;
+  const admin = getSupabaseServer();
   // This user manages the series, so the titles of its current chapters may be
   // shown even when another author wrote them (they are not in the picker).
   const pickerIds = new Set((rows ?? []).map(row => row.id));
@@ -82,6 +80,8 @@ export default async function EditSeriesPage({ params }: { params: Promise<{ id:
   }));
   const initial: SeriesEditorInitial = {
     ...series,
+    // The column is text with a CHECK constraint; the generated type is string.
+    status: series.status === 'published' ? 'published' : 'draft',
     translation: translation ?? null,
     chapterIds,
   };

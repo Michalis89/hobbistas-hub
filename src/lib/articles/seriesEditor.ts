@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SeriesDatabase } from './seriesDatabase';
+import type { Database } from '@/lib/supabase/database.types';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { requireAuth, UnauthorizedError } from '@/lib/api/auth';
 import { getUserFullInfo } from '@/lib/services/userService';
@@ -11,7 +11,7 @@ export async function editorContext() {
   const session = await requireAuth(client);
   const user = await getUserFullInfo(client, session.user.id);
   return {
-    db: client as unknown as SupabaseClient<SeriesDatabase>,
+    db: client,
     user,
     userId: session.user.id,
     canCreate: canCreateSeries(user),
@@ -24,7 +24,7 @@ export async function editorContext() {
  * a series' existence is not revealed). RLS applies the same rule again.
  */
 export async function managedSeries(
-  db: SupabaseClient<SeriesDatabase>,
+  db: SupabaseClient<Database>,
   id: number,
   user: { roles?: string[] | null } | null,
   userId: string,

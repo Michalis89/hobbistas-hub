@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SeriesDatabase } from '@/lib/articles/seriesDatabase';
+import type { Database } from '@/lib/supabase/database.types';
 import { withApiRoute } from '@/lib/observability/withApiRoute';
 import {
   editorContext,
@@ -14,7 +14,7 @@ import { revalidateCache } from '@/lib/cache/tags';
 import { validatePlainText } from '@/utils/validation/text';
 
 /** Keeps the sitemap's lastmod honest when only the translation changed. */
-async function touchSeries(db: SupabaseClient<SeriesDatabase>, id: number) {
+async function touchSeries(db: SupabaseClient<Database>, id: number) {
   await db.from('article_series').update({ updated_at: new Date().toISOString() }).eq('id', id);
 }
 

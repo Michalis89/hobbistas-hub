@@ -1,7 +1,5 @@
 import 'server-only';
 import { cache } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SeriesDatabase } from './seriesDatabase';
 import getSupabaseServer from '@/lib/supabase-server';
 import { articleLocalePath, type ArticleLocale } from './locales';
 import { normalizeSlug } from '@/utils/slugify';
@@ -45,7 +43,7 @@ export function getPublicSeries(
 async function loadPublicSeries(
   key: { slug: string } | { articleId: number },
 ): Promise<PublicSeries | null> {
-  const db = getSupabaseServer() as unknown as SupabaseClient<SeriesDatabase>;
+  const db = getSupabaseServer();
   let seriesId: number | undefined;
   if ('articleId' in key) {
     const { data, error } = await db
