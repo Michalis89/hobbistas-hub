@@ -178,6 +178,7 @@ jest.mock('@/app/components/article/TrackArticleView.client', () => ({
 jest.mock('@/config/site', () => ({
   __esModule: true,
   SITE_URL: 'https://example.com',
+  SITE_NAME: 'Hobbistas',
 }));
 
 jest.mock('@/app/(main)/articles/constants', () => ({
@@ -480,6 +481,139 @@ describe('ArticleDetailPage', () => {
     });
   });
 
+  describe('localized title and description (Greek content beats English meta)', () => {
+    const englishWithMeta = {
+      ...baseArticle,
+      slug: 'lore',
+      title: 'English title',
+      description: 'English standfirst',
+      meta_title: 'English meta title',
+      meta_description: 'English meta description',
+    };
+    const greekRow = (fields: Record<string, unknown>) => ({
+      article_id: 'article-1',
+      locale: 'el',
+      title: 'Ελληνικός τίτλος',
+      description: null,
+      meta_title: null,
+      meta_description: null,
+      ...fields,
+    });
+
+    async function metadataFor(
+      article: Record<string, unknown>,
+      translation: Record<string, unknown> | null,
+      lang?: string,
+    ) {
+      (getSupabaseServer as jest.Mock).mockReturnValue(
+        createSupabaseMock({
+          singleResolvers: [() => ({ data: article, error: null })],
+          translationResolver: () => ({ data: translation ? [translation] : [], error: null }),
+        }),
+      );
+      return (await buildArticleDetailMetadata({
+        params: Promise.resolve({ slug: 'lore' }),
+        ...(lang ? { searchParams: Promise.resolve({ lang }) } : {}),
+        options: { basePath: '/articles', breadcrumbLabel: 'Articles' },
+      })) as { title: string; description: string; ogLocale: string; path: string };
+    }
+
+    it('uses the Greek meta title and description when set', async () => {
+      const result = await metadataFor(
+        englishWithMeta,
+        greekRow({
+          description: 'Ελληνική περίληψη',
+          meta_title: 'Ελληνικό meta',
+          meta_description: 'Ελληνική meta περιγραφή',
+        }),
+        'el',
+      );
+      expect(result).toMatchObject({
+        title: 'Ελληνικό meta',
+        description: 'Ελληνική meta περιγραφή',
+        ogLocale: 'el_GR',
+        path: '/articles/lore?lang=el',
+      });
+    });
+
+    it('prefers the Greek title and standfirst over the English meta fields', async () => {
+      const result = await metadataFor(
+        englishWithMeta,
+        greekRow({ description: 'Ελληνική περίληψη', meta_title: '  ', meta_description: '' }),
+        'el',
+      );
+      expect(result).toMatchObject({
+        title: 'Ελληνικός τίτλος',
+        description: 'Ελληνική περίληψη',
+      });
+    });
+
+    it('falls back to the English meta description, then the English standfirst', async () => {
+      expect(await metadataFor(englishWithMeta, greekRow({}), 'el')).toMatchObject({
+        title: 'Ελληνικός τίτλος',
+        description: 'English meta description',
+      });
+      expect(
+        await metadataFor({ ...englishWithMeta, meta_description: null }, greekRow({}), 'el'),
+      ).toMatchObject({ description: 'English standfirst' });
+    });
+
+    it('ends with a neutral Greek sentence naming the Greek title', async () => {
+      const result = await metadataFor(
+        { ...englishWithMeta, description: null, meta_description: null },
+        greekRow({}),
+        'el',
+      );
+      expect(result.description).toBe('Διαβάστε «Ελληνικός τίτλος» στο Hobbistas.');
+    });
+
+    it('keeps the English page on English values even when a Greek translation exists', async () => {
+      const result = await metadataFor(
+        englishWithMeta,
+        greekRow({ meta_title: 'Ελληνικό meta', meta_description: 'Ελληνική meta περιγραφή' }),
+      );
+      expect(result).toMatchObject({
+        title: 'English meta title',
+        description: 'English meta description',
+        ogLocale: 'en_US',
+        path: '/articles/lore',
+      });
+    });
+
+    it('gives structured data the same resolved title and description as the metadata', async () => {
+      (getSupabaseServer as jest.Mock).mockReturnValue(
+        createSupabaseMock({
+          singleResolvers: [
+            () => ({ data: { ...englishWithMeta, topic: 'news', score: null }, error: null }),
+          ],
+          likesResolvers: [() => ({ count: 0 })],
+          listResolvers: [() => ({ data: [], error: null }), () => ({ data: [], error: null })],
+          translationResolver: () => ({
+            data: [greekRow({ description: 'Ελληνική περίληψη' })],
+            error: null,
+          }),
+        }),
+      );
+
+      // Structured data is built while the page renders on the server.
+      await ArticleDetailPage({
+        params: Promise.resolve({ slug: 'lore' }),
+        searchParams: Promise.resolve({ lang: 'el' }),
+        basePath: '/articles',
+        breadcrumbLabel: 'Articles',
+      });
+
+      expect(buildArticleJsonLd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Ελληνικός τίτλος',
+          description: 'Ελληνική περίληψη',
+          locale: 'el',
+          url: expect.stringContaining('/articles/lore?lang=el'),
+        }),
+      );
+    });
+  });
+
   it('calls notFound for missing metadata row', async () => {
     (getSupabaseServer as jest.Mock).mockReturnValue(
       createSupabaseMock({
@@ -522,7 +656,7 @@ describe('ArticleDetailPage', () => {
 
     expect(result).toMatchObject({
       title: 'Fallback Title',
-      description: 'Stay tuned for updates or explore another story while we resolve this.',
+      description: 'Read “Fallback Title” on Hobbistas.',
       authors: ['Hobbistas'],
       images: undefined,
     });
