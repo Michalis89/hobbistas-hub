@@ -3,7 +3,7 @@ import { withApiRoute } from '@/lib/observability/withApiRoute';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
 import { requireAuth, UnauthorizedError } from '@/lib/api/auth';
 import { getUserFullInfo } from '@/lib/services/userService';
-import { hasAnyRole } from '@/lib/roles';
+import { canManageAllArticles } from '@/lib/roles';
 import { API_ERRORS } from '@/lib/api/errors';
 import { fail, ok } from '@/lib/api/response';
 
@@ -36,7 +36,7 @@ async function GETHandler(req: Request, { params }: { params: Promise<{ id: stri
 
     const userData = await getUserFullInfo(supabase, session.user.id);
     const isAuthor = article.author_id === session.user.id;
-    const canManage = hasAnyRole(userData, ['admin', 'owner', 'moderator']);
+    const canManage = canManageAllArticles(userData);
 
     if (!isAuthor && !canManage) {
       return fail(API_ERRORS.FORBIDDEN, API_ERRORS.FORBIDDEN.status);

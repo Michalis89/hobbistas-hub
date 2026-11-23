@@ -214,7 +214,9 @@ describe('article routes: who may create, edit and delete', () => {
       expect(writes.updates).toHaveLength(0);
     });
 
-    it.each(['admin', 'owner', 'reviewer'])("%s may edit another author's article", async role => {
+    // Same rule as Studio's "manage all content" and the RLS function
+    // public.can_manage_all_articles().
+    it.each(['admin', 'owner', 'moderator'])("%s may edit another author's article", async role => {
       const { supabase, writes } = client('caller', others);
       createRouteHandlerClientMock.mockResolvedValue(supabase);
       as(['user', role]);
@@ -225,10 +227,10 @@ describe('article routes: who may create, edit and delete', () => {
       expect(writes.updates).toHaveLength(1);
     });
 
-    it("a moderator may not edit another author's article through this route", async () => {
+    it("a reviewer may not edit another author's article (403, nothing written)", async () => {
       const { supabase, writes } = client('caller', others);
       createRouteHandlerClientMock.mockResolvedValue(supabase);
-      as(['user', 'moderator']);
+      as(['user', 'reviewer']);
 
       const response = await PUT(updateRequest(), params);
 
@@ -279,18 +281,35 @@ describe('article routes: who may create, edit and delete', () => {
       expect(writes.deletes).toBe(0);
     });
 
-    it("an admin may delete another author's article", async () => {
+    it.each(['admin', 'owner', 'moderator'])(
+      "%s may delete another author's article",
+      async role => {
+        const { supabase, writes } = client('caller', others);
+        createRouteHandlerClientMock.mockResolvedValue(supabase);
+        as(['user', role]);
+
+        const response = await DELETE(
+          new Request('https://example.test', { method: 'DELETE' }),
+          params,
+        );
+
+        expect(response.status).toBe(200);
+        expect(writes.deletes).toBe(1);
+      },
+    );
+
+    it("a reviewer may not delete another author's article", async () => {
       const { supabase, writes } = client('caller', others);
       createRouteHandlerClientMock.mockResolvedValue(supabase);
-      as(['user', 'admin']);
+      as(['user', 'reviewer']);
 
       const response = await DELETE(
         new Request('https://example.test', { method: 'DELETE' }),
         params,
       );
 
-      expect(response.status).toBe(200);
-      expect(writes.deletes).toBe(1);
+      expect(response.status).toBe(403);
+      expect(writes.deletes).toBe(0);
     });
   });
 });

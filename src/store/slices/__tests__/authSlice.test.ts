@@ -12,6 +12,7 @@ import authReducer, {
   selectCanAccessAdminPanel,
   selectCanEditArticles,
   selectCanAccessStudio,
+  selectCanManageAllArticles,
   selectIsAdmin,
   selectIsAdminOrModerator,
   selectIsAuthenticated,
@@ -26,7 +27,7 @@ import authReducer, {
   updateUserProfile,
 } from '@/store/slices/authSlice';
 import { supabase } from '@/lib/supabase-client';
-import { getUserRoles, hasAnyRole } from '@/lib/roles';
+import { canManageAllArticles, getUserRoles, hasAnyRole } from '@/lib/roles';
 
 jest.mock('@/lib/supabase-client', () => ({
   supabase: {
@@ -41,6 +42,7 @@ jest.mock('@/lib/supabase-client', () => ({
 }));
 
 jest.mock('@/lib/roles', () => ({
+  canManageAllArticles: jest.fn(),
   getUserRoles: jest.fn(),
   hasAnyRole: jest.fn(),
 }));
@@ -334,6 +336,11 @@ describe('authSlice', () => {
 
     (hasAnyRole as jest.Mock).mockReturnValue(false);
     expect(selectCanAccessStudio({ auth: { ...state.auth, user: null } })).toBe(false);
+
+    (canManageAllArticles as jest.Mock).mockReturnValue(true);
+    expect(selectCanManageAllArticles(state)).toBe(true);
+    expect(canManageAllArticles).toHaveBeenCalledWith(user);
+    expect(selectCanManageAllArticles({ auth: { ...state.auth, user: null } })).toBe(false);
 
     expect(selectIsAuthorOf('u1')(state)).toBe(true);
     expect(selectIsAuthorOf('u2')(state)).toBe(false);

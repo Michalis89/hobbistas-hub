@@ -201,16 +201,17 @@ export const selectIsLoading = (state: { auth: AuthSession }) => state.auth.isLo
 export const selectAuthError = (state: { auth: AuthSession }) => state.auth.error;
 
 import { createSelector } from '@reduxjs/toolkit';
-import { getUserRoles, hasAnyRole } from '@/lib/roles';
+import { canManageAllArticles, getUserRoles, hasAnyRole } from '@/lib/roles';
 
 export const selectUserRoles = (state: { auth: AuthSession }) => {
   const user = state.auth.user;
   return user ? getUserRoles(user) : [];
 };
 
+/** Mirrors requireStudioAccess: writers, plus moderators who edit others' work. */
 export const selectCanAccessStudio = (state: { auth: AuthSession }) => {
   const user = state.auth.user;
-  return !!user && hasAnyRole(user, ['admin', 'author', 'reviewer', 'owner']);
+  return !!user && hasAnyRole(user, ['admin', 'author', 'reviewer', 'owner', 'moderator']);
 };
 
 export const selectCanAccessAdminPanel = (state: { auth: AuthSession }) => {
@@ -231,6 +232,12 @@ export const selectIsAdminOrModerator = (state: { auth: AuthSession }) => {
 export const selectCanEditArticles = (state: { auth: AuthSession }) => {
   const user = state.auth.user;
   return !!user && hasAnyRole(user, ['admin', 'author', 'reviewer', 'owner']);
+};
+
+/** May edit and delete anyone's article; see `canManageAllArticles`. */
+export const selectCanManageAllArticles = (state: { auth: AuthSession }) => {
+  const user = state.auth.user;
+  return !!user && canManageAllArticles(user);
 };
 
 export const selectIsAuthorOf =

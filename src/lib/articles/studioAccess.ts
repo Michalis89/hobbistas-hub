@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { createRouteHandlerClient } from '@/lib/supabase-route-handler';
-import { hasAnyRole, isAdminOrModerator } from '@/lib/roles';
+import { canManageAllArticles, hasAnyRole } from '@/lib/roles';
 
 export type StudioAccess = {
   session: Session;
@@ -10,16 +10,22 @@ export type StudioAccess = {
   canWriteArticles: boolean;
   /** May create and edit reviews. */
   canWriteReviews: boolean;
-  /** May see and edit other authors' content. */
+  /** May see and edit other authors' content (admin, owner, moderator). */
   canManageAllContent: boolean;
+  /** May start a new article or review; a moderator only edits existing ones. */
+  canCreate: boolean;
 };
 
 /**
  * Gate for /studio.
  *
  * The studio is open to every author and reviewer, not just admins: writing is
- * the point of the role. Admins and moderators additionally get access to
- * everyone's drafts.
+ * the point of the role. Admins, owners and moderators additionally see and
+ * edit everyone's work, drafts included; a moderator gets in for that alone,
+ * without being able to start new pieces.
+ *
+ * The database enforces the same "manage all" rule through RLS
+ * (`public.can_manage_all_articles()`), see `canManageAllArticles`.
  *
  * Redirects rather than throwing, because this runs in page server components.
  */
@@ -44,8 +50,10 @@ export async function requireStudioAccess(): Promise<StudioAccess> {
 
   const canWriteArticles = hasAnyRole(carrier, ['admin', 'owner', 'author']);
   const canWriteReviews = hasAnyRole(carrier, ['admin', 'owner', 'reviewer']);
+  const canManageAllContent = canManageAllArticles(carrier);
+  const canCreate = canWriteArticles || canWriteReviews;
 
-  if (!canWriteArticles && !canWriteReviews) {
+  if (!canCreate && !canManageAllContent) {
     redirect('/dashboard');
   }
 
@@ -54,6 +62,7 @@ export async function requireStudioAccess(): Promise<StudioAccess> {
     roles,
     canWriteArticles,
     canWriteReviews,
-    canManageAllContent: isAdminOrModerator(carrier),
+    canManageAllContent,
+    canCreate,
   };
 }

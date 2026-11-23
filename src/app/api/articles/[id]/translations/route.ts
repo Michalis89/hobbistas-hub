@@ -7,14 +7,14 @@ import { API_ERRORS } from '@/lib/api/errors';
 import { requireAuth, UnauthorizedError } from '@/lib/api/auth';
 import { fail, ok } from '@/lib/api/response';
 import { revalidateCache } from '@/lib/cache/tags';
-import { hasAnyRole } from '@/lib/roles';
+import { canManageAllArticles } from '@/lib/roles';
 import { getUserFullInfo } from '@/lib/services/userService';
 import { isArticleLocale, SOURCE_ARTICLE_LOCALE } from '@/lib/articles/locales';
 
 const TRANSLATION_FIELDS =
   'article_id, locale, title, description, content_rich, content_html, meta_title, meta_description, updated_at';
 
-/** Author of the piece, or an editorial role. Mirrors PUT /api/articles/[id]. */
+/** The author, or a role that manages every article. Mirrors PUT /api/articles/[id]. */
 async function assertCanEditArticle(
   supabase: Awaited<ReturnType<typeof createRouteHandlerClient>>,
   articleId: number,
@@ -32,9 +32,9 @@ async function assertCanEditArticle(
 
   const userData = await getUserFullInfo(supabase, userId);
   const isAuthor = article.author_id === userId;
-  const isEditor = hasAnyRole(userData, ['admin', 'owner', 'reviewer']);
+  const canManageAll = canManageAllArticles(userData);
 
-  if (!isAuthor && !isEditor) {
+  if (!isAuthor && !canManageAll) {
     return { error: fail({ error: 'Access forbidden' }, 403) };
   }
 

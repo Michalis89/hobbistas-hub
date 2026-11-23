@@ -55,6 +55,7 @@ jest.mock('@/lib/api/auth', () => ({
 
 jest.mock('@/lib/roles', () => ({
   hasAnyRole: (...args: unknown[]) => hasAnyRoleMock(...args),
+  canManageAllArticles: (user: unknown) => hasAnyRoleMock(user, ['admin', 'owner', 'moderator']),
 }));
 
 jest.mock('@/lib/services/userService', () => ({
