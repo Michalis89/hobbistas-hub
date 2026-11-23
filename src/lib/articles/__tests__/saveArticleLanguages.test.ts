@@ -120,3 +120,33 @@ describe('saveArticleLanguages: Publish', () => {
     expect(result).toEqual({ articleSaved: true, translation: 'unchanged', error: null });
   });
 });
+
+describe('saveArticleLanguages: Publish with Greek changes that have no title', () => {
+  it.each([
+    ['an existing article', 3],
+    ['a new article', null],
+  ])('does not publish %s and writes nothing', async (_label, id) => {
+    const a = article({ id });
+    const t = panel({ title: '  ' });
+
+    const result = await saveArticleLanguages({ ...a, translation: t, publishing: true });
+
+    expect(a.saveArticle).not.toHaveBeenCalled();
+    expect(t.save).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      articleSaved: false,
+      translation: 'needs-title',
+      error: expect.stringMatching(
+        /^Not published: the Greek version has unsaved changes but no title/,
+      ),
+    });
+  });
+
+  it('still publishes when the untitled Greek panel has no pending changes', async () => {
+    const a = article({ id: 3 });
+    const t = panel({ title: '', dirty: false });
+    const result = await saveArticleLanguages({ ...a, translation: t, publishing: true });
+    expect(a.saveArticle).toHaveBeenCalledTimes(1);
+    expect(result.articleSaved).toBe(true);
+  });
+});

@@ -369,3 +369,51 @@ describe('ArticleComposer: repeated saves, preview link and autosave wording', (
     );
   });
 });
+
+describe('ArticleComposer: Publish with Greek changes that have no title', () => {
+  it('does not go live and says why', async () => {
+    const { toast } = jest.requireMock('sonner') as { toast: { success: jest.Mock } };
+    toast.success.mockClear();
+    const calls: Call[] = [];
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push({
+        url: String(input),
+        method,
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
+      });
+      const payload =
+        method === 'GET'
+          ? { data: { translations: [{ locale: 'el', title: 'Παλιός τίτλος', content_html: '' }] } }
+          : { data: { article: { id: 42 } } };
+      return new Response(JSON.stringify(payload), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    render(
+      <ArticleComposer
+        initialDraft={{
+          ...emptyDraft(),
+          category: 'games',
+          title: 'Kratos',
+          contentHtml: '<p>x</p>',
+        }}
+        initialId={42}
+        initialSlug="kratos"
+        previewPath={null}
+        canWriteArticles
+        canWriteReviews
+      />,
+    );
+    fireEvent.click(greekTab());
+    fireEvent.change(await screen.findByDisplayValue('Παλιός τίτλος'), { target: { value: '' } });
+    await waitFor(() => expect(screen.getByLabelText('unsaved changes')).toBeInTheDocument());
+
+    fireEvent.click(publish());
+
+    expect(
+      await screen.findByText(/Not published: the Greek version has unsaved changes but no title/),
+    ).toBeInTheDocument();
+    expect(calls.filter(c => c.method === 'PUT')).toHaveLength(0);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+});

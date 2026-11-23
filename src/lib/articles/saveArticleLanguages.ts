@@ -31,6 +31,8 @@ export type LanguageSaveResult = {
 };
 
 const NEEDS_TITLE = 'Greek changes were not saved: the Greek version needs a title.';
+const NOT_PUBLISHED_NEEDS_TITLE =
+  'Not published: the Greek version has unsaved changes but no title. Add a Greek title, or remove the Greek version, then publish.';
 
 export async function saveArticleLanguages({
   saveArticle,
@@ -47,6 +49,12 @@ export async function saveArticleLanguages({
   const pending = translation?.isDirty() ?? false;
   const hasTitle = (translation?.getTitle() ?? '').trim() !== '';
   const existingId = getArticleId();
+
+  // Publishing with Greek changes that cannot be saved would put the article
+  // live with an older Greek version (or none). Refuse before writing anything.
+  if (publishing && pending && !hasTitle) {
+    return { articleSaved: false, translation: 'needs-title', error: NOT_PUBLISHED_NEEDS_TITLE };
+  }
 
   if (publishing && existingId !== null && pending && hasTitle && translation) {
     const first = await translation.save(existingId);

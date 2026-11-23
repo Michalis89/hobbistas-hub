@@ -322,3 +322,70 @@ describe('ArticleTranslationEditor: Greek SEO preview', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('ArticleTranslationEditor: saving and removing exclude each other', () => {
+  /** Fetch whose `method` requests stay pending until released. */
+  function holdFetch(method: 'PUT' | 'DELETE') {
+    const calls: Call[] = [];
+    let release: () => void = () => {};
+    const held = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const m = init?.method ?? 'GET';
+      calls.push({ url: String(input), method: m, body: null });
+      if (m === method) {
+        await held;
+      }
+      const payload = m === 'GET' ? { data: { translations: [savedGreek] } } : { data: {} };
+      return new Response(JSON.stringify(payload), { status: 200 });
+    }) as unknown as typeof fetch;
+    return { calls, release: () => release() };
+  }
+
+  const removeButton = () => screen.getByRole('button', { name: /Remove Ελληνικά version/ });
+
+  it('disables Remove while the Greek version is being saved', async () => {
+    const { calls, release } = holdFetch('PUT');
+    renderEditor();
+    await open();
+    fireEvent.change(screen.getByLabelText('Meta title'), { target: { value: 'meta' } });
+
+    let saving: Promise<unknown> = Promise.resolve();
+    act(() => {
+      saving = handle.current!.save(5);
+    });
+    await waitFor(() => expect(removeButton()).toBeDisabled());
+    fireEvent.click(removeButton());
+
+    await act(async () => {
+      release();
+      await saving;
+    });
+    expect(calls.some(c => c.method === 'DELETE')).toBe(false);
+    expect(removeButton()).toBeEnabled();
+  });
+
+  it('refuses to save while the Greek version is being removed, so it is not brought back', async () => {
+    const { calls, release } = holdFetch('DELETE');
+    renderEditor();
+    await open();
+    fireEvent.change(screen.getByLabelText('Meta title'), { target: { value: 'meta' } });
+
+    fireEvent.click(removeButton());
+    await waitFor(() => expect(calls.some(c => c.method === 'DELETE')).toBe(true));
+
+    expect(await saveTo(5)).toEqual({
+      ok: false,
+      error: expect.stringContaining('is being removed'),
+    });
+    expect(calls.some(c => c.method === 'PUT')).toBe(false);
+
+    await act(async () => {
+      release();
+    });
+    // Removed: nothing left to save.
+    await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue(''));
+    expect(isDirtyNow()).toBe(false);
+  });
+});

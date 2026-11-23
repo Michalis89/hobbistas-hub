@@ -112,6 +112,11 @@ const ArticleTranslationEditor = forwardRef<
   const [loadArticleId] = useState(articleId);
   const [isLoading, setIsLoading] = useState(loadArticleId !== null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  // Saving and removing exclude each other: an upsert that lands after the
+  // DELETE would bring back the version the author just removed. A ref, so
+  // the check holds before React re-renders.
+  const busyRef = useRef<'saving' | 'removing' | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [exists, setExists] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -254,6 +259,13 @@ const ArticleTranslationEditor = forwardRef<
           setError(message);
           return { ok: false, error: message };
         }
+        if (busyRef.current === 'removing') {
+          const message = `The ${ARTICLE_LOCALE_LABELS[locale]} version is being removed. Save again once that has finished.`;
+          setError(message);
+          return { ok: false, error: message };
+        }
+        busyRef.current = 'saving';
+        setIsSaving(true);
         setError(null);
         try {
           const response = await fetch(`/api/articles/${id}/translations`, {
@@ -289,6 +301,9 @@ const ArticleTranslationEditor = forwardRef<
             saveError instanceof Error ? saveError.message : 'Could not save the translation.';
           setError(message);
           return { ok: false, error: message };
+        } finally {
+          busyRef.current = null;
+          setIsSaving(false);
         }
       },
     }),
@@ -296,9 +311,10 @@ const ArticleTranslationEditor = forwardRef<
   );
 
   const remove = async () => {
-    if (articleId === null) {
+    if (articleId === null || busyRef.current !== null) {
       return;
     }
+    busyRef.current = 'removing';
     setIsRemoving(true);
     setError(null);
     try {
@@ -310,6 +326,10 @@ const ArticleTranslationEditor = forwardRef<
         const body = await response.json().catch(() => null);
         throw new Error(body?.error || 'Could not remove the translation.');
       }
+      // Updated now as well, so a save that asks before the next render does
+      // not send the removed version back.
+      draftRef.current = EMPTY_DRAFT;
+      isDirtyRef.current = false;
       setDraft(EMPTY_DRAFT);
       setSaved(EMPTY_DRAFT);
       setSavedBodyHtml('');
@@ -323,6 +343,7 @@ const ArticleTranslationEditor = forwardRef<
         removeError instanceof Error ? removeError.message : 'Could not remove the translation.',
       );
     } finally {
+      busyRef.current = null;
       setIsRemoving(false);
     }
   };
@@ -448,7 +469,7 @@ const ArticleTranslationEditor = forwardRef<
                 type="button"
                 variant="ghost"
                 size="sm"
-                disabled={isRemoving}
+                disabled={isRemoving || isSaving}
                 onClick={() => void remove()}
                 className="ml-auto text-muted-foreground hover:text-destructive"
               >
