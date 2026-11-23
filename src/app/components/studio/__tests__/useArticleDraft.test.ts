@@ -1,4 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+
+const mockGetSession = jest.fn();
+const mockSyncCookies = jest.fn();
+jest.mock('@/lib/supabase-client', () => ({
+  supabase: { auth: { getSession: () => mockGetSession() } },
+}));
+jest.mock('@/lib/auth/syncCookies', () => ({
+  syncCookies: (session: unknown) => mockSyncCookies(session),
+}));
 import {
   AUTOSAVE_DELAY_MS,
   buildArticlePayload,
@@ -249,5 +258,139 @@ describe('useArticleDraft', () => {
       resolveFetch?.(okResponse({ data: { article: { id: 5 } } }));
       await first;
     });
+  });
+});
+
+describe('useArticleDraft: session re-sync on 401', () => {
+  let fetchMock: jest.Mock;
+  const browserSession = { access_token: 'fresh-access', refresh_token: 'fresh-refresh' };
+  const unauthorized = () =>
+    ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Unauthorized access', code: 'UNAUTHORIZED' }),
+    }) as unknown as Response;
+  const created = () =>
+    ({
+      ok: true,
+      status: 201,
+      json: async () => ({ data: { article: { id: 42 } } }),
+    }) as unknown as Response;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    mockGetSession.mockReset().mockResolvedValue({ data: { session: browserSession } });
+    mockSyncCookies.mockReset().mockResolvedValue(true);
+  });
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+  });
+
+  const setup = (initialId: number | null = null) => {
+    const onCreated = jest.fn();
+    const view = renderHook(() => useArticleDraft({ initial: makeDraft(), initialId, onCreated }));
+    return { ...view, onCreated };
+  };
+
+  it('first save: re-syncs the cookies from the browser session and retries the POST once', async () => {
+    fetchMock.mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(created());
+    const { result, onCreated } = setup();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(mockSyncCookies).toHaveBeenCalledWith(browserSession);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+      ['/api/articles', 'POST'],
+      ['/api/articles', 'POST'],
+    ]);
+    // Same payload both times.
+    expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
+    expect(result.current.saveState).toBe('saved');
+    expect(onCreated).toHaveBeenCalledWith(42);
+  });
+
+  it('existing article: retries the PUT once', async () => {
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      } as unknown as Response);
+    const { result } = setup(7);
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+      ['/api/articles/7', 'PUT'],
+      ['/api/articles/7', 'PUT'],
+    ]);
+    expect(result.current.saveState).toBe('saved');
+  });
+
+  it('retries at most once and then shows the server error', async () => {
+    fetchMock.mockResolvedValue(unauthorized());
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mockSyncCookies).toHaveBeenCalledTimes(1);
+    expect(result.current.saveState).toBe('error');
+    expect(result.current.error).toBe('Unauthorized access');
+  });
+
+  it('does not retry when the browser has no session', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+    fetchMock.mockResolvedValue(unauthorized());
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockSyncCookies).not.toHaveBeenCalled();
+    expect(result.current.error).toBe('Unauthorized access');
+  });
+
+  it('does not retry when the server rejects the re-sync', async () => {
+    mockSyncCookies.mockResolvedValue(false);
+    fetchMock.mockResolvedValue(unauthorized());
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.saveState).toBe('error');
+  });
+
+  it('never retries a permission refusal (403) or a validation error', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'Access forbidden' }),
+    } as unknown as Response);
+    const { result } = setup(7);
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(result.current.error).toBe('Access forbidden');
   });
 });

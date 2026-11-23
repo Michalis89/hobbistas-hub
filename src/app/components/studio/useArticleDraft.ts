@@ -20,6 +20,38 @@ export {
   type SaveState,
 } from '@/lib/articles/draft';
 
+/**
+ * Sends a save request and, if the server answers 401, copies the browser's
+ * current Supabase session into the auth cookies and tries exactly once more.
+ *
+ * The browser and the httpOnly cookies hold separate copies of the session
+ * tokens, and they can drift apart (a token refresh the cookies did not pick
+ * up). Re-syncing is the same POST /api/auth/refresh the app already uses; the
+ * server still validates the tokens, so nothing is bypassed. A 401 from the
+ * article routes is raised by requireAuth before any write, so retrying cannot
+ * create a duplicate. Loaded lazily so the hook does not pull in the browser
+ * Supabase client until it is needed.
+ */
+export async function fetchWithSessionResync(send: () => Promise<Response>): Promise<Response> {
+  const first = await send();
+  if (first.status !== 401) {
+    return first;
+  }
+  const [{ supabase }, { syncCookies }] = await Promise.all([
+    import('@/lib/supabase-client'),
+    import('@/lib/auth/syncCookies'),
+  ]);
+  const { data } = await supabase.auth.getSession();
+  if (!data.session) {
+    return first;
+  }
+  const synced = await syncCookies(data.session);
+  if (!synced) {
+    return first;
+  }
+  return send();
+}
+
 type UseArticleDraftOptions = {
   initial: ComposerDraft;
   initialId: number | null;
@@ -70,24 +102,26 @@ export function useArticleDraft({ initial, initialId, onCreated }: UseArticleDra
         const payload = buildArticlePayload(current);
         const id = articleIdRef.current;
 
-        const response = id
-          ? await fetch(`/api/articles/${id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ...payload,
-                ...(options.status ? { status: options.status } : {}),
+        const response = await fetchWithSessionResync(() =>
+          id
+            ? fetch(`/api/articles/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...payload,
+                  ...(options.status ? { status: options.status } : {}),
+                }),
+              })
+            : fetch('/api/articles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...payload,
+                  slug: slugify(current.title),
+                  status: options.status ?? 'draft',
+                }),
               }),
-            })
-          : await fetch('/api/articles', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ...payload,
-                slug: slugify(current.title),
-                status: options.status ?? 'draft',
-              }),
-            });
+        );
 
         if (!response.ok) {
           const body = await response.json().catch(() => null);
